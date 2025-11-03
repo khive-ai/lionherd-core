@@ -1,0 +1,102 @@
+# Ruff configuration for lionherd monorepo
+# Replaces: Black, isort, Flake8
+# Docs: https://docs.astral.sh/ruff/
+
+# Global settings
+line-length = 100
+target-version = "py311"
+force-exclude = true     # Critical for pre-commit
+
+# File selection
+extend-exclude = [
+  ".venv",
+  "venv",
+  ".git",
+  "__pycache__",
+  "*.pyc",
+  ".pytest_cache",
+  "htmlcov",
+  ".coverage",
+  "dist",
+  "build",
+  "*.egg-info",
+]
+
+[lint]
+# Rule selection (tiered approach)
+select = [
+  # Tier 1: Essential (errors and imports)
+  "E4", # Import errors
+  "E7", # Statement errors
+  "E9", # Runtime errors
+  "F",  # Pyflakes (logic errors)
+  "I",  # isort (import sorting)
+
+  # Tier 2: Quality
+  "UP",  # pyupgrade (modern Python syntax)
+  "B",   # flake8-bugbear (likely bugs)
+  "SIM", # flake8-simplify (simplifications)
+  "RUF", # Ruff-specific rules
+
+  # Tier 3: Style
+  "N", # pep8-naming
+  "W", # pycodestyle warnings
+]
+
+ignore = [
+  "E501",   # Line too long (handled by formatter)
+  "E402",   # Module level import not at top (common pattern)
+  "E721",   # Type comparison with == instead of is (TODO: fix in cleanup PR)
+  "E722",   # Bare except (TODO: fix in cleanup PR)
+  "B008",   # Function call in default argument (TODO: fix in cleanup PR)
+  "B904",   # raise from err (TODO: fix in cleanup PR)
+  "SIM105", # contextlib.suppress (TODO: fix in cleanup PR)
+  "SIM112", # Environment variable casing (TODO: fix in cleanup PR)
+  "N806",   # Variable naming (TODO: fix in cleanup PR)
+  "RUF012", # Mutable ClassVar (TODO: fix in cleanup PR)
+  "UP007",  # Union → | syntax (type aliases, not annotations - low priority)
+]
+
+# Allow fix for all enabled rules (when `--fix` is provided)
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+# Test files can have assertions and imports
+"tests/**/*.py" = ["S101", "F401", "F811"]
+"**/test_*.py" = ["S101", "F401", "F811"]
+
+# __init__.py can have unused imports
+"__init__.py" = ["F401"]
+
+# Config files can have broad exceptions
+"conftest.py" = ["F401", "F811"]
+
+[lint.isort]
+# isort configuration (replaces tool.isort in pyproject.toml)
+known-first-party = ["lionherd"]
+combine-as-imports = true
+force-wrap-aliases = true
+split-on-trailing-comma = true
+
+[lint.mccabe]
+# Max complexity for functions
+max-complexity = 10
+
+[lint.pyupgrade]
+# Keep runtime typing imports (don't convert to TYPE_CHECKING)
+keep-runtime-typing = true
+
+[format]
+# Formatting options (replaces Black)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# Format code in docstrings
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
