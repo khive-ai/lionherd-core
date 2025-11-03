@@ -9,7 +9,7 @@
 
 ---
 
-## Why lionherd-core is the shit
+## Why lionherd-core
 
 Zero framework lock-in. Use what you need, ignore the rest. Build production AI
 systems your way.
