@@ -1101,7 +1101,7 @@ class TestSpec:
         """
         annotated() returns cached result for same Spec
 
-        **Pattern**: LRU cache for performance (100× speedup)
+        **Pattern**: LRU cache for performance (100x speedup)
 
         **Scenario**: Call annotated() multiple times on same Spec:
         ```python
@@ -1114,7 +1114,7 @@ class TestSpec:
         **Expected Behavior**:
         - First call computes and caches annotation
         - Subsequent calls return cached object (identity match)
-        - ~100× speedup for cached access
+        - ~100x speedup for cached access
 
         **Design Rationale**:
         typing.Annotated creation is expensive (~100μs):
@@ -1367,7 +1367,7 @@ class TestSpec:
 
         Default size (10k) chosen because:
         - Typical application: <100 unique specs
-        - 10k provides 100× headroom
+        - 10k provides 100x headroom
         - ~1MB memory for 10k cached annotations
 
         Tunable via environment: `lionherd_FIELD_CACHE_SIZE`

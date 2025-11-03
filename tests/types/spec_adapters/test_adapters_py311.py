@@ -198,7 +198,7 @@ Model = PydanticSpecAdapter.create_model(op, model_name="User")
 - Field creation: O(metadata_count) (~10-50μs per field)
 - Model creation: O(field_count) + Pydantic overhead (~1-5ms for 10 fields)
 - Validation: O(field_count) + Pydantic validation (~0.5-2ms)
-- Fuzzy matching: O(data_keys × model_fields) (~0.1-1ms for 100 keys)
+- Fuzzy matching: O(data_keys x model_fields) (~0.1-1ms for 100 keys)
 - Validator execution: O(validator_complexity) (user-defined)
 
 **Related Components**:
@@ -644,7 +644,7 @@ def test_fuzzy_match_fields_strict_mode():
     **Alternative Considered**: Warn on extra keys (log warning, continue)
     **Rejected Because**: Warnings often ignored; strict mode forces handling; production should fail fast
 
-    **Performance**: O(data_keys × model_fields) for matching, then O(1) for error raise
+    **Performance**: O(data_keys x model_fields) for matching, then O(1) for error raise
     """
     # Create model
     op = Operable((_spec_str("name"),), name="Simple")

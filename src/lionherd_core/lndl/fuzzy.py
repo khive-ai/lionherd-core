@@ -197,7 +197,7 @@ def parse_lndl_fuzzy(
 
         # Validate spec names in OUT{} block
         expected_spec_names = list(operable.allowed())
-        for spec_name in out_fields_raw.keys():
+        for spec_name in out_fields_raw:
             if spec_name not in expected_spec_names:
                 raise MissingFieldError(
                     f"Spec '{spec_name}' not found. "

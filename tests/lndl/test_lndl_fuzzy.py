@@ -626,12 +626,13 @@ class TestFuzzyErrorHandling:
 
     def test_empty_lndl_text(self):
         """Test empty LNDL text handling."""
+        from lionherd_core.lndl.errors import MissingOutBlockError
         from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
         from lionherd_core.types import Operable
 
         operable = Operable()
 
-        with pytest.raises(Exception):  # Should raise some parsing error
+        with pytest.raises(MissingOutBlockError):  # Should raise MissingOutBlockError
             parse_lndl_fuzzy("", operable)
 
     def test_no_matches_below_threshold(self):
@@ -710,7 +711,7 @@ class TestFuzzyCorrectionLogging:
                 """
 
         with caplog.at_level(logging.DEBUG):
-            result = parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
+            parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
 
         # Should log the correction
         assert any(
@@ -786,7 +787,7 @@ class TestFuzzyCoverageEdgeCases:
         """
 
         # Should raise MissingFieldError for wrong model name in strict mode
-        with pytest.raises(MissingFieldError, match="Model.*not found"):
+        with pytest.raises(MissingFieldError, match=r"Model.*not found"):
             parse_lndl_fuzzy(lndl_text, operable, threshold=1.0)
 
     def test_strict_mode_with_wrong_field_name(self):
@@ -811,7 +812,7 @@ class TestFuzzyCoverageEdgeCases:
         """
 
         # Should raise MissingFieldError for wrong field name in strict mode
-        with pytest.raises(MissingFieldError, match="Field.*not found"):
+        with pytest.raises(MissingFieldError, match=r"Field.*not found"):
             parse_lndl_fuzzy(lndl_text, operable, threshold=1.0)
 
     def test_strict_mode_with_wrong_spec_name(self):
@@ -836,7 +837,7 @@ class TestFuzzyCoverageEdgeCases:
         """
 
         # Should raise MissingFieldError for wrong spec name in strict mode
-        with pytest.raises(MissingFieldError, match="Spec.*not found"):
+        with pytest.raises(MissingFieldError, match=r"Spec.*not found"):
             parse_lndl_fuzzy(lndl_text, operable, threshold=1.0)
 
     def test_fuzzy_with_literal_value_not_array(self):

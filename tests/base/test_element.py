@@ -1071,10 +1071,10 @@ class TestElementSecurity:
 
         # Compare with non-Element types
         # Should return NotImplemented, which Python interprets as False
-        assert (elem == "string") == False
-        assert (elem == 123) == False
-        assert (elem == None) == False
-        assert (elem == {"dict": "value"}) == False
+        assert elem != "string"
+        assert elem != 123
+        assert elem is not None
+        assert elem != {"dict": "value"}
 
         # Verify it returns NotImplemented (not False directly)
         result = elem.__eq__("not an element")
