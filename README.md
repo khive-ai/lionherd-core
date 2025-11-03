@@ -4,6 +4,7 @@ Core utilities, base classes, and protocols for the lionherd ecosystem
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![codecov](https://codecov.io/github/khive-ai/lionherd-core/graph/badge.svg?token=FAE47FY26T)](https://codecov.io/github/khive-ai/lionherd-core)
 
 ## Overview
 

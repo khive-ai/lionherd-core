@@ -33,7 +33,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies (workspace dev deps + all package extras)
-        run: uv sync --group dev --all-extras
+        run: uv sync --all-extras
 
       - name: Run ruff check
         run: uv run ruff check .

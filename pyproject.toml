@@ -1,6 +1,6 @@
 [project]
 name = "lionherd-core"
-version = "0.1.0"
+version = "1.0.0-alpha"
 description = "Core utilities, base classes, and protocols for lionherd ecosystem"
 requires-python = ">=3.11"
 dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
