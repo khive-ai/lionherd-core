@@ -122,7 +122,7 @@ def alcall(
 
 ### Test Structure
 
-```
+```text
 tests/
 ├── base/           # Base classes (Element, Node, Pile, Graph)
 ├── lndl/           # LNDL parser tests
@@ -213,7 +213,7 @@ Closes #123"
 
 ### Commit Message Format
 
-```
+```text
 type(scope): subject
 
 body
@@ -267,7 +267,7 @@ Releases are handled by maintainers:
 
 ## Project Structure
 
-```
+```text
 lionherd-core/
 ├── src/lionherd_core/
 │   ├── base/              # Base classes
@@ -290,4 +290,5 @@ lionherd-core/
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0.
+By contributing, you agree that your contributions will be licensed under
+the Apache License 2.0.
