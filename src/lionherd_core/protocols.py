@@ -123,7 +123,6 @@ class Allowable(Protocol):
         ...
 
 
-# Alias for backward compatibility
 Observable = ObservableProto
 
 
