@@ -65,7 +65,7 @@ jobs:
         run: uv sync --group dev --all-extras
 
       - name: Run mypy
-        run: uv run mypy libs/lionherd/src/lionherd
+        run: uv run mypy src/lionherd_core
         continue-on-error: true # Don't block CI on type errors initially
 
   # =============================================================================
@@ -99,7 +99,7 @@ jobs:
       - name: Run tests (parallel execution)
         if: matrix.python-version != '3.11'
         run: |
-          uv run pytest libs/lionherd/tests/ \
+          uv run pytest tests/ \
             --junitxml=junit.xml \
             --tb=short \
             -n auto
@@ -107,8 +107,8 @@ jobs:
       - name: Run tests with coverage (Python 3.11 only)
         if: matrix.python-version == '3.11'
         run: |
-          uv run pytest libs/lionherd/tests/ \
-            --cov=libs/lionherd/src/lionherd \
+          uv run pytest tests/ \
+            --cov=src/lionherd_core \
             --cov-report=xml \
             --cov-report=term-missing:skip-covered \
             --junitxml=junit.xml \
@@ -155,7 +155,7 @@ jobs:
           enable-cache: true
 
       - name: Build package
-        run: uv build --package lionherd
+        run: uv build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
