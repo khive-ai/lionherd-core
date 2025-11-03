@@ -53,6 +53,34 @@ def extract_lvars_prefixed(text: str) -> dict[str, LvarMetadata]:
     return lvars
 
 
+def extract_lacts(text: str) -> dict[str, str]:
+    """Extract <lact name>function_call</lact> action declarations.
+
+    Actions represent tool/function invocations using pythonic syntax.
+    They are only executed if referenced in the OUT{} block.
+
+    Args:
+        text: Response text containing <lact> declarations
+
+    Returns:
+        Dict mapping action names to Python function call strings
+
+    Examples:
+        >>> text = '<lact search>search(query="AI", limit=5)</lact>'
+        >>> extract_lacts(text)
+        {'search': 'search(query="AI", limit=5)'}
+    """
+    pattern = r"<lact\s+(\w+)>(.*?)</lact>"
+    matches = re.findall(pattern, text, re.DOTALL)
+
+    lacts = {}
+    for name, call_str in matches:
+        # Strip whitespace but preserve the function call structure
+        lacts[name] = call_str.strip()
+
+    return lacts
+
+
 def extract_out_block(text: str) -> str:
     """Extract OUT{...} block content with balanced brace scanning.
 

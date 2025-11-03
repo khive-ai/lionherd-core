@@ -204,7 +204,7 @@ def parse_lndl_fuzzy(
                     f"Available: {expected_spec_names} (strict mode: exact match required)"
                 )
 
-        return resolve_references_prefixed(out_fields_raw, lvars_raw, operable)
+        return resolve_references_prefixed(out_fields_raw, lvars_raw, {}, operable)
 
     # 2. Pre-correct lvar metadata (model names and field names)
     # Collect all unique model names and field names from lvars
@@ -291,4 +291,4 @@ def parse_lndl_fuzzy(
             out_fields_final[spec_name] = value
 
     # 5. Call strict resolver with corrected inputs (REUSE existing logic)
-    return resolve_references_prefixed(out_fields_final, lvars_corrected, operable)
+    return resolve_references_prefixed(out_fields_final, lvars_corrected, {}, operable)

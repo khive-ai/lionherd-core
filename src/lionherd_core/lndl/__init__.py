@@ -12,6 +12,7 @@ from .errors import (
 )
 from .fuzzy import parse_lndl_fuzzy
 from .parser import (
+    extract_lacts,
     extract_lvars,
     extract_lvars_prefixed,
     extract_out_block,
@@ -19,10 +20,11 @@ from .parser import (
 )
 from .prompt import LNDL_SYSTEM_PROMPT, get_lndl_system_prompt
 from .resolver import parse_lndl, resolve_references_prefixed
-from .types import LNDLOutput, LvarMetadata, ParsedConstructor
+from .types import ActionCall, LNDLOutput, LvarMetadata, ParsedConstructor
 
 __all__ = (
     "LNDL_SYSTEM_PROMPT",
+    "ActionCall",
     "AmbiguousMatchError",
     "InvalidConstructorError",
     "LNDLError",
@@ -33,6 +35,7 @@ __all__ = (
     "MissingOutBlockError",
     "ParsedConstructor",
     "TypeMismatchError",
+    "extract_lacts",
     "extract_lvars",  # backward compatibility
     "extract_lvars_prefixed",
     "extract_out_block",

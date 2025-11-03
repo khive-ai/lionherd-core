@@ -38,17 +38,38 @@ class ParsedConstructor:
 
 
 @dataclass(slots=True, frozen=True)
+class ActionCall:
+    """Parsed action call from <lact> tag.
+
+    Represents a tool/function invocation declared in LNDL response.
+    Actions are only executed if referenced in OUT{} block.
+
+    Attributes:
+        name: Local reference name (e.g., "search", "validate")
+        function: Function/tool name to invoke
+        arguments: Parsed arguments dict
+        raw_call: Original Python function call string
+    """
+
+    name: str
+    function: str
+    arguments: dict[str, Any]
+    raw_call: str
+
+
+@dataclass(slots=True, frozen=True)
 class LNDLOutput:
     """Validated LNDL output."""
 
     fields: dict[str, BaseModel]
     lvars: dict[str, str] | dict[str, LvarMetadata]  # Preserved for debugging
+    actions: dict[str, ActionCall]  # Declared actions (for debugging/reference)
     raw_out_block: str  # Preserved for debugging
 
     def __getitem__(self, key: str) -> BaseModel:
         return self.fields[key]
 
     def __getattr__(self, key: str) -> BaseModel:
-        if key in ("fields", "lvars", "raw_out_block"):
+        if key in ("fields", "lvars", "actions", "raw_out_block"):
             return object.__getattribute__(self, key)
         return self.fields[key]
