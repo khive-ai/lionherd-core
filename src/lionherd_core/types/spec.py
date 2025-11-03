@@ -265,7 +265,15 @@ class Spec:
 
             if current_metadata:
                 args = [actual_type, *list(current_metadata)]
-                result = Annotated.__class_getitem__(tuple(args))  # type: ignore
+                # Python 3.11-3.14 compatibility: try __class_getitem__ first (3.11-3.12),
+                # fall back to direct subscripting approach for 3.13+
+                try:
+                    result = Annotated.__class_getitem__(tuple(args))  # type: ignore
+                except AttributeError:
+                    # Python 3.13+ removed __class_getitem__, use operator approach
+                    import operator
+
+                    result = operator.getitem(Annotated, tuple(args))  # type: ignore
             else:
                 result = actual_type  # type: ignore[misc]
 
