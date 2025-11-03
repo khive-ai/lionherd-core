@@ -310,10 +310,12 @@ class TestLoadTypeFromString:
         _TYPE_CACHE.pop(type_str, None)
 
         # Mock importlib.import_module to return None (defensive case)
-        with patch("importlib.import_module", return_value=None):
-            # Raises ImportError which gets caught and re-raised as ValueError
-            with pytest.raises(ValueError, match="Failed to load type.*Module.*not found"):
-                load_type_from_string(type_str)
+        # Raises ImportError which gets caught and re-raised as ValueError
+        with (
+            patch("importlib.import_module", return_value=None),
+            pytest.raises(ValueError, match=r"Failed to load type.*Module.*not found"),
+        ):
+            load_type_from_string(type_str)
 
 
 # ============================================================================

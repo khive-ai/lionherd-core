@@ -10,7 +10,7 @@ Graph Structure
 ---------------
 A graph G = (V, E) consists of:
 - V: Set of vertices (nodes)
-- E ⊆ V × V: Set of edges (directed relationships)
+- E ⊆ V x V: Set of edges (directed relationships)
 - For directed graph: edge (u, v) ∈ E implies u → v (u is head, v is tail)
 
 Graph Properties
@@ -1878,12 +1878,12 @@ class TestEdgeCases:
         # Neither has toml adapter (isolated registries)
         try:
             graph_a.adapt_to("toml")
-            assert False, "GraphA should not have toml adapter"
+            raise AssertionError("GraphA should not have toml adapter")
         except AdapterNotFoundError:
             pass  # Expected
 
         try:
             graph_b.adapt_to("toml")
-            assert False, "GraphB should not have toml adapter"
+            raise AssertionError("GraphB should not have toml adapter")
         except AdapterNotFoundError:
             pass  # Expected

@@ -42,7 +42,7 @@ Set Operations
 --------------
 Pile provides mathematical set semantics:
 
-    P ∪ {x}  ≡  pile.include(x)   [idempotent add]
+    P U {x}  ≡  pile.include(x)   [idempotent add]
     P \\ {x}  ≡  pile.exclude(x)   [idempotent remove]
     |P|      ≡  len(pile)          [cardinality]
     x ∈ P    ≡  x in pile          [membership]
@@ -1199,13 +1199,13 @@ class TestPileTypeConstraintsEdgeCases:
         # Neither has toml adapter (isolated registries)
         try:
             pile_a.adapt_to("toml")
-            assert False, "PileA should not have toml adapter"
+            raise AssertionError("PileA should not have toml adapter")
         except AdapterNotFoundError:
             pass  # Expected
 
         try:
             pile_b.adapt_to("toml")
-            assert False, "PileB should not have toml adapter"
+            raise AssertionError("PileB should not have toml adapter")
         except AdapterNotFoundError:
             pass  # Expected
 
@@ -1305,12 +1305,12 @@ class TestPileTypeConstraintsEdgeCases:
 # ------------
 # to_dict(): O(n) where n = len(pile)
 #     - Iterate progression: O(n)
-#     - Serialize each item: O(n) × O(item serialization)
+#     - Serialize each item: O(n) x O(item serialization)
 #
 # from_dict(): O(n) where n = len(items)
-#     - Validate all types: O(n) × O(1) [set membership]
-#     - Deserialize items: O(n) × O(Element.from_dict)
-#     - Add items: O(n) × O(1) [dict insert + progression append]
+#     - Validate all types: O(n) x O(1) [set membership]
+#     - Deserialize items: O(n) x O(Element.from_dict)
+#     - Add items: O(n) x O(1) [dict insert + progression append]
 
 
 def test_to_dict_python_mode(simple_items):
