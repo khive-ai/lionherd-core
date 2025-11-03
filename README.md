@@ -88,7 +88,7 @@ researcher = Agent(id=uuid4(), name="Alice", role="researcher")
 agents.include(researcher)
 
 # O(1) UUID lookup
-found = agents[researcher.ln_id]
+found = agents[researcher.id]
 
 # Predicate queries
 idle_agents = agents.get(lambda a: a.status == "idle")
@@ -162,7 +162,7 @@ from lionherd_core.protocols import Observable, Serializable, Adaptable
 
 # Check capabilities at runtime
 if isinstance(obj, Observable):
-    print(obj.ln_id)  # UUID guaranteed
+    print(obj.id)  # UUID guaranteed
 
 if isinstance(obj, Serializable):
     data = obj.to_dict()  # Serialization guaranteed
@@ -173,10 +173,10 @@ from lionherd_core.protocols import implements
 @implements(Observable, Serializable, Adaptable)
 class CustomAgent:
     def __init__(self):
-        self.ln_id = uuid4()
+        self.id = uuid4()
 
     def to_dict(self):
-        return {"id": str(self.ln_id)}
+        return {"id": str(self.id)}
 ```
 
 ---
