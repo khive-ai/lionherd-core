@@ -1054,19 +1054,19 @@ class MyParamsWithContainers(Params):
 
 
 def test_params_with_updates_deep():
-    """Test Params.with_updates performs deep copy when deep=True."""
+    """Test Params.with_updates copies containers when copy_containers=True."""
     original_list = [1, 2, 3]
     original_dict = {"key": "value"}
     original_set = {1, 2, 3}
     params = MyParamsWithContainers(items=original_list, config=original_dict, tags=original_set)
 
-    # Deep copy
-    updated = params.with_updates(deep=True, items=[4, 5, 6])
+    # Shallow copy containers
+    updated = params.with_updates(copy_containers=True, items=[4, 5, 6])
 
-    # Verify deep copy occurred (lines 190-192)
+    # Verify copy occurred (lines 190-192)
     assert params.items == [1, 2, 3]
     assert updated.items == [4, 5, 6]
-    # Other mutable fields should also be deep copied
+    # Other mutable fields should also be copied
     assert params.config == {"key": "value"}
     assert params.tags == {1, 2, 3}
 
@@ -1081,11 +1081,11 @@ class MyDataClassWithContainers(DataClass):
 
 
 def test_dataclass_with_updates_deep():
-    """Test DataClass.with_updates performs deep copy when deep=True."""
+    """Test DataClass.with_updates copies containers when copy_containers=True."""
     obj = MyDataClassWithContainers(items=[1, 2], tags={1, 2}, config={"a": 1})
-    updated = obj.with_updates(deep=True, items=[3, 4])
+    updated = obj.with_updates(copy_containers=True, items=[3, 4])
 
-    # Verify deep copy occurred
+    # Verify copy occurred
     assert obj.items == [1, 2]
     assert updated.items == [3, 4]
     # Verify other containers were also copied
