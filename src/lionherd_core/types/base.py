@@ -157,24 +157,32 @@ class Params:
         """
         dict_ = self.to_dict()
 
-        if copy_containers == "shallow":
-            for k, v in dict_.items():
-                if k not in kwargs and isinstance(v, list | dict | set):
-                    dict_[k] = v.copy()
-        elif copy_containers == "deep":
-            import copy
+        def _out(d: dict):
+            d.update(kwargs)
+            return type(self)(**d)
 
-            for k, v in dict_.items():
-                if k not in kwargs and isinstance(v, list | dict | set):
-                    dict_[k] = copy.deepcopy(v)
-        elif copy_containers is not None:
-            raise ValueError(
-                f"Invalid copy_containers: {copy_containers!r}. "
-                f"Must be 'shallow', 'deep', or None."
-            )
+        if copy_containers is None:
+            return _out(dict_)
 
-        dict_.update(kwargs)
-        return type(self)(**dict_)
+        match copy_containers:
+            case "shallow":
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(v, list | dict | set):
+                        dict_[k] = v.copy()
+                return _out(dict_)
+
+            case "deep":
+                import copy
+
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(v, list | dict | set):
+                        dict_[k] = copy.deepcopy(v)
+                return _out(dict_)
+
+        raise ValueError(
+            f"Invalid copy_containers: {copy_containers!r}. "
+            f"Must be 'shallow', 'deep', or None."
+        )
 
 
 @implements(Serializable, Allowable, Hashable)
@@ -247,25 +255,34 @@ class DataClass:
         """
         dict_ = self.to_dict()
 
-        if copy_containers == "shallow":
-            for k, v in dict_.items():
-                if k not in kwargs and isinstance(v, list | dict | set):
-                    dict_[k] = v.copy()
-        elif copy_containers == "deep":
-            import copy
+        def _out(d: dict):
+            d.update(kwargs)
+            return type(self)(**d)
 
-            for k, v in dict_.items():
-                if k not in kwargs and isinstance(v, list | dict | set):
-                    dict_[k] = copy.deepcopy(v)
-        elif copy_containers is not None:
-            raise ValueError(
-                f"Invalid copy_containers: {copy_containers!r}. "
-                f"Must be 'shallow', 'deep', or None."
-            )
+        if copy_containers is None:
+            return _out(dict_)
 
-        dict_.update(kwargs)
-        return type(self)(**dict_)
+        match copy_containers:
+            case "shallow":
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(v, list | dict | set):
+                        dict_[k] = v.copy()
+                return _out(dict_)
+                        
+            case "deep":
+                import copy
 
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(v, list | dict | set):
+                        dict_[k] = copy.deepcopy(v)
+                return _out(dict_)
+                        
+        raise ValueError(
+            f"Invalid copy_containers: {copy_containers!r}. "
+            f"Must be 'shallow', 'deep', or None."
+        )
+        
+        
     def __hash__(self) -> int:
         from ..ln._hash import hash_dict
 
