@@ -78,10 +78,33 @@ class Element(BaseModel):
 
     @classmethod
     def class_name(cls, full: bool = False) -> str:
-        """Return class name (fully qualified if full=True)."""
+        """Returns this class's name, stripping generic type parameters.
+
+        For generic classes (e.g., Flow[Item, Prog]), returns the origin class name
+        without type parameters (e.g., Flow).
+
+        Args:
+            full: If True, returns fully qualified name (module.Class); otherwise class name only
+
+        Returns:
+            Class name string without generic parameters
+
+        Note:
+            For Pydantic generic models, runtime classes have type parameters in __name__.
+            We strip these using string parsing since typing.get_origin() doesn't work
+            on Pydantic runtime instances.
+        """
+        # For Pydantic generic models, __name__ and __qualname__ include type params at runtime
+        # e.g., "Flow[Item, Prog]" instead of "Flow"
+        name = cls.__qualname__ if full else cls.__name__
+
+        # Strip generic type parameters (Flow[E, P] -> Flow)
+        if "[" in name:
+            name = name.split("[")[0]
+
         if full:
-            return f"{cls.__module__}.{cls.__qualname__}"  # nested class support
-        return cls.__name__
+            return f"{cls.__module__}.{name}"
+        return name
 
     def _to_dict(self, **kwargs: Any) -> dict[str, Any]:
         """Serialize to dict with lion_class injected in metadata."""
