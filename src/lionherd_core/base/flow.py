@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Generic, TypeVar, overload
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
@@ -17,15 +16,17 @@ from .progression import Progression
 
 __all__ = ("Flow",)
 
-E = TypeVar("E", bound=Element)  # Element type for items pile
-P = TypeVar("P", bound=Progression)  # Progression type (Flow IS Pile[P])
+E = TypeVar("E", bound=Element)  # Element type for items
+P = TypeVar("P", bound=Progression)  # Progression type
 
 
 @implements(Containable)
-class Flow(Pile[P], Generic[E, P]):
-    """Pile of progressions + pile of items for workflow state machines.
+class Flow(Element, Generic[E, P]):
+    """Workflow state machine with ordered progressions and referenced items.
 
-    Flow IS Pile[P] with additional items pile. Progressions reference items.
+    Flow uses composition: two Pile instances for clear separation.
+    - progressions: Named sequences of item UUIDs (workflow stages)
+    - items: Referenced elements (Nodes, Agents, etc.)
 
     Generic Parameters:
         E: Element type for items
@@ -36,15 +37,19 @@ class Flow(Pile[P], Generic[E, P]):
         default=None,
         description="Optional name for this flow (e.g., 'task_workflow')",
     )
-    pile: Pile[E] = Field(
+    progressions: Pile[P] = Field(
+        default_factory=Pile,
+        description="Workflow stages as named progressions",
+    )
+    items: Pile[E] = Field(
         default_factory=Pile,
         description="Items that progressions reference",
     )
     _progression_names: dict[str, UUID] = PrivateAttr(default_factory=dict)
 
-    @field_validator("pile", mode="before")
+    @field_validator("items", "progressions", mode="before")
     @classmethod
-    def _validate_pile(cls, v: Any) -> Any:
+    def _validate_piles(cls, v: Any) -> Any:
         """Convert dict to Pile during deserialization."""
         if isinstance(v, dict):
             return Pile.from_dict(v)
@@ -61,35 +66,33 @@ class Flow(Pile[P], Generic[E, P]):
         """Initialize Flow with optional items and type validation.
 
         Args:
-            items: Initial items to add to pile
+            items: Initial items to add to items pile
             name: Flow name
             item_type: Type(s) for validation
             strict_type: Enforce exact type match (no subclasses)
             **data: Additional Element fields
         """
-        # Let Pydantic create default pile, then populate it
+        # Let Pydantic create default piles, then populate
         super().__init__(name=name, **data)
 
         # Normalize item_type to set and extract types from unions
         if item_type is not None:
             item_type = extract_types(item_type)
 
-        # Set item_type and strict_type on pile if provided
+        # Set item_type and strict_type on items pile if provided
         if item_type:
-            self.pile.item_type = item_type
+            self.items.item_type = item_type
         if strict_type:
-            self.pile.strict_type = strict_type
+            self.items.strict_type = strict_type
 
         # Add items after initialization
         if items:
             for item in items:
-                self.pile.add(item)
+                self.items.add(item)
 
     # ==================== Progression Management ====================
-    # Flow IS Pile[P], so progression operations are inherited
-    # Override add/remove to manage name index
 
-    def add(self, progression: P) -> None:
+    def add_progression(self, progression: P) -> None:
         """Add progression with name registration. Raises ValueError if UUID or name exists."""
         # Check name uniqueness
         if progression.name and progression.name in self._progression_names:
@@ -97,30 +100,50 @@ class Flow(Pile[P], Generic[E, P]):
                 f"Progression with name '{progression.name}' already exists. Names must be unique."
             )
 
-        # Add to pile (Flow IS Pile[P])
-        super().add(progression)
+        # Add to progressions pile
+        self.progressions.add(progression)
 
         # Register name if present
         if progression.name:
             self._progression_names[progression.name] = progression.id
 
-    def remove(self, progression_id: UUID | str | P) -> P:
+    def remove_progression(self, progression_id: UUID | str | P) -> P:
         """Remove progression by UUID or name. Raises ValueError if not found."""
         # Resolve name to UUID if needed
         if isinstance(progression_id, str) and progression_id in self._progression_names:
             uid = self._progression_names[progression_id]
             del self._progression_names[progression_id]
-            return super().remove(uid)
+            return self.progressions.remove(uid)
 
         # Convert to UUID for type-safe removal
         from ._utils import to_uuid
 
         uid = to_uuid(progression_id)
-        prog: P = super().__getitem__(uid)
+        prog: P = self.progressions[uid]
 
         if prog.name and prog.name in self._progression_names:
             del self._progression_names[prog.name]
-        return super().remove(uid)
+        return self.progressions.remove(uid)
+
+    def get_progression(self, key: UUID | str | P) -> P:
+        """Get progression by UUID or name. Raises KeyError if not found."""
+        if isinstance(key, str):
+            # Check name index first
+            if key in self._progression_names:
+                uid = self._progression_names[key]
+                return self.progressions[uid]
+
+            # Try parsing as UUID string
+            from ._utils import to_uuid
+
+            try:
+                uid = to_uuid(key)
+                return self.progressions[uid]
+            except (ValueError, TypeError):
+                raise KeyError(f"Progression '{key}' not found in flow")
+
+        # UUID or Progression instance
+        return self.progressions[key]
 
     # ==================== Item Management ====================
 
@@ -129,9 +152,9 @@ class Flow(Pile[P], Generic[E, P]):
         item: E,
         progression_ids: list[UUID | str] | UUID | str | None = None,
     ) -> None:
-        """Add item to pile and optionally to progressions. Raises ValueError if exists."""
+        """Add item to items pile and optionally to progressions. Raises ValueError if exists."""
         # Add to items pile
-        self.pile.add(item)
+        self.items.add(item)
 
         # Add to specified progressions
         if progression_ids is not None:
@@ -139,7 +162,7 @@ class Flow(Pile[P], Generic[E, P]):
             ids = [progression_ids] if not isinstance(progression_ids, list) else progression_ids
 
             for prog_id in ids:
-                progression = self[prog_id]  # Flow IS Pile[P]
+                progression = self.get_progression(prog_id)
                 progression.append(item)
 
     def remove_item(
@@ -147,81 +170,20 @@ class Flow(Pile[P], Generic[E, P]):
         item_id: UUID | str | Element,
         remove_from_progressions: bool = True,
     ) -> E:
-        """Remove item from pile and optionally from progressions. Raises ValueError if not found."""
+        """Remove item from items pile and optionally from progressions. Raises ValueError if not found."""
         from ._utils import to_uuid
 
         uid = to_uuid(item_id)
 
-        # Remove from progressions first (Flow IS Pile[P])
+        # Remove from progressions first
         if remove_from_progressions:
-            for progression in self:
+            for progression in self.progressions:
                 if uid in progression:
                     progression.remove(uid)
 
         # Remove from items pile
-        return self.pile.remove(uid)
-
-    # ==================== Operators ====================
-
-    @overload
-    def __getitem__(self, key: UUID | str) -> P:
-        """Get progression by UUID or name."""
-        ...  # pragma: no cover
-
-    @overload
-    def __getitem__(self, key: Progression) -> Pile[P]:
-        """Filter by progression - returns new Pile."""
-        ...  # pragma: no cover
-
-    @overload
-    def __getitem__(self, key: int) -> P:
-        """Get progression by index."""
-        ...  # pragma: no cover
-
-    @overload
-    def __getitem__(self, key: slice) -> list[P]:
-        """Get multiple progressions by slice."""
-        ...  # pragma: no cover
-
-    @overload
-    def __getitem__(self, key: Callable[[P], bool]) -> Pile[P]:
-        """Filter by function - returns new Pile."""
-        ...  # pragma: no cover
-
-    def __getitem__(self, key: Any) -> P | list[P] | Pile[P]:
-        """Get progression by UUID/name/int/slice/callable. Raises KeyError if not found.
-
-        Flow IS Pile[P]: flow["name"] → progression. For items: flow.pile[item_id].
-        """
-        # String: check name index first
-        if isinstance(key, str):
-            if key in self._progression_names:
-                uid = self._progression_names[key]
-                # Type narrowing: uid is UUID, super().__getitem__(UUID) returns P
-                return super().__getitem__(uid)
-
-            # Try parsing as UUID string
-            from ._utils import to_uuid
-
-            try:
-                uid = to_uuid(key)
-                # Type narrowing: uid is UUID, super().__getitem__(UUID) returns P
-                return super().__getitem__(uid)
-            except (ValueError, TypeError):
-                raise KeyError(f"Progression '{key}' not found in flow")
-
-        # All other cases (UUID, int, slice, Progression, callable): delegate to Pile
-        return super().__getitem__(key)
-
-    def __contains__(self, item: str | UUID | Element) -> bool:
-        """Check if progression (by name/UUID) or item exists in piles."""
-        # String: check name index first, then items pile
-        if isinstance(item, str):
-            return item in self._progression_names or item in self.pile
-
-        # UUID/Element: check progressions (Flow IS Pile[P]) or items pile
-        return super().__contains__(item) or item in self.pile
+        return self.items.remove(uid)
 
     def __repr__(self) -> str:
         name_str = f" name='{self.name}'" if self.name else ""
-        return f"Flow(items={len(self.pile)}, progressions={len(self)}{name_str})"
+        return f"Flow(items={len(self.items)}, progressions={len(self.progressions)}{name_str})"
