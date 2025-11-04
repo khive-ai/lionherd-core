@@ -9,7 +9,7 @@ from enum import (
     Enum as _Enum,
     StrEnum,
 )
-from typing import Any, ClassVar, Self, TypedDict
+from typing import Any, ClassVar, Literal, Self, TypedDict
 
 from typing_extensions import override
 
@@ -147,37 +147,26 @@ class Params:
         return hash(self) == hash(other)
 
     def with_updates(
-        self, copy_containers: bool = False, deep_copy: bool = False, **kwargs: Any
+        self, copy_containers: Literal["shallow", "deep"] | None = None, **kwargs: Any
     ) -> Self:
         """Return new instance with updated fields.
 
         Args:
-            copy_containers: Copy mutable containers (list/dict/set) to prevent shared references.
-            deep_copy: Use deep copy (recursive) instead of shallow. Ignored if copy_containers=False.
-            **kwargs: Field updates to apply.
-
-        Returns:
-            New instance with updated fields.
-
-        Examples:
-            >>> params = Params(x=10, items=[1, 2, 3])
-            >>> # No copying (references preserved, fast)
-            >>> new1 = params.with_updates(x=20)
-            >>> # Shallow copy containers (isolate top-level mutations)
-            >>> new2 = params.with_updates(copy_containers=True, items=[4, 5])
-            >>> # Deep copy (full isolation, including nested structures)
-            >>> new3 = params.with_updates(
-            ...     copy_containers=True, deep_copy=True, nested={"a": [1, 2]}
-            ... )
+            copy_containers: None (no copy), "shallow" (top-level), or "deep" (recursive).
+            **kwargs: Field updates.
         """
         dict_ = self.to_dict()
 
-        if copy_containers:
+        if copy_containers == "shallow":
+            for k, v in dict_.items():
+                if isinstance(v, list | dict | set):
+                    dict_[k] = v.copy()
+        elif copy_containers == "deep":
             import copy
 
             for k, v in dict_.items():
                 if isinstance(v, list | dict | set):
-                    dict_[k] = v.copy() if not deep_copy else copy.deepcopy(v)
+                    dict_[k] = copy.deepcopy(v)
 
         dict_.update(kwargs)
         return type(self)(**dict_)
@@ -243,35 +232,26 @@ class DataClass:
         return value
 
     def with_updates(
-        self, copy_containers: bool = False, deep_copy: bool = False, **kwargs: Any
+        self, copy_containers: Literal["shallow", "deep"] | None = None, **kwargs: Any
     ) -> Self:
         """Return new instance with updated fields.
 
         Args:
-            copy_containers: Copy mutable containers (list/dict/set) to prevent shared references.
-            deep_copy: Use deep copy (recursive) instead of shallow. Ignored if copy_containers=False.
-            **kwargs: Field updates to apply.
-
-        Returns:
-            New instance with updated fields.
-
-        Examples:
-            >>> dc = SomeDataClass(x=10, items=[1, 2, 3])
-            >>> # No copying (references preserved, fast)
-            >>> new1 = dc.with_updates(x=20)
-            >>> # Shallow copy containers (isolate top-level mutations)
-            >>> new2 = dc.with_updates(copy_containers=True, items=[4, 5])
-            >>> # Deep copy (full isolation, including nested structures)
-            >>> new3 = dc.with_updates(copy_containers=True, deep_copy=True, nested={"a": [1, 2]})
+            copy_containers: None (no copy), "shallow" (top-level), or "deep" (recursive).
+            **kwargs: Field updates.
         """
         dict_ = self.to_dict()
 
-        if copy_containers:
+        if copy_containers == "shallow":
+            for k, v in dict_.items():
+                if isinstance(v, list | dict | set):
+                    dict_[k] = v.copy()
+        elif copy_containers == "deep":
             import copy
 
             for k, v in dict_.items():
                 if isinstance(v, list | dict | set):
-                    dict_[k] = v.copy() if not deep_copy else copy.deepcopy(v)
+                    dict_[k] = copy.deepcopy(v)
 
         dict_.update(kwargs)
         return type(self)(**dict_)

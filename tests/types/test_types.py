@@ -1053,17 +1053,38 @@ class MyParamsWithContainers(Params):
     tags: set = Unset
 
 
-def test_params_with_updates_deep():
-    """Test Params.with_updates copies containers when copy_containers=True."""
+def test_params_with_updates_shallow():
+    """Test Params.with_updates with copy_containers='shallow'.
+
+    **API Design Rationale**:
+    with_updates() uses Literal["shallow", "deep"] | None for explicit copy semantics:
+    - None: No copying (references preserved, fast default)
+    - "shallow": Copy top-level containers (list/dict/set) via .copy()
+    - "deep": Recursive copy via copy.deepcopy() for full isolation
+
+    This replaces the old misleading API:
+    - OLD: deep=True (name suggested deep but did shallow via copy.copy())
+    - NEW: copy_containers="shallow" (explicit about what it does)
+
+    **Performance**:
+    - Lazy import: copy module only loaded for "deep"
+    - Builtin .copy(): Faster than copy.copy() for shallow
+    - Type-specific: Only copies list/dict/set
+
+    **Use Cases**:
+    - None: Updating immutable fields (int, str, etc.)
+    - "shallow": Preventing shared references for simple containers
+    - "deep": Full isolation for nested structures (see test_*_deep_copy_nested)
+    """
     original_list = [1, 2, 3]
     original_dict = {"key": "value"}
     original_set = {1, 2, 3}
     params = MyParamsWithContainers(items=original_list, config=original_dict, tags=original_set)
 
     # Shallow copy containers
-    updated = params.with_updates(copy_containers=True, items=[4, 5, 6])
+    updated = params.with_updates(copy_containers="shallow", items=[4, 5, 6])
 
-    # Verify copy occurred (lines 190-192)
+    # Verify copy occurred
     assert params.items == [1, 2, 3]
     assert updated.items == [4, 5, 6]
     # Other mutable fields should also be copied
@@ -1080,10 +1101,10 @@ class MyDataClassWithContainers(DataClass):
     config: dict = field(default_factory=dict)
 
 
-def test_dataclass_with_updates_deep():
-    """Test DataClass.with_updates copies containers when copy_containers=True."""
+def test_dataclass_with_updates_shallow():
+    """Test DataClass.with_updates copies containers when copy_containers='shallow'."""
     obj = MyDataClassWithContainers(items=[1, 2], tags={1, 2}, config={"a": 1})
-    updated = obj.with_updates(copy_containers=True, items=[3, 4])
+    updated = obj.with_updates(copy_containers="shallow", items=[3, 4])
 
     # Verify copy occurred
     assert obj.items == [1, 2]
@@ -1091,6 +1112,59 @@ def test_dataclass_with_updates_deep():
     # Verify other containers were also copied
     assert obj.tags == {1, 2}
     assert obj.config == {"a": 1}
+
+
+def test_params_with_updates_deep_copy_nested():
+    """Test copy_containers='deep' performs recursive copying on nested structures.
+
+    **Deep Copy Behavior**:
+    - Uses copy.deepcopy() for full recursive isolation
+    - Prevents shared references at ALL levels (not just top-level)
+    - Required for nested containers: dict with list values, list of lists, etc.
+
+    **Contrast with Shallow**:
+    - Shallow: Top-level copied, inner structures shared (mutating inner affects original)
+    - Deep: Fully isolated, no shared references (safe to mutate at any level)
+
+    This test proves deep copy works by mutating nested structures and verifying
+    original is unchanged.
+    """
+    # Nested structure: dict with list values
+    nested_dict = {"outer": {"inner": [1, 2]}}
+    params = MyParamsWithContainers(config=nested_dict)
+
+    # Shallow copy - inner structures shared
+    shallow = params.with_updates(copy_containers="shallow", config={"outer": {"inner": [1, 2]}})
+    shallow.config["outer"]["inner"].append(3)
+    # Original should be unchanged (top-level dict was copied)
+    assert params.config == {"outer": {"inner": [1, 2]}}
+
+    # Deep copy - fully isolated, no shared references
+    deep = params.with_updates(copy_containers="deep")
+    deep.config["outer"]["inner"].append(999)
+    # Original unchanged (recursive copy)
+    assert params.config == {"outer": {"inner": [1, 2]}}
+    assert deep.config == {"outer": {"inner": [1, 2, 999]}}
+
+
+def test_dataclass_with_updates_deep_copy_nested():
+    """Test DataClass copy_containers='deep' performs recursive copying on nested structures."""
+    # Nested list of lists
+    nested_items = [[1, 2], [3, 4]]
+    obj = MyDataClassWithContainers(items=nested_items)
+
+    # Shallow copy - inner lists shared
+    shallow = obj.with_updates(copy_containers="shallow", items=[[1, 2], [3, 4]])
+    shallow.items[0].append(999)
+    # Original unchanged (top-level list was copied)
+    assert obj.items == [[1, 2], [3, 4]]
+
+    # Deep copy - fully isolated
+    deep = obj.with_updates(copy_containers="deep")
+    deep.items[0].append(999)
+    # Original unchanged (recursive copy)
+    assert obj.items == [[1, 2], [3, 4]]
+    assert deep.items == [[1, 2, 999], [3, 4]]
 
 
 # ============================================================================
