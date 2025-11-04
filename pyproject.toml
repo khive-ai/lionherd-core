@@ -11,6 +11,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lionherd_core"]
+artifacts = ["src/lionherd_core/py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
