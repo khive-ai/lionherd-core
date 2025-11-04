@@ -12,6 +12,7 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
+from lionherd_core.lndl.parser import PYTHON_RESERVED
 from lionherd_core.types import Operable, Spec
 
 
@@ -581,11 +582,12 @@ class TestActionErrorHandling:
         assert len(errors) == 1
         assert "Invalid function call syntax" in str(errors[0])
 
-    def test_reserved_keyword_warning_keyword(self):
-        """Test warning when action name is Python keyword."""
+    @pytest.mark.parametrize("keyword", sorted(PYTHON_RESERVED))
+    def test_reserved_keyword_warning(self, keyword):
+        """Test warning when action name is Python reserved keyword or builtin."""
         import warnings
 
-        response = "<lact class>some_function()</lact>\nOUT{result:[class]}"
+        response = f"<lact {keyword}>some_function()</lact>\nOUT{{result:[{keyword}]}}"
         operable = Operable([Spec(SearchResults, name="result")])
 
         with warnings.catch_warnings(record=True) as w:
@@ -594,26 +596,55 @@ class TestActionErrorHandling:
 
             # Should issue a warning
             assert len(w) == 1
-            assert "reserved keyword" in str(w[0].message)
-            assert "'class'" in str(w[0].message)
+            assert "reserved keyword" in str(w[0].message).lower()
+            assert f"'{keyword}'" in str(w[0].message)
 
         # Should still parse successfully
         assert isinstance(output.result, ActionCall)
 
-    def test_reserved_keyword_warning_builtin(self):
-        """Test warning when action name is Python builtin."""
-        import warnings
+    def test_multiple_malformed_actions(self):
+        """Test ExceptionGroup aggregation for multiple malformed actions."""
+        response = """<lact action1>broken_syntax</lact>
+<lact action2>also_broken(</lact>
+OUT{result1:[action1], result2:[action2]}"""
+        operable = Operable(
+            [
+                Spec(SearchResults, name="result1"),
+                Spec(SearchResults, name="result2"),
+            ]
+        )
 
-        response = "<lact print>some_function()</lact>\nOUT{result:[print]}"
-        operable = Operable([Spec(SearchResults, name="result")])
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            output = parse_lndl(response, operable)
+        errors = exc_info.value.exceptions
+        # Should have 2 errors, one for each malformed action
+        assert len(errors) == 2
+        assert all("Invalid function call syntax" in str(e) for e in errors)
+        # Verify both action names are mentioned
+        error_strs = [str(e) for e in errors]
+        assert any("action1" in s for s in error_strs)
+        assert any("action2" in s for s in error_strs)
 
-            # Should issue a warning
-            assert len(w) == 1
-            assert "reserved keyword or builtin" in str(w[0].message)
-            assert "'print'" in str(w[0].message)
+    def test_mixed_valid_and_malformed_actions(self):
+        """Test partial failures with mixed valid and malformed actions."""
+        response = """<lact valid>proper_function()</lact>
+<lact broken>bad_syntax</lact>
+OUT{result1:[valid], result2:[broken]}"""
+        operable = Operable(
+            [
+                Spec(SearchResults, name="result1"),
+                Spec(SearchResults, name="result2"),
+            ]
+        )
 
-        assert isinstance(output.result, ActionCall)
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        # Should have only 1 error for the broken action
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "broken" in str(errors[0])
+        # Should NOT mention the valid action name (avoid false positive from "Invalid")
+        assert "'valid'" not in str(errors[0])
