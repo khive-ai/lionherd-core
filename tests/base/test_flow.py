@@ -678,6 +678,30 @@ def test_flow_to_dict(flow):
     assert data["name"] == "test_flow"
 
 
+def test_flow_to_dict_with_exclude_list(flow):
+    """Test Flow.to_dict() with exclude as list (not set)."""
+    # Test the else branch when exclude is not a set
+    data = flow.to_dict(exclude=["metadata"])
+
+    # Should still have items and progressions
+    assert "items" in data
+    assert "progressions" in data
+    # metadata should be excluded
+    assert "metadata" not in data
+
+
+def test_flow_to_dict_with_exclude_set(flow):
+    """Test Flow.to_dict() with exclude as set."""
+    # Test the if branch when exclude is already a set
+    data = flow.to_dict(exclude={"metadata"})
+
+    # Should still have items and progressions
+    assert "items" in data
+    assert "progressions" in data
+    # metadata should be excluded
+    assert "metadata" not in data
+
+
 def test_flow_from_dict():
     """Test Flow deserialization from dict."""
     # Create flow and serialize
