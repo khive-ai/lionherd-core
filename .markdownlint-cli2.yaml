@@ -1,0 +1,7 @@
+# markdownlint-cli2 configuration
+# https://github.com/DavidAnson/markdownlint-cli2
+
+config:
+  # MD024: Multiple headings with the same content
+  # Disabled for CHANGELOG.md where duplicate "Added" sections are expected
+  MD024: false
