@@ -685,8 +685,8 @@ def test_flow_from_dict():
     # Deserialize
     f2 = Flow.from_dict(data)
 
-    # Check pile is deserialized
-    assert isinstance(f2.pile, Pile)
+    # Check items pile is deserialized
+    assert isinstance(f2.items, Pile)
     assert f2.name == "test"
     # Note: Flow.from_dict only deserializes Element fields, not items/progressions
     # Those need to be handled separately by subclasses if needed
@@ -790,8 +790,8 @@ def test_flow_end_to_end_workflow():
     assert len(prog2) == 3
 
     # Access by name
-    assert f["stage1"] is prog1
-    assert f["stage2"] is prog2
+    assert f.get_progression("stage1") is prog1
+    assert f.get_progression("stage2") is prog2
 
     # Remove progression by name
     removed = f.remove_progression("stage1")
@@ -888,7 +888,7 @@ def test_flow_remove_nonexistent_progression_raises():
     f = Flow[FlowTestItem, FlowTestProgression]()
 
     with pytest.raises(ValueError, match="not found"):
-        f.remove(UUID("12345678-1234-5678-1234-567812345678"))
+        f.remove_progression(UUID("12345678-1234-5678-1234-567812345678"))
 
 
 def test_flow_remove_nonexistent_item_raises():

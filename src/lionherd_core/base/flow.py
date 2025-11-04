@@ -85,8 +85,8 @@ class Flow(Element, Generic[E, P]):
         if strict_type:
             self.items.strict_type = strict_type
 
-        # Add items after initialization
-        if items:
+        # Add items after initialization (only if items is a list, not during deserialization)
+        if items and isinstance(items, list):
             for item in items:
                 self.items.add(item)
 

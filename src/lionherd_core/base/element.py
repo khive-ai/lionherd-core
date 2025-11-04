@@ -78,10 +78,22 @@ class Element(BaseModel):
 
     @classmethod
     def class_name(cls, full: bool = False) -> str:
-        """Return class name (fully qualified if full=True)."""
+        """Returns this class's name.
+
+        full (bool): If True, returns the fully qualified class name; otherwise,
+            returns only the class name.
+        """
         if full:
-            return f"{cls.__module__}.{cls.__qualname__}"  # nested class support
-        return cls.__name__
+            name = str(cls).split("'")[1]
+            # Strip generic type parameters (e.g., Flow[Item, Prog] -> Flow)
+            if "[" in name:
+                name = name.split("[")[0]
+            return name
+        # Strip generics from __name__ too
+        name = cls.__name__
+        if "[" in name:
+            name = name.split("[")[0]
+        return name
 
     def _to_dict(self, **kwargs: Any) -> dict[str, Any]:
         """Serialize to dict with lion_class injected in metadata."""
