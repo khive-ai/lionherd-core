@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
@@ -199,8 +199,8 @@ class Flow(Element, Generic[E, P]):
 
     def to_dict(
         self,
-        mode: str = "python",
-        created_at_format: str | None = None,
+        mode: Literal["python", "json", "db"] = "python",
+        created_at_format: Literal["datetime", "isoformat", "timestamp"] | None = None,
         meta_key: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
@@ -209,12 +209,23 @@ class Flow(Element, Generic[E, P]):
         Overrides Element.to_dict() to ensure Pile fields are properly serialized
         with their items, not just metadata.
         """
-        # Get base Element serialization
+        # Exclude items and progressions from parent serialization
+        exclude = kwargs.pop("exclude", set())
+        if isinstance(exclude, set):
+            exclude = exclude | {"items", "progressions"}
+        else:
+            exclude = set(exclude) | {"items", "progressions"}
+
+        # Get base Element serialization (without Pile fields)
         data = super().to_dict(
-            mode=mode, created_at_format=created_at_format, meta_key=meta_key, **kwargs
+            mode=mode,
+            created_at_format=created_at_format,
+            meta_key=meta_key,
+            exclude=exclude,
+            **kwargs,
         )
 
-        # Replace Pile fields with their proper serialization (includes items)
+        # Add Pile fields with their proper serialization (includes items)
         data["items"] = self.items.to_dict(
             mode=mode, created_at_format=created_at_format, meta_key=meta_key
         )
