@@ -1188,6 +1188,47 @@ def test_params_with_updates_no_copy_for_updated_fields():
     assert updated.config is not params.config  # Different object
 
 
+def test_params_with_updates_invalid_copy_containers():
+    """Test runtime validation for invalid copy_containers values.
+
+    **Runtime Safety**: Type hints enforce valid values at compile time (mypy),
+    but runtime values (from config files, APIs, env vars) bypass type checking.
+    Must validate at runtime to prevent silent failures.
+
+    Invalid values should raise ValueError immediately, not silently ignore.
+    """
+    params = MyParamsWithContainers(items=[1, 2, 3])
+
+    # Invalid string
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        params.with_updates(copy_containers="invalid", items=[4, 5, 6])
+
+    # Case mismatch (case-sensitive)
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        params.with_updates(copy_containers="SHALLOW", items=[4, 5, 6])
+
+    # Empty string
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        params.with_updates(copy_containers="", items=[4, 5, 6])
+
+    # Typo
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        params.with_updates(copy_containers="shalllow", items=[4, 5, 6])
+
+
+def test_dataclass_with_updates_invalid_copy_containers():
+    """Test DataClass runtime validation for invalid copy_containers values."""
+    obj = MyDataClassWithContainers(items=[1, 2], tags={1, 2}, config={"a": 1})
+
+    # Invalid string
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        obj.with_updates(copy_containers="deep_copy", items=[3, 4])
+
+    # Case mismatch
+    with pytest.raises(ValueError, match="Invalid copy_containers"):
+        obj.with_updates(copy_containers="Deep", items=[3, 4])
+
+
 # ============================================================================
 # Test Meta Class
 # ============================================================================

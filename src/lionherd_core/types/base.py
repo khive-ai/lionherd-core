@@ -167,6 +167,11 @@ class Params:
             for k, v in dict_.items():
                 if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = copy.deepcopy(v)
+        elif copy_containers is not None:
+            raise ValueError(
+                f"Invalid copy_containers: {copy_containers!r}. "
+                f"Must be 'shallow', 'deep', or None."
+            )
 
         dict_.update(kwargs)
         return type(self)(**dict_)
@@ -252,6 +257,11 @@ class DataClass:
             for k, v in dict_.items():
                 if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = copy.deepcopy(v)
+        elif copy_containers is not None:
+            raise ValueError(
+                f"Invalid copy_containers: {copy_containers!r}. "
+                f"Must be 'shallow', 'deep', or None."
+            )
 
         dict_.update(kwargs)
         return type(self)(**dict_)
