@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
 
+from ..protocols import Serializable, implements
 from ._utils import extract_types
 from .element import Element
 from .pile import Pile
@@ -19,6 +20,7 @@ E = TypeVar("E", bound=Element)  # Element type for items
 P = TypeVar("P", bound=Progression)  # Progression type
 
 
+@implements(Serializable)
 class Flow(Element, Generic[E, P]):
     """Workflow state machine with ordered progressions and referenced items.
 
