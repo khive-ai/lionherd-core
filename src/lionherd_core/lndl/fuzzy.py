@@ -165,10 +165,12 @@ def parse_lndl_fuzzy(
     out_content = extract_out_block(response)
     out_fields_raw = parse_out_block_array(out_content)
 
+    # Build spec map for O(1) lookups (used in both strict and fuzzy modes)
+    spec_map = {spec.base_type.__name__: spec for spec in operable.get_specs()}
+    expected_models = set(spec_map.keys())
+
     # If threshold is 1.0 (strict mode), validate strictly then call resolver
     if threshold >= 1.0:
-        # Validate model names exist
-        expected_models = {spec.base_type.__name__ for spec in operable.get_specs()}
         for lvar in lvars_raw.values():
             if lvar.model not in expected_models:
                 raise MissingFieldError(
@@ -179,11 +181,7 @@ def parse_lndl_fuzzy(
         # Validate field names exist for each model
         for lvar in lvars_raw.values():
             # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
-            spec = None
-            for s in operable.get_specs():
-                if s.base_type.__name__ == lvar.model:
-                    spec = s
-                    break
+            spec = spec_map[lvar.model]
 
             # Check if field exists
             expected_fields = list(spec.base_type.model_fields.keys())
@@ -203,19 +201,13 @@ def parse_lndl_fuzzy(
                     )
 
                 # Find spec and validate field
-                spec = None
-                for s in operable.get_specs():
-                    if s.base_type.__name__ == lact.model:
-                        spec = s
-                        break
-
-                if spec is not None:
-                    expected_fields = list(spec.base_type.model_fields.keys())
-                    if lact.field not in expected_fields:
-                        raise MissingFieldError(
-                            f"Action field '{lact.field}' not found in model {lact.model}. "
-                            f"Available: {expected_fields} (strict mode: exact match required)"
-                        )
+                spec = spec_map[lact.model]
+                expected_fields = list(spec.base_type.model_fields.keys())
+                if lact.field not in expected_fields:
+                    raise MissingFieldError(
+                        f"Action field '{lact.field}' not found in model {lact.model}. "
+                        f"Available: {expected_fields} (strict mode: exact match required)"
+                    )
 
         # Validate spec names in OUT{} block
         expected_spec_names = list(operable.allowed())
@@ -237,9 +229,6 @@ def parse_lndl_fuzzy(
             raw_field_names_by_model[lvar.model] = set()
         raw_field_names_by_model[lvar.model].add(lvar.field)
 
-    # Get expected model names from operable specs
-    expected_models = {spec.base_type.__name__ for spec in operable.get_specs()}
-
     # Correct model names in lvars
     model_corrections: dict[str, str] = {}  # raw_model → corrected_model
     for raw_model in raw_model_names:
@@ -251,15 +240,9 @@ def parse_lndl_fuzzy(
     for raw_model, raw_fields in raw_field_names_by_model.items():
         corrected_model = model_corrections[raw_model]
 
-        # Get expected fields for this model from spec
+        # Get expected fields for this model from spec (O(1) lookup)
         # (spec guaranteed to exist: corrected_model from fuzzy match against expected_models)
-        spec = None
-        for s in operable.get_specs():
-            if s.base_type.__name__ == corrected_model:
-                spec = s
-                break
-
-        # Get field names from Pydantic model
+        spec = spec_map[corrected_model]
         expected_fields = list(spec.base_type.model_fields.keys())
 
         for raw_field in raw_fields:

@@ -9,6 +9,9 @@ from typing import Any
 from .errors import MissingOutBlockError
 from .types import LactMetadata, LvarMetadata
 
+# Track warned action names to prevent duplicate warnings
+_warned_action_names: set[str] = set()
+
 # Python reserved keywords and common builtins
 # Action names matching these will trigger warnings (not errors)
 PYTHON_RESERVED = {
@@ -185,8 +188,9 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
             field = None
             local_name = identifier  # identifier is the name
 
-        # Warn if action name conflicts with Python reserved keywords
-        if local_name in PYTHON_RESERVED:
+        # Warn if action name conflicts with Python reserved keywords (deduplicated)
+        if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
+            _warned_action_names.add(local_name)
             warnings.warn(
                 f"Action name '{local_name}' is a Python reserved keyword or builtin. "
                 f"While this works in LNDL (string keys), it may cause confusion.",
