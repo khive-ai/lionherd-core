@@ -8,7 +8,9 @@ from lionherd_core.lndl.types import LNDLOutput, ParsedConstructor
 
 def test_lndloutput_internal_attribute_access():
     """Test LNDLOutput internal attribute access."""
-    output = LNDLOutput(fields={"key": "value"}, lvars={}, raw_out_block="raw")
+    output = LNDLOutput(
+        fields={"key": "value"}, lvars={}, lacts={}, actions={}, raw_out_block="raw"
+    )
 
     # Access internal attributes directly (line 50)
     assert object.__getattribute__(output, "fields") == {"key": "value"}
@@ -40,7 +42,11 @@ class TestPhase3TypesCoverage:
             value: str
 
         output = LNDLOutput(
-            fields={"my_field": TestModel(value="test")}, lvars={}, raw_out_block="raw"
+            fields={"my_field": TestModel(value="test")},
+            lvars={},
+            lacts={},
+            actions={},
+            raw_out_block="raw",
         )
 
         # Test line 51: __getattr__ returns from fields dict
