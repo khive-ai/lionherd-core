@@ -475,3 +475,145 @@ class TestNamespacedActions:
 
         # Action should be in parsed_actions
         assert "fetch_report" in output.actions
+
+
+class TestActionErrorHandling:
+    """Test error handling for malformed action calls."""
+
+    def test_empty_action_call(self):
+        """Test error for empty action body."""
+        response = "<lact Report.summary s></lact>\nOUT{report:[s]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # Empty action call should raise ExceptionGroup with clear error message
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        # Check that the nested exception has clear context
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "action 's'" in str(errors[0])
+
+    def test_non_function_action(self):
+        """Test error for non-function syntax (missing parentheses)."""
+        response = "<lact Report.summary s>not_a_function</lact>\nOUT{report:[s]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # Missing parentheses should raise ExceptionGroup
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "not_a_function" in str(errors[0])
+
+    def test_syntax_error_in_args(self):
+        """Test error for unclosed quotes/parentheses in arguments."""
+        response = '<lact s>search(query="unclosed)</lact>\nOUT{result:[s]}'
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        # Syntax error in arguments should raise ExceptionGroup
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        # Error message should show the malformed call
+        assert 'search(query="unclosed)' in str(errors[0])
+
+    def test_nested_lact_tags(self):
+        """Test behavior with nested lact tags (regex extracts inner first)."""
+        # Regex will match the first complete tag pair (non-greedy .*?)
+        # So it extracts <lact inner>x()</lact> first, leaving malformed outer
+        response = "<lact outer>func(<lact inner>x()</lact>)</lact>\nOUT{report:[outer]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # The regex captures inner tag, leaving "func(<lact inner>x()" as outer call
+        # This results in syntax error
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+
+    def test_missing_closing_tag(self):
+        """Test unclosed lact tag (should not match regex, treated as missing)."""
+        response = '<lact action>search(query="test")\nOUT{result:[action]}'
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        # Missing closing tag means regex doesn't extract action
+        # Then reference resolution fails because "action" is undefined
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "not declared" in str(errors[0])
+        assert "'action'" in str(errors[0])
+
+    def test_scalar_action_malformed_syntax(self):
+        """Test error context for malformed action in scalar field."""
+        response = "<lact calc>broken_syntax_no_parens</lact>\nOUT{score:[calc]}"
+        operable = Operable([Spec(float, name="score")])
+
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "action 'calc'" in str(errors[0])
+        assert "scalar field 'score'" in str(errors[0])
+
+    def test_scalar_action_empty_call(self):
+        """Test error for empty action call in scalar field."""
+        response = "<lact calc></lact>\nOUT{score:[calc]}"
+        operable = Operable([Spec(float, name="score")])
+
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+
+    def test_reserved_keyword_warning_keyword(self):
+        """Test warning when action name is Python keyword."""
+        import warnings
+
+        response = "<lact class>some_function()</lact>\nOUT{result:[class]}"
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            output = parse_lndl(response, operable)
+
+            # Should issue a warning
+            assert len(w) == 1
+            assert "reserved keyword" in str(w[0].message)
+            assert "'class'" in str(w[0].message)
+
+        # Should still parse successfully
+        assert isinstance(output.result, ActionCall)
+
+    def test_reserved_keyword_warning_builtin(self):
+        """Test warning when action name is Python builtin."""
+        import warnings
+
+        response = "<lact print>some_function()</lact>\nOUT{result:[print]}"
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            output = parse_lndl(response, operable)
+
+            # Should issue a warning
+            assert len(w) == 1
+            assert "reserved keyword or builtin" in str(w[0].message)
+            assert "'print'" in str(w[0].message)
+
+        assert isinstance(output.result, ActionCall)

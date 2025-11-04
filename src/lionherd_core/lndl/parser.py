@@ -3,10 +3,67 @@
 
 import ast
 import re
+import warnings
 from typing import Any
 
 from .errors import MissingOutBlockError
 from .types import LactMetadata, LvarMetadata
+
+# Track warned action names to prevent duplicate warnings
+_warned_action_names: set[str] = set()
+
+# Python reserved keywords and common builtins
+# Action names matching these will trigger warnings (not errors)
+PYTHON_RESERVED = {
+    # Keywords
+    "and",
+    "as",
+    "assert",
+    "async",
+    "await",
+    "break",
+    "class",
+    "continue",
+    "def",
+    "del",
+    "elif",
+    "else",
+    "except",
+    "finally",
+    "for",
+    "from",
+    "global",
+    "if",
+    "import",
+    "in",
+    "is",
+    "lambda",
+    "nonlocal",
+    "not",
+    "or",
+    "pass",
+    "raise",
+    "return",
+    "try",
+    "while",
+    "with",
+    "yield",
+    # Common builtins that might cause confusion
+    "print",
+    "input",
+    "open",
+    "len",
+    "range",
+    "list",
+    "dict",
+    "set",
+    "tuple",
+    "str",
+    "int",
+    "float",
+    "bool",
+    "type",
+}
 
 
 def extract_lvars(text: str) -> dict[str, str]:
@@ -96,6 +153,11 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
     Returns:
         Dict mapping local names to LactMetadata
 
+    Note:
+        Performance: The regex pattern uses (.*?) with DOTALL for action body extraction.
+        For very large responses (>100KB), parsing may be slow. Recommended maximum
+        response size: 50KB. For larger responses, consider streaming parsers.
+
     Examples:
         >>> text = "<lact Report.summary s>generate_summary(...)</lact>"
         >>> extract_lacts_prefixed(text)
@@ -125,6 +187,16 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
             model = None
             field = None
             local_name = identifier  # identifier is the name
+
+        # Warn if action name conflicts with Python reserved keywords (deduplicated)
+        if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
+            _warned_action_names.add(local_name)
+            warnings.warn(
+                f"Action name '{local_name}' is a Python reserved keyword or builtin. "
+                f"While this works in LNDL (string keys), it may cause confusion.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         lacts[local_name] = LactMetadata(
             model=model,
