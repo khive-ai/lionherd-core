@@ -1,9 +1,41 @@
 [project]
 name = "lionherd-core"
 version = "1.0.0-alpha1"
-description = "Core utilities, base classes, and protocols for lionherd ecosystem"
+description = "The kernel layer for production AI agents - protocol-based, type-safe, zero framework lock-in"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "HaiyangLi", email = "quantocean.li@gmail.com" }]
 requires-python = ">=3.11"
+keywords = [
+  "ai",
+  "agents",
+  "multi-agent",
+  "orchestration",
+  "llm",
+  "type-safety",
+  "protocols",
+  "async",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
 dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
+
+[project.urls]
+Homepage = "https://github.com/khive-ai/lionherd-core"
+Documentation = "https://github.com/khive-ai/lionherd-core/blob/main/README.md"
+Repository = "https://github.com/khive-ai/lionherd-core"
+Issues = "https://github.com/khive-ai/lionherd-core/issues"
+Changelog = "https://github.com/khive-ai/lionherd-core/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
