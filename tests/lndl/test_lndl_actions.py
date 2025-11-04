@@ -12,6 +12,7 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
+from lionherd_core.lndl.parser import PYTHON_RESERVED
 from lionherd_core.types import Operable, Spec
 
 
@@ -581,59 +582,7 @@ class TestActionErrorHandling:
         assert len(errors) == 1
         assert "Invalid function call syntax" in str(errors[0])
 
-    @pytest.mark.parametrize(
-        "keyword",
-        [
-            # Keywords
-            "and",
-            "as",
-            "assert",
-            "async",
-            "await",
-            "break",
-            "class",
-            "continue",
-            "def",
-            "del",
-            "elif",
-            "else",
-            "except",
-            "finally",
-            "for",
-            "from",
-            "global",
-            "if",
-            "import",
-            "in",
-            "is",
-            "lambda",
-            "nonlocal",
-            "not",
-            "or",
-            "pass",
-            "raise",
-            "return",
-            "try",
-            "while",
-            "with",
-            "yield",
-            # Common builtins
-            "print",
-            "input",
-            "open",
-            "len",
-            "range",
-            "list",
-            "dict",
-            "set",
-            "tuple",
-            "str",
-            "int",
-            "float",
-            "bool",
-            "type",
-        ],
-    )
+    @pytest.mark.parametrize("keyword", sorted(PYTHON_RESERVED))
     def test_reserved_keyword_warning(self, keyword):
         """Test warning when action name is Python reserved keyword or builtin."""
         import warnings
