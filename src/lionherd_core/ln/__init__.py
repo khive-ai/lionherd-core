@@ -1,6 +1,7 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
+from ..libs.string_handlers._to_dict import to_dict
 from ._async_call import AlcallParams, BcallParams, alcall, bcall
 from ._fuzzy_match import FuzzyMatchKeysParams, fuzzy_match_keys
 from ._fuzzy_validate import fuzzy_validate_mapping, fuzzy_validate_pydantic
@@ -39,5 +40,6 @@ __all__ = (
     "lcall",
     "make_options",
     "now_utc",
+    "to_dict",
     "to_list",
 )

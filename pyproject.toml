@@ -1,6 +1,6 @@
 [project]
 name = "lionherd-core"
-version = "1.0.0-alpha"
+version = "1.0.0-alpha1"
 description = "Core utilities, base classes, and protocols for lionherd ecosystem"
 requires-python = ">=3.11"
 dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
@@ -11,6 +11,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lionherd_core"]
+artifacts = ["src/lionherd_core/py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

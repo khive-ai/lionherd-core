@@ -632,7 +632,7 @@ wheels = [
 
 [[package]]
 name = "lionherd-core"
-version = "1.0.0a0"
+version = "1.0.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

@@ -62,7 +62,7 @@ def _parse_str(
 def _object_to_mapping_like(
     obj: Any,
     *,
-    prioritize_model_dump: bool = True,
+    prioritize_model_dump: bool = False,
     **kwargs: Any,
 ) -> Mapping | dict | Any:
     """
@@ -309,7 +309,7 @@ def to_dict(
     input_: Any,
     /,
     *,
-    prioritize_model_dump: bool = True,
+    prioritize_model_dump: bool = False,
     fuzzy_parse: bool = False,
     suppress: bool = False,
     parser: Callable[[str], Any] | None = None,
