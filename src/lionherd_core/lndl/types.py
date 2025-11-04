@@ -24,6 +24,24 @@ class LvarMetadata:
 
 
 @dataclass(slots=True, frozen=True)
+class LactMetadata:
+    """Metadata for action declaration (namespaced or direct).
+
+    Examples:
+        Namespaced: <lact Report.summary s>generate_summary(...)</lact>
+        → LactMetadata(model="Report", field="summary", local_name="s", call="generate_summary(...)")
+
+        Direct: <lact search>search(...)</lact>
+        → LactMetadata(model=None, field=None, local_name="search", call="search(...)")
+    """
+
+    model: str | None  # Model name (e.g., "Report") or None for direct actions
+    field: str | None  # Field name (e.g., "summary") or None for direct actions
+    local_name: str  # Local reference name (e.g., "s", "search")
+    call: str  # Raw function call string
+
+
+@dataclass(slots=True, frozen=True)
 class ParsedConstructor:
     """Parsed type constructor from OUT{} block."""
 
@@ -61,15 +79,16 @@ class ActionCall:
 class LNDLOutput:
     """Validated LNDL output."""
 
-    fields: dict[str, BaseModel]
+    fields: dict[str, BaseModel | ActionCall]  # BaseModel instances or ActionCall (pre-execution)
     lvars: dict[str, str] | dict[str, LvarMetadata]  # Preserved for debugging
-    actions: dict[str, ActionCall]  # Declared actions (for debugging/reference)
+    lacts: dict[str, LactMetadata]  # All declared actions (for debugging/reference)
+    actions: dict[str, ActionCall]  # Actions referenced in OUT{} (pending execution)
     raw_out_block: str  # Preserved for debugging
 
-    def __getitem__(self, key: str) -> BaseModel:
+    def __getitem__(self, key: str) -> BaseModel | ActionCall:
         return self.fields[key]
 
-    def __getattr__(self, key: str) -> BaseModel:
-        if key in ("fields", "lvars", "actions", "raw_out_block"):
+    def __getattr__(self, key: str) -> BaseModel | ActionCall:
+        if key in ("fields", "lvars", "lacts", "actions", "raw_out_block"):
             return object.__getattribute__(self, key)
         return self.fields[key]

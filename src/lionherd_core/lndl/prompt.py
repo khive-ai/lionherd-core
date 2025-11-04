@@ -12,13 +12,26 @@ Variables:
 - alias: Short name for OUT{} reference (optional, defaults to field name)
 - Declare anywhere, revise anytime, think naturally
 
-Actions:
-<lact name>function_call(arg1="value", arg2=123)</lact>
+Actions (two patterns):
+
+Namespaced (for mixing with lvars):
+<lact Model.field alias>function_call(args)</lact>
+
+- Model.field: Explicit mapping (like lvars)
+- alias: Short name for OUT{} reference (optional, defaults to field name)
+- Enables mixing with lvars in same model
+
+Direct (entire output):
+<lact name>function_call(args)</lact>
 
 - name: Local reference for OUT{} block
-- function_call: Pythonic function syntax with arguments
-- Only actions referenced in OUT{} are executed
-- Actions NOT in OUT{} are scratch work (thinking, not executed)
+- Result becomes the entire field value
+- Cannot mix with lvars (use namespaced pattern instead)
+
+Both patterns:
+- Only executed if referenced in OUT{}
+- Not in OUT{} = scratch work (thinking, not executed)
+- Pythonic function syntax with arguments
 
 Output:
 ```lndl
@@ -27,7 +40,7 @@ OUT{field1:[var1, var2], field2:[action], scalar:literal}
 
 Arrays for models, action references for tool results, literals for scalars (float, str, int, bool)
 
-EXAMPLE
+EXAMPLE 1: Direct Actions (entire output)
 
 Specs: report(Report: title, summary), search_data(SearchResults: items, count), quality_score(float)
 
@@ -45,6 +58,20 @@ OUT{report:[t, s], search_data:[focused], quality_score:0.85}
 ```
 
 Note: Only "focused" action executes (in OUT{}). "broad" was scratch work.
+
+EXAMPLE 2: Mixing lvars and namespaced actions
+
+Specs: report(Report: title, summary, footer)
+
+<lvar Report.title t>Analysis Report</lvar>
+<lact Report.summary summarize>generate_summary(data="metrics")</lact>
+<lvar Report.footer f>End of Report</lvar>
+
+```lndl
+OUT{report:[t, summarize, f]}
+```
+
+Note: "summarize" action result fills Report.summary field, mixed with lvars for title and footer.
 
 KEY POINTS
 
@@ -64,11 +91,13 @@ Scalars (float, str, int, bool):
 
 Models (Pydantic classes):
 - Must use array syntax: report:[title, summary]
-- Can mix lvars and actions: data:[title, api_call, summary]
+- Can mix lvars and namespaced actions: data:[title, api_call, summary]
+- Direct action for entire model: data:[fetch_data] (single action, no lvars)
 - Actions referenced are executed, results used as field values
 
 Actions (tool/function calls):
-- Declared with <lact name>function(args)</lact>
+- Namespaced: <lact Model.field name>function(args)</lact> (for mixing)
+- Direct: <lact name>function(args)</lact> (entire output)
 - Referenced by name in OUT{}: field:[action_name]
 - Only executed if in OUT{} (scratch actions ignored)
 - Use pythonic call syntax: search(query="text", limit=10)
@@ -87,13 +116,15 @@ OUT{field:[data]}                           # WRONG: name collision (both lvar a
 
 CORRECT
 
-<lvar Model.field alias>value</lvar>        # Proper namespace for variables
-<lact name>function(args)</lact>            # Proper action declaration
-OUT{report:[var1, var2]}                    # Array maps to model fields
-OUT{data:[action_name]}                     # Action referenced, will execute
-OUT{quality_score:0.8}                      # Scalar literal
-OUT{quality_score:[q]}                      # Scalar from variable
-OUT{result:[action]}                        # Scalar from action result
+<lvar Model.field alias>value</lvar>              # Proper namespace for variables
+<lact Model.field alias>function(args)</lact>     # Namespaced action (for mixing)
+<lact name>function(args)</lact>                  # Direct action (entire output)
+OUT{report:[var1, var2]}                          # Array maps to model fields (lvars)
+OUT{report:[var1, action1, var2]}                 # Mixing lvars and namespaced actions
+OUT{data:[action_name]}                           # Direct action for entire field
+OUT{quality_score:0.8}                            # Scalar literal
+OUT{quality_score:[q]}                            # Scalar from variable
+OUT{result:[action]}                              # Scalar from action result
 """
 
 

@@ -34,7 +34,7 @@ class TestActionResolution:
 
     def test_scalar_action_resolution(self):
         """Test resolving action for scalar field."""
-        from lionherd_core.lndl.types import LvarMetadata
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
 
         out_fields = {
             "report": ["title", "summary"],
@@ -45,7 +45,9 @@ class TestActionResolution:
             "summary": LvarMetadata("Report", "summary", "summary", "Summary"),
         }
         lacts = {
-            "calculate": 'compute_score(data="test", threshold=0.8)',
+            "calculate": LactMetadata(
+                None, None, "calculate", 'compute_score(data="test", threshold=0.8)'
+            ),
         }
         operable = Operable([Spec(Report, name="report"), Spec(float, name="quality_score")])
 
@@ -66,8 +68,8 @@ class TestActionResolution:
         assert output.actions["calculate"].function == "compute_score"
 
     def test_action_in_basemodel_field_error(self):
-        """Test error when action referenced in BaseModel field."""
-        from lionherd_core.lndl.types import LvarMetadata
+        """Test error when direct action mixed with lvars in BaseModel field."""
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
 
         out_fields = {
             "report": ["title", "search_action"],
@@ -75,19 +77,21 @@ class TestActionResolution:
         lvars = {
             "title": LvarMetadata("Report", "title", "title", "Title"),
         }
+        # Direct action (no namespace) cannot be mixed with lvars
         lacts = {
-            "search_action": 'search(query="test", limit=10)',
+            "search_action": LactMetadata(
+                None, None, "search_action", 'search(query="test", limit=10)'
+            ),
         }
         operable = Operable([Spec(Report, name="report")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
             resolve_references_prefixed(out_fields, lvars, lacts, operable)
 
-        # Should raise ValueError about actions in BaseModel fields
+        # Should raise ValueError about direct actions not being mixable
         assert len(exc_info.value.exceptions) == 1
-        assert "Actions in BaseModel fields are not yet supported" in str(
-            exc_info.value.exceptions[0]
-        )
+        assert "Direct action" in str(exc_info.value.exceptions[0])
+        assert "cannot be mixed" in str(exc_info.value.exceptions[0])
 
     def test_name_collision_lvar_lact_error(self):
         """Test error when same name used for lvar and lact."""
@@ -107,7 +111,7 @@ class TestActionResolution:
 
     def test_multiple_actions_only_referenced_parsed(self):
         """Test that only actions referenced in OUT{} are parsed."""
-        from lionherd_core.lndl.types import LvarMetadata
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
 
         out_fields = {
             "report": ["title", "summary"],
@@ -118,9 +122,9 @@ class TestActionResolution:
             "summary": LvarMetadata("Report", "summary", "summary", "Summary"),
         }
         lacts = {
-            "draft1": "compute(version=1)",
-            "draft2": "compute(version=2)",
-            "final": "compute(version=3)",
+            "draft1": LactMetadata(None, None, "draft1", "compute(version=1)"),
+            "draft2": LactMetadata(None, None, "draft2", "compute(version=2)"),
+            "final": LactMetadata(None, None, "final", "compute(version=3)"),
         }
         operable = Operable([Spec(Report, name="report"), Spec(float, name="quality_score")])
 
@@ -281,3 +285,193 @@ class TestEndToEndActionParsing:
 
         with pytest.raises(ValueError, match="Name collision"):
             parse_lndl(response, operable)
+
+
+class TestNamespacedActions:
+    """Test namespaced action pattern for mixing lvars and actions."""
+
+    def test_extract_namespaced_actions(self):
+        """Test extracting namespaced actions with Model.field syntax."""
+        from lionherd_core.lndl import extract_lacts_prefixed
+
+        response = """
+        <lact Report.title t>generate_title(topic="AI")</lact>
+        <lact Report.summary summarize>generate_summary(data="metrics")</lact>
+        <lact search>search(query="test")</lact>
+        """
+
+        lacts = extract_lacts_prefixed(response)
+
+        # Namespaced actions
+        assert "t" in lacts
+        assert lacts["t"].model == "Report"
+        assert lacts["t"].field == "title"
+        assert lacts["t"].local_name == "t"
+        assert lacts["t"].call == 'generate_title(topic="AI")'
+
+        assert "summarize" in lacts
+        assert lacts["summarize"].model == "Report"
+        assert lacts["summarize"].field == "summary"
+        assert lacts["summarize"].local_name == "summarize"
+
+        # Direct action
+        assert "search" in lacts
+        assert lacts["search"].model is None
+        assert lacts["search"].field is None
+        assert lacts["search"].local_name == "search"
+
+    def test_extract_namespaced_without_alias(self):
+        """Test namespaced action defaults to field name when no alias provided."""
+        from lionherd_core.lndl import extract_lacts_prefixed
+
+        response = """
+        <lact Report.summary>generate_summary(data="test")</lact>
+        """
+
+        lacts = extract_lacts_prefixed(response)
+
+        assert "summary" in lacts
+        assert lacts["summary"].model == "Report"
+        assert lacts["summary"].field == "summary"
+        assert lacts["summary"].local_name == "summary"
+
+    def test_mixing_lvars_and_namespaced_actions(self):
+        """Test mixing lvars and namespaced actions in same BaseModel."""
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
+
+        out_fields = {
+            "report": ["title", "summarize", "footer"],
+        }
+        lvars = {
+            "title": LvarMetadata("ExtendedReport", "title", "title", "Analysis Report"),
+            "footer": LvarMetadata("ExtendedReport", "footer", "footer", "End of Report"),
+        }
+        lacts = {
+            "summarize": LactMetadata(
+                "ExtendedReport", "summary", "summarize", 'generate_summary(data="metrics")'
+            ),
+        }
+
+        # Create extended Report model with footer field
+        class ExtendedReport(BaseModel):
+            title: str
+            summary: str
+            footer: str
+
+        operable = Operable([Spec(ExtendedReport, name="report")])
+        output = resolve_references_prefixed(out_fields, lvars, lacts, operable)
+
+        # Title and footer from lvars
+        assert output.report.title == "Analysis Report"
+        assert output.report.footer == "End of Report"
+
+        # Summary from namespaced action (ActionCall before execution)
+        assert isinstance(output.report.summary, ActionCall)
+        assert output.report.summary.function == "generate_summary"
+        assert output.report.summary.arguments == {"data": "metrics"}
+
+        # Only summarize action should be in parsed_actions
+        assert len(output.actions) == 1
+        assert "summarize" in output.actions
+
+    def test_namespaced_action_model_mismatch_error(self):
+        """Test error when namespaced action model doesn't match field spec."""
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
+
+        out_fields = {
+            "report": ["title", "wrong_model_action"],
+        }
+        lvars = {
+            "title": LvarMetadata("Report", "title", "title", "Title"),
+        }
+        # Action declares SearchResults.summary but used in Report field
+        lacts = {
+            "wrong_model_action": LactMetadata(
+                "SearchResults", "items", "wrong_model_action", 'search(query="test")'
+            ),
+        }
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(ExceptionGroup) as exc_info:
+            resolve_references_prefixed(out_fields, lvars, lacts, operable)
+
+        # Should raise TypeMismatchError about model mismatch
+        assert len(exc_info.value.exceptions) == 1
+        assert "SearchResults" in str(exc_info.value.exceptions[0])
+        assert "Report" in str(exc_info.value.exceptions[0])
+
+    def test_end_to_end_namespaced_mixing(self):
+        """Test complete end-to-end parsing with mixed lvars and namespaced actions."""
+        response = """
+        Let me create a report with generated summary:
+
+        <lvar Report.title t>Quarterly Analysis</lvar>
+        <lact Report.summary s>generate_summary(quarter="Q4", year=2024)</lact>
+
+        ```lndl
+        OUT{report:[t, s]}
+        ```
+        """
+
+        operable = Operable([Spec(Report, name="report")])
+        output = parse_lndl(response, operable)
+
+        # Title from lvar
+        assert output.report.title == "Quarterly Analysis"
+
+        # Summary from namespaced action
+        assert isinstance(output.report.summary, ActionCall)
+        assert output.report.summary.function == "generate_summary"
+        assert output.report.summary.arguments == {"quarter": "Q4", "year": 2024}
+
+        # Only "s" action should be parsed
+        assert len(output.actions) == 1
+        assert "s" in output.actions
+
+    def test_direct_action_cannot_mix_with_lvars(self):
+        """Test that direct actions cannot be mixed with lvars in OUT{} array."""
+        from lionherd_core.lndl.types import LactMetadata, LvarMetadata
+
+        out_fields = {
+            "report": ["title", "direct_action"],
+        }
+        lvars = {
+            "title": LvarMetadata("Report", "title", "title", "Title"),
+        }
+        # Direct action (no namespace)
+        lacts = {
+            "direct_action": LactMetadata(None, None, "direct_action", 'fetch_data(url="...")'),
+        }
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(ExceptionGroup) as exc_info:
+            resolve_references_prefixed(out_fields, lvars, lacts, operable)
+
+        # Should raise error about direct actions not being mixable
+        assert len(exc_info.value.exceptions) == 1
+        assert "Direct action" in str(exc_info.value.exceptions[0])
+        assert "cannot be mixed" in str(exc_info.value.exceptions[0])
+
+    def test_single_direct_action_for_entire_model(self):
+        """Test single direct action returning entire BaseModel."""
+        from lionherd_core.lndl.types import LactMetadata
+
+        out_fields = {
+            "report": ["fetch_report"],
+        }
+        lacts = {
+            "fetch_report": LactMetadata(
+                None, None, "fetch_report", 'api_fetch(endpoint="/report")'
+            ),
+        }
+        operable = Operable([Spec(Report, name="report")])
+
+        output = resolve_references_prefixed(out_fields, {}, lacts, operable)
+
+        # Entire report field should be ActionCall
+        assert isinstance(output.report, ActionCall)
+        assert output.report.function == "api_fetch"
+        assert output.report.arguments == {"endpoint": "/report"}
+
+        # Action should be in parsed_actions
+        assert "fetch_report" in output.actions

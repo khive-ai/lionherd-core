@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .errors import MissingOutBlockError
-from .types import LvarMetadata
+from .types import LactMetadata, LvarMetadata
 
 
 def extract_lvars(text: str) -> dict[str, str]:
@@ -54,7 +54,9 @@ def extract_lvars_prefixed(text: str) -> dict[str, LvarMetadata]:
 
 
 def extract_lacts(text: str) -> dict[str, str]:
-    """Extract <lact name>function_call</lact> action declarations.
+    """Extract <lact name>function_call</lact> action declarations (legacy, non-namespaced).
+
+    DEPRECATED: Use extract_lacts_prefixed() for namespace support.
 
     Actions represent tool/function invocations using pythonic syntax.
     They are only executed if referenced in the OUT{} block.
@@ -77,6 +79,58 @@ def extract_lacts(text: str) -> dict[str, str]:
     for name, call_str in matches:
         # Strip whitespace but preserve the function call structure
         lacts[name] = call_str.strip()
+
+    return lacts
+
+
+def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
+    """Extract <lact> action declarations with optional namespace prefix.
+
+    Supports two patterns:
+        Namespaced: <lact Model.field alias>function_call()</lact>
+        Direct: <lact name>function_call()</lact>
+
+    Args:
+        text: Response text containing <lact> declarations
+
+    Returns:
+        Dict mapping local names to LactMetadata
+
+    Examples:
+        >>> text = "<lact Report.summary s>generate_summary(...)</lact>"
+        >>> extract_lacts_prefixed(text)
+        {'s': LactMetadata(model="Report", field="summary", local_name="s", call="generate_summary(...)")}
+
+        >>> text = '<lact search>search(query="AI")</lact>'
+        >>> extract_lacts_prefixed(text)
+        {'search': LactMetadata(model=None, field=None, local_name="search", call='search(query="AI")')}
+    """
+    # Pattern matches both forms:
+    # <lact Model.field alias>call</lact>  OR  <lact name>call</lact>
+    pattern = r"<lact\s+([\w.]+)(?:\s+(\w+))?>(.*?)</lact>"
+    matches = re.findall(pattern, text, re.DOTALL)
+
+    lacts = {}
+    for prefix, alias, call_str in matches:
+        # Check if prefix contains dot (Model.field) or is just name
+        if "." in prefix:
+            # Namespaced: <lact Model.field alias>
+            parts = prefix.split(".", 1)
+            model = parts[0]
+            field = parts[1]
+            local_name = alias if alias else field  # Use alias or default to field name
+        else:
+            # Direct: <lact name>
+            model = None
+            field = None
+            local_name = prefix  # No alias needed, prefix is the name
+
+        lacts[local_name] = LactMetadata(
+            model=model,
+            field=field,
+            local_name=local_name,
+            call=call_str.strip(),
+        )
 
     return lacts
 

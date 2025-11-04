@@ -13,6 +13,7 @@ from .errors import (
 from .fuzzy import parse_lndl_fuzzy
 from .parser import (
     extract_lacts,
+    extract_lacts_prefixed,
     extract_lvars,
     extract_lvars_prefixed,
     extract_out_block,
@@ -20,7 +21,7 @@ from .parser import (
 )
 from .prompt import LNDL_SYSTEM_PROMPT, get_lndl_system_prompt
 from .resolver import parse_lndl, resolve_references_prefixed
-from .types import ActionCall, LNDLOutput, LvarMetadata, ParsedConstructor
+from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata, ParsedConstructor
 
 __all__ = (
     "LNDL_SYSTEM_PROMPT",
@@ -29,6 +30,7 @@ __all__ = (
     "InvalidConstructorError",
     "LNDLError",
     "LNDLOutput",
+    "LactMetadata",
     "LvarMetadata",
     "MissingFieldError",
     "MissingLvarError",
@@ -36,6 +38,7 @@ __all__ = (
     "ParsedConstructor",
     "TypeMismatchError",
     "extract_lacts",
+    "extract_lacts_prefixed",
     "extract_lvars",  # backward compatibility
     "extract_lvars_prefixed",
     "extract_out_block",
