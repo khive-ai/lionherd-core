@@ -1167,6 +1167,27 @@ def test_dataclass_with_updates_deep_copy_nested():
     assert deep.items == [[1, 2, 999], [3, 4]]
 
 
+def test_params_with_updates_no_copy_for_updated_fields():
+    """Test that fields in kwargs are not copied (performance optimization).
+
+    **Optimization**: If a field is being updated via kwargs, skip copying the
+    old value since it will be immediately replaced. Avoids unnecessary copy
+    operations, especially important for large containers or deep copy.
+    """
+    # Create expensive nested structure
+    expensive_nested = {"level1": {"level2": {"level3": [1, 2, 3] * 1000}}}
+    params = MyParamsWithContainers(config=expensive_nested, items=[1, 2, 3])
+
+    # Update items with shallow copy - config should be copied, items should NOT
+    updated = params.with_updates(copy_containers="shallow", items=[4, 5, 6])
+
+    # Verify items was replaced (not copied then replaced)
+    assert updated.items == [4, 5, 6]
+    # Verify config was copied (not in kwargs)
+    assert updated.config == expensive_nested
+    assert updated.config is not params.config  # Different object
+
+
 # ============================================================================
 # Test Meta Class
 # ============================================================================

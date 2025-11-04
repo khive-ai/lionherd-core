@@ -159,13 +159,13 @@ class Params:
 
         if copy_containers == "shallow":
             for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
+                if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = v.copy()
         elif copy_containers == "deep":
             import copy
 
             for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
+                if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = copy.deepcopy(v)
 
         dict_.update(kwargs)
@@ -244,13 +244,13 @@ class DataClass:
 
         if copy_containers == "shallow":
             for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
+                if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = v.copy()
         elif copy_containers == "deep":
             import copy
 
             for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
+                if k not in kwargs and isinstance(v, list | dict | set):
                     dict_[k] = copy.deepcopy(v)
 
         dict_.update(kwargs)
