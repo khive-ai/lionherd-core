@@ -88,7 +88,16 @@ def resolve_references_prefixed(
                     if var_name in lacts:
                         # Get action metadata
                         lact_meta = lacts[var_name]
-                        parsed_call = parse_function_call(lact_meta.call)
+
+                        # Parse function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in action '{var_name}' for scalar field '{field_name}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
 
                         # Create ActionCall instance
                         action_call = ActionCall(
@@ -151,7 +160,15 @@ def resolve_references_prefixed(
 
                     # Direct actions (no namespace) can return entire model
                     if lact_meta.model is None:
-                        parsed_call = parse_function_call(lact_meta.call)
+                        # Parse function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in direct action '{action_name}' for BaseModel field '{field_name}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
 
                         # Create ActionCall instance
                         action_call = ActionCall(
@@ -188,8 +205,15 @@ def resolve_references_prefixed(
                                 f"but field '{field_name}' expects '{target_type.__name__}'"
                             )
 
-                        # Parse action function call
-                        parsed_call = parse_function_call(lact_meta.call)
+                        # Parse action function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in namespaced action '{var_name}' for field '{lact_meta.model}.{lact_meta.field}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
 
                         # Create ActionCall instance
                         action_call = ActionCall(
@@ -223,15 +247,16 @@ def resolve_references_prefixed(
                     kwargs[lvar_meta.field] = parse_value(lvar_meta.value)
 
                 # Construct Pydantic model instance
-                # If kwargs contains ActionCall objects (from namespaced actions),
-                # use model_construct() to bypass validation until actions are executed
+                # WARNING: model_construct() bypasses Pydantic validation when ActionCall objects present.
+                # Caller MUST re-validate after executing actions using revalidate_with_action_results().
+                # See LNDLOutput docstring for complete action execution lifecycle.
                 has_actions = any(isinstance(v, ActionCall) for v in kwargs.values())
                 try:
                     if has_actions:
-                        # Bypass validation for models with pending actions
+                        # PARTIAL VALIDATION: Field constraints, validators, and type checking bypassed
                         instance = target_type.model_construct(**kwargs)
                     else:
-                        # Normal validation for fully-resolved models
+                        # FULL VALIDATION: Normal Pydantic validation for models without actions
                         instance = target_type(**kwargs)
                 except PydanticValidationError as e:
                     raise ValueError(

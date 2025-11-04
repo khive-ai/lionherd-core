@@ -77,7 +77,34 @@ class ActionCall:
 
 @dataclass(slots=True, frozen=True)
 class LNDLOutput:
-    """Validated LNDL output."""
+    """Validated LNDL output with action execution lifecycle.
+
+    Action Execution Lifecycle:
+    ---------------------------
+    1. **Parse**: LNDL response parsed, ActionCall objects created for referenced actions
+    2. **Partial Validation**: BaseModels with ActionCall fields use model_construct() to bypass validation
+    3. **Execute**: Caller executes actions using .actions dict, collects results
+    4. **Re-validate**: Caller replaces ActionCall objects with results and re-validates models
+
+    Fields containing ActionCall objects have **partial validation** only:
+    - Field constraints (validators, bounds, regex) are NOT enforced
+    - Type checking is bypassed
+    - Re-validation MUST occur after action execution
+
+    Example:
+        >>> output = parse_lndl(response, operable)
+        >>> # Execute actions
+        >>> action_results = {}
+        >>> for name, action in output.actions.items():
+        >>>     result = execute_tool(action.function, action.arguments)
+        >>>     action_results[name] = result
+        >>>
+        >>> # Re-validate models with action results
+        >>> for field_name, value in output.fields.items():
+        >>>     if isinstance(value, BaseModel) and has_action_calls(value):
+        >>>         value = revalidate_with_action_results(value, action_results)
+        >>>         output.fields[field_name] = value
+    """
 
     fields: dict[str, BaseModel | ActionCall]  # BaseModel instances or ActionCall (pre-execution)
     lvars: dict[str, str] | dict[str, LvarMetadata]  # Preserved for debugging
@@ -92,3 +119,70 @@ class LNDLOutput:
         if key in ("fields", "lvars", "lacts", "actions", "raw_out_block"):
             return object.__getattribute__(self, key)
         return self.fields[key]
+
+
+def has_action_calls(model: BaseModel) -> bool:
+    """Check if a BaseModel instance contains any ActionCall objects in its fields.
+
+    Args:
+        model: Pydantic BaseModel instance to check
+
+    Returns:
+        True if any field value is an ActionCall, False otherwise
+
+    Example:
+        >>> report = Report.model_construct(title="Report", summary=ActionCall(...))
+        >>> has_action_calls(report)
+        True
+    """
+    return any(isinstance(value, ActionCall) for value in model.__dict__.values())
+
+
+def revalidate_with_action_results(
+    model: BaseModel,
+    action_results: dict[str, Any],
+) -> BaseModel:
+    """Replace ActionCall fields with execution results and re-validate the model.
+
+    This function must be called after executing actions to restore full Pydantic validation.
+    Models constructed with model_construct() have bypassed validation and may contain
+    ActionCall objects where actual values are expected.
+
+    Args:
+        model: BaseModel instance with ActionCall placeholders
+        action_results: Dict mapping action names to their execution results
+
+    Returns:
+        Fully validated BaseModel instance with action results substituted
+
+    Raises:
+        ValidationError: If action results don't satisfy field constraints
+
+    Example:
+        >>> # Model has ActionCall in summary field
+        >>> report = Report.model_construct(title="Report", summary=action_call)
+        >>>
+        >>> # Execute action and get result
+        >>> action_results = {"summarize": "Generated summary text"}
+        >>>
+        >>> # Re-validate with results
+        >>> validated_report = revalidate_with_action_results(report, action_results)
+        >>> isinstance(validated_report.summary, str)  # True, no longer ActionCall
+        True
+    """
+    # Get current field values
+    kwargs = model.model_dump()
+
+    # Replace ActionCall objects with their execution results
+    for field_name, value in model.__dict__.items():
+        if isinstance(value, ActionCall):
+            # Find result by action name
+            if value.name not in action_results:
+                raise ValueError(
+                    f"Action '{value.name}' in field '{field_name}' has no execution result. "
+                    f"Available results: {list(action_results.keys())}"
+                )
+            kwargs[field_name] = action_results[value.name]
+
+    # Re-construct with full validation
+    return type(model)(**kwargs)

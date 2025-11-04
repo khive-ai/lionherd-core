@@ -105,25 +105,26 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
         >>> extract_lacts_prefixed(text)
         {'search': LactMetadata(model=None, field=None, local_name="search", call='search(query="AI")')}
     """
-    # Pattern matches both forms:
+    # Pattern matches both forms with strict identifier validation:
     # <lact Model.field alias>call</lact>  OR  <lact name>call</lact>
-    pattern = r"<lact\s+([\w.]+)(?:\s+(\w+))?>(.*?)</lact>"
+    # Groups: (1) identifier (Model or name), (2) optional .field, (3) optional alias, (4) call
+    # Rejects: multiple dots, leading/trailing dots, numeric prefixes
+    # Note: \w* allows single-character identifiers (e.g., alias="t")
+    pattern = r"<lact\s+([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?(?:\s+([A-Za-z_]\w*))?>(.*?)</lact>"
     matches = re.findall(pattern, text, re.DOTALL)
 
     lacts = {}
-    for prefix, alias, call_str in matches:
-        # Check if prefix contains dot (Model.field) or is just name
-        if "." in prefix:
+    for identifier, field, alias, call_str in matches:
+        # Check if field group is present (namespaced pattern)
+        if field:
             # Namespaced: <lact Model.field alias>
-            parts = prefix.split(".", 1)
-            model = parts[0]
-            field = parts[1]
+            model = identifier
             local_name = alias if alias else field  # Use alias or default to field name
         else:
             # Direct: <lact name>
             model = None
             field = None
-            local_name = prefix  # No alias needed, prefix is the name
+            local_name = identifier  # identifier is the name
 
         lacts[local_name] = LactMetadata(
             model=model,

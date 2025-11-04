@@ -21,7 +21,15 @@ from .parser import (
 )
 from .prompt import LNDL_SYSTEM_PROMPT, get_lndl_system_prompt
 from .resolver import parse_lndl, resolve_references_prefixed
-from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata, ParsedConstructor
+from .types import (
+    ActionCall,
+    LactMetadata,
+    LNDLOutput,
+    LvarMetadata,
+    ParsedConstructor,
+    has_action_calls,
+    revalidate_with_action_results,
+)
 
 __all__ = (
     "LNDL_SYSTEM_PROMPT",
@@ -43,8 +51,10 @@ __all__ = (
     "extract_lvars_prefixed",
     "extract_out_block",
     "get_lndl_system_prompt",
+    "has_action_calls",
     "parse_lndl",
     "parse_lndl_fuzzy",
     "parse_out_block_array",
     "resolve_references_prefixed",
+    "revalidate_with_action_results",
 )

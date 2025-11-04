@@ -7,9 +7,14 @@ from lionherd_core.libs.string_handlers._string_similarity import string_similar
 from lionherd_core.types import Operable
 
 from .errors import AmbiguousMatchError, MissingFieldError
-from .parser import extract_lvars_prefixed, extract_out_block, parse_out_block_array
+from .parser import (
+    extract_lacts_prefixed,
+    extract_lvars_prefixed,
+    extract_out_block,
+    parse_out_block_array,
+)
 from .resolver import resolve_references_prefixed
-from .types import LNDLOutput, LvarMetadata
+from .types import LactMetadata, LNDLOutput, LvarMetadata
 
 __all__ = ("parse_lndl_fuzzy",)
 
@@ -159,8 +164,9 @@ def parse_lndl_fuzzy(
     )  # Stricter for model names
     threshold_spec = threshold_spec if threshold_spec is not None else threshold
 
-    # 1. Extract namespace-prefixed lvars and OUT{} block (same as strict)
+    # 1. Extract namespace-prefixed lvars, lacts, and OUT{} block
     lvars_raw = extract_lvars_prefixed(response)
+    lacts_raw = extract_lacts_prefixed(response)
     out_content = extract_out_block(response)
     out_fields_raw = parse_out_block_array(out_content)
 
@@ -195,6 +201,30 @@ def parse_lndl_fuzzy(
                     f"Available: {expected_fields} (strict mode: exact match required)"
                 )
 
+        # Validate namespaced action model/field names (strict mode)
+        for lact in lacts_raw.values():
+            if lact.model:  # Namespaced action
+                if lact.model not in expected_models:
+                    raise MissingFieldError(
+                        f"Action model '{lact.model}' not found. "
+                        f"Available: {list(expected_models)} (strict mode: exact match required)"
+                    )
+
+                # Find spec and validate field
+                spec = None
+                for s in operable.get_specs():
+                    if s.base_type.__name__ == lact.model:
+                        spec = s
+                        break
+
+                if spec is not None:
+                    expected_fields = list(spec.base_type.model_fields.keys())
+                    if lact.field not in expected_fields:
+                        raise MissingFieldError(
+                            f"Action field '{lact.field}' not found in model {lact.model}. "
+                            f"Available: {expected_fields} (strict mode: exact match required)"
+                        )
+
         # Validate spec names in OUT{} block
         expected_spec_names = list(operable.allowed())
         for spec_name in out_fields_raw:
@@ -204,7 +234,7 @@ def parse_lndl_fuzzy(
                     f"Available: {expected_spec_names} (strict mode: exact match required)"
                 )
 
-        return resolve_references_prefixed(out_fields_raw, lvars_raw, {}, operable)
+        return resolve_references_prefixed(out_fields_raw, lvars_raw, lacts_raw, operable)
 
     # 2. Pre-correct lvar metadata (model names and field names)
     # Collect all unique model names and field names from lvars
@@ -262,6 +292,26 @@ def parse_lndl_fuzzy(
             value=lvar.value,
         )
 
+    # 2b. Pre-correct lact metadata (model names and field names for namespaced actions)
+    # Namespaced actions share the same model/field correction as lvars
+    lacts_corrected: dict[str, LactMetadata] = {}
+    for local_name, lact in lacts_raw.items():
+        if lact.model:  # Namespaced action
+            # Use existing model_corrections (same as lvars)
+            corrected_model = model_corrections.get(lact.model, lact.model)
+
+            # For field correction, use existing field_corrections
+            corrected_field = field_corrections.get((lact.model, lact.field), lact.field)
+
+            lacts_corrected[local_name] = LactMetadata(
+                model=corrected_model,
+                field=corrected_field,
+                local_name=lact.local_name,
+                call=lact.call,
+            )
+        else:  # Direct action - no correction needed
+            lacts_corrected[local_name] = lact
+
     # 3. Pre-correct OUT{} spec names (keys in out_fields_raw)
     expected_spec_names = list(operable.allowed())
     out_fields_corrected: dict[str, list[str] | str] = {}
@@ -272,17 +322,22 @@ def parse_lndl_fuzzy(
         )
         out_fields_corrected[corrected_spec_name] = value
 
-    # 4. Pre-correct lvar references in OUT{} arrays
+    # 4. Pre-correct lvar and lact references in OUT{} arrays
     available_lvar_names = list(lvars_corrected.keys())
+    available_lact_names = list(lacts_corrected.keys())
+    available_var_or_action_names = available_lvar_names + available_lact_names
     out_fields_final: dict[str, list[str] | str] = {}
 
     for spec_name, value in out_fields_corrected.items():
         if isinstance(value, list):
-            # Array of lvar references - correct each reference
+            # Array of variable/action references - correct each reference
             corrected_refs = []
             for raw_ref in value:
                 corrected_ref = _correct_name(
-                    raw_ref, available_lvar_names, threshold_lvar, "lvar reference"
+                    raw_ref,
+                    available_var_or_action_names,
+                    threshold_lvar,
+                    "variable or action reference",
                 )
                 corrected_refs.append(corrected_ref)
             out_fields_final[spec_name] = corrected_refs
@@ -291,4 +346,4 @@ def parse_lndl_fuzzy(
             out_fields_final[spec_name] = value
 
     # 5. Call strict resolver with corrected inputs (REUSE existing logic)
-    return resolve_references_prefixed(out_fields_final, lvars_corrected, {}, operable)
+    return resolve_references_prefixed(out_fields_final, lvars_corrected, lacts_corrected, operable)
