@@ -110,9 +110,9 @@ ERRORS TO AVOID
 OUT{report:Report(title=t)}                 # WRONG: No constructors, use arrays
 OUT{report:[t, s2], reason:[c, a]}          # WRONG: field name must match spec
 OUT{quality_score:[x, y]}                   # WRONG: scalars need single var or literal
-<lact data>search(...)</lact>
+<lact Report.field data>search(...)</lact>
 <lvar Report.field data>value</lvar>
-OUT{field:[data]}                           # WRONG: name collision (both lvar and lact)
+OUT{field:[data]}                           # WRONG: name collision (both lvar and lact named "data")
 
 CORRECT
 

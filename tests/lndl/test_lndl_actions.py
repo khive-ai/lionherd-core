@@ -475,3 +475,82 @@ class TestNamespacedActions:
 
         # Action should be in parsed_actions
         assert "fetch_report" in output.actions
+
+
+class TestActionErrorHandling:
+    """Test error handling for malformed action calls."""
+
+    def test_empty_action_call(self):
+        """Test error for empty action body."""
+        response = "<lact Report.summary s></lact>\nOUT{report:[s]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # Empty action call should raise ExceptionGroup with clear error message
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        # Check that the nested exception has clear context
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "action 's'" in str(errors[0])
+
+    def test_non_function_action(self):
+        """Test error for non-function syntax (missing parentheses)."""
+        response = "<lact Report.summary s>not_a_function</lact>\nOUT{report:[s]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # Missing parentheses should raise ExceptionGroup
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "not_a_function" in str(errors[0])
+
+    def test_syntax_error_in_args(self):
+        """Test error for unclosed quotes/parentheses in arguments."""
+        response = '<lact s>search(query="unclosed)</lact>\nOUT{result:[s]}'
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        # Syntax error in arguments should raise ExceptionGroup
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        # Error message should show the malformed call
+        assert 'search(query="unclosed)' in str(errors[0])
+
+    def test_nested_lact_tags(self):
+        """Test behavior with nested lact tags (regex extracts inner first)."""
+        # Regex will match the first complete tag pair (non-greedy .*?)
+        # So it extracts <lact inner>x()</lact> first, leaving malformed outer
+        response = "<lact outer>func(<lact inner>x()</lact>)</lact>\nOUT{report:[outer]}"
+        operable = Operable([Spec(Report, name="report")])
+
+        # The regex captures inner tag, leaving "func(<lact inner>x()" as outer call
+        # This results in syntax error
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+
+    def test_missing_closing_tag(self):
+        """Test unclosed lact tag (should not match regex, treated as missing)."""
+        response = '<lact action>search(query="test")\nOUT{result:[action]}'
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        # Missing closing tag means regex doesn't extract action
+        # Then reference resolution fails because "action" is undefined
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "not declared" in str(errors[0])
+        assert "'action'" in str(errors[0])

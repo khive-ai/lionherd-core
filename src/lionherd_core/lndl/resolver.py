@@ -195,7 +195,7 @@ def resolve_references_prefixed(
                         if lact_meta.model is None or lact_meta.field is None:
                             raise ValueError(
                                 f"Direct action '{var_name}' cannot be mixed with lvars in BaseModel field '{field_name}'. "
-                                f"Use namespaced syntax: <lact {target_type.__name__}.fieldname {var_name}>...< /lact>"
+                                f"Use namespaced syntax: <lact {target_type.__name__}.fieldname {var_name}>...</lact>"
                             )
 
                         # Validate: model name matches
