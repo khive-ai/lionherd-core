@@ -180,8 +180,7 @@ class Params:
                 return _out(dict_)
 
         raise ValueError(
-            f"Invalid copy_containers: {copy_containers!r}. "
-            f"Must be 'shallow', 'deep', or None."
+            f"Invalid copy_containers: {copy_containers!r}. Must be 'shallow', 'deep', or None."
         )
 
 
@@ -268,7 +267,7 @@ class DataClass:
                     if k not in kwargs and isinstance(v, list | dict | set):
                         dict_[k] = v.copy()
                 return _out(dict_)
-                        
+
             case "deep":
                 import copy
 
@@ -276,13 +275,11 @@ class DataClass:
                     if k not in kwargs and isinstance(v, list | dict | set):
                         dict_[k] = copy.deepcopy(v)
                 return _out(dict_)
-                        
+
         raise ValueError(
-            f"Invalid copy_containers: {copy_containers!r}. "
-            f"Must be 'shallow', 'deep', or None."
+            f"Invalid copy_containers: {copy_containers!r}. Must be 'shallow', 'deep', or None."
         )
-        
-        
+
     def __hash__(self) -> int:
         from ..ln._hash import hash_dict
 
