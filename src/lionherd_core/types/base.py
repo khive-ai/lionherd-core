@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
 from dataclasses import dataclass
 from enum import (
     Enum as _Enum,
     StrEnum,
 )
-from typing import Any, ClassVar, Self, TypedDict
+from typing import Any, ClassVar, Literal, Self, TypedDict
 
 from typing_extensions import override
 
@@ -146,20 +146,46 @@ class Params:
             return NotImplemented
         return hash(self) == hash(other)
 
-    def with_updates(self, deep: bool = False, **kwargs: Any) -> Self:
-        """Return new instance with updated fields. Args: deep (copy mutables), field updates."""
-        import copy
+    def with_updates(
+        self, copy_containers: Literal["shallow", "deep"] | None = None, **kwargs: Any
+    ) -> Self:
+        """Return new instance with updated fields.
 
+        Args:
+            copy_containers: None (no copy), "shallow" (top-level), or "deep" (recursive).
+            **kwargs: Field updates.
+        """
         dict_ = self.to_dict()
 
-        if deep:
-            # Deep copy mutable containers
-            for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
-                    dict_[k] = copy.copy(v)  # Shallow copy is usually sufficient
+        def _out(d: dict):
+            d.update(kwargs)
+            return type(self)(**d)
 
-        dict_.update(kwargs)
-        return type(self)(**dict_)
+        if copy_containers is None:
+            return _out(dict_)
+
+        match copy_containers:
+            case "shallow":
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(
+                        v, (MutableSequence, MutableMapping, MutableSet)
+                    ):
+                        dict_[k] = v.copy()
+                return _out(dict_)
+
+            case "deep":
+                import copy
+
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(
+                        v, (MutableSequence, MutableMapping, MutableSet)
+                    ):
+                        dict_[k] = copy.deepcopy(v)
+                return _out(dict_)
+
+        raise ValueError(
+            f"Invalid copy_containers: {copy_containers!r}. Must be 'shallow', 'deep', or None."
+        )
 
 
 @implements(Serializable, Allowable, Hashable)
@@ -221,20 +247,46 @@ class DataClass:
             return value.value
         return value
 
-    def with_updates(self, deep: bool = False, **kwargs: Any) -> Self:
-        """Return new instance with updated fields. Args: deep (copy mutables), field updates."""
-        import copy
+    def with_updates(
+        self, copy_containers: Literal["shallow", "deep"] | None = None, **kwargs: Any
+    ) -> Self:
+        """Return new instance with updated fields.
 
+        Args:
+            copy_containers: None (no copy), "shallow" (top-level), or "deep" (recursive).
+            **kwargs: Field updates.
+        """
         dict_ = self.to_dict()
 
-        if deep:
-            # Deep copy mutable containers
-            for k, v in dict_.items():
-                if isinstance(v, list | dict | set):
-                    dict_[k] = copy.copy(v)  # Shallow copy is usually sufficient
+        def _out(d: dict):
+            d.update(kwargs)
+            return type(self)(**d)
 
-        dict_.update(kwargs)
-        return type(self)(**dict_)
+        if copy_containers is None:
+            return _out(dict_)
+
+        match copy_containers:
+            case "shallow":
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(
+                        v, (MutableSequence, MutableMapping, MutableSet)
+                    ):
+                        dict_[k] = v.copy()
+                return _out(dict_)
+
+            case "deep":
+                import copy
+
+                for k, v in dict_.items():
+                    if k not in kwargs and isinstance(
+                        v, (MutableSequence, MutableMapping, MutableSet)
+                    ):
+                        dict_[k] = copy.deepcopy(v)
+                return _out(dict_)
+
+        raise ValueError(
+            f"Invalid copy_containers: {copy_containers!r}. Must be 'shallow', 'deep', or None."
+        )
 
     def __hash__(self) -> int:
         from ..ln._hash import hash_dict
