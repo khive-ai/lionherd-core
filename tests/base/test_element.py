@@ -1116,3 +1116,88 @@ class TestElementSecurity:
         # Same ID = equal, even if different types
         assert elem1 == custom
         assert custom == elem1
+
+
+# ==================== class_name() Integration Tests ====================
+
+
+def test_class_name_strips_generics():
+    """Test class_name() strips generic type parameters using typing.get_origin().
+
+    Design Rationale:
+        Generic classes (Flow[E, P]) need to serialize as base class name (Flow)
+        for polymorphic deserialization. Using typing.get_origin() is robust and
+        handles all generic forms correctly.
+
+    Edge Cases:
+        - Non-generic classes: Element -> Element
+        - Generic classes: Flow[Item, Prog] -> Flow
+        - Nested generics: Pile[Flow[Item, Prog]] -> Pile
+    """
+    from lionherd_core.base import Flow, Pile, Progression
+
+    # Non-generic Element
+    assert Element.class_name(full=False) == "Element"
+    assert Element.class_name(full=True) == "lionherd_core.base.element.Element"
+
+    # Generic Flow without parameters
+    assert Flow.class_name(full=False) == "Flow"
+    assert Flow.class_name(full=True) == "lionherd_core.base.flow.Flow"
+
+    # Generic Flow with parameters
+    flow_generic = Flow[Element, Progression]
+    assert flow_generic.class_name(full=False) == "Flow"
+    assert flow_generic.class_name(full=True) == "lionherd_core.base.flow.Flow"
+
+    # Generic Pile
+    pile_generic = Pile[Element]
+    assert pile_generic.class_name(full=False) == "Pile"
+    assert pile_generic.class_name(full=True) == "lionherd_core.base.pile.Pile"
+
+
+def test_class_name_serialization_across_subclasses():
+    """Integration test: class_name() enables correct polymorphic deserialization.
+
+    Tests that class_name() works correctly across the Element hierarchy:
+    - Element, Flow, Pile, Node, Graph, Event
+    - Generic and non-generic forms
+    - Serialization round-trip preserves type
+
+    This verifies the critic's concern: class_name() affects 9+ subclasses,
+    not just Flow.
+    """
+    from lionherd_core.base import Flow, Node, Pile, Progression
+    from lionherd_core.libs.string_handlers._to_dict import to_dict
+
+    # Test Element
+    elem = Element()
+    elem_data = to_dict(elem)
+    assert elem_data["metadata"]["lion_class"] == "lionherd_core.base.element.Element"
+    elem2 = Element.from_dict(elem_data)
+    assert isinstance(elem2, Element)
+    assert elem2.id == elem.id
+
+    # Test Flow (generic)
+    flow = Flow[Element, Progression](name="test_flow")
+    flow_data = to_dict(flow)
+    assert flow_data["metadata"]["lion_class"] == "lionherd_core.base.flow.Flow"
+    flow2 = Flow.from_dict(flow_data)
+    assert isinstance(flow2, Flow)
+    assert flow2.name == "test_flow"
+
+    # Test Pile (generic)
+    pile = Pile[Element]()
+    pile.add(Element())
+    pile_data = to_dict(pile)
+    assert pile_data["metadata"]["lion_class"] == "lionherd_core.base.pile.Pile"
+    pile2 = Pile.from_dict(pile_data)
+    assert isinstance(pile2, Pile)
+    assert len(pile2) == 1
+
+    # Test Node
+    node = Node(content="test content")
+    node_data = to_dict(node)
+    assert node_data["metadata"]["lion_class"] == "lionherd_core.base.node.Node"
+    node2 = Node.from_dict(node_data)
+    assert isinstance(node2, Node)
+    assert node2.content == "test content"

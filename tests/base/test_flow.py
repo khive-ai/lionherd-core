@@ -222,15 +222,23 @@ def test_flow_validate_piles_converts_dict():
         "strict_type": False,
     }
 
-    # Validate conversion
-    result = Flow._validate_piles(pile_dict)
+    # Validate conversion (validator uses mode="wrap" so needs handler)
+    def mock_handler(v):  # Mock handler that returns input
+        return v
+
+    result = Flow._validate_piles(pile_dict, mock_handler)
     assert isinstance(result, Pile)
 
 
 def test_flow_validate_piles_preserves_pile():
-    """Test _validate_piles preserves existing Pile."""
+    """Test _validate_piles delegates to handler for non-dict inputs."""
     pile = Pile[FlowTestItem]()
-    result = Flow._validate_piles(pile)
+
+    # Validator delegates to handler for non-dict inputs
+    def mock_handler(v):  # Mock handler that returns input
+        return v
+
+    result = Flow._validate_piles(pile, mock_handler)
     assert result is pile
 
 
@@ -715,6 +723,70 @@ def test_flow_from_dict_with_piles_as_dicts():
     assert isinstance(f.items, Pile)
     assert isinstance(f.progressions, Pile)
     assert f.name == "test"
+
+
+def test_flow_progression_names_persisted_after_deserialization():
+    """Test _progression_names index is rebuilt after deserialization.
+
+    Critical Bug Fix:
+        The _progression_names dict is a PrivateAttr (not serialized). Without
+        model_post_init() rebuilding it from progressions, name-based access fails
+        after deserialization with KeyError.
+
+    Design Pattern:
+        Pydantic model_post_init() hook rebuilds derived state after deserialization.
+        This is standard for caching/indexing structures that aren't persisted.
+
+    Verification:
+        1. Create Flow with named progressions
+        2. Serialize to dict
+        3. Deserialize from dict
+        4. Verify name-based access works (get_progression by name)
+
+    This test catches the blocking bug identified by architect + tester reviews.
+    """
+    from lionherd_core.libs.string_handlers._to_dict import to_dict
+
+    # Create flow with named progressions
+    f1 = Flow[FlowTestItem, FlowTestProgression](name="workflow")
+    prog1 = FlowTestProgression(name="stage1")
+    prog2 = FlowTestProgression(name="stage2")
+    prog3 = FlowTestProgression(name="stage3")
+    f1.add_progression(prog1)
+    f1.add_progression(prog2)
+    f1.add_progression(prog3)
+
+    # Verify name index is populated
+    assert len(f1._progression_names) == 3
+    assert "stage1" in f1._progression_names
+    assert "stage2" in f1._progression_names
+    assert "stage3" in f1._progression_names
+
+    # Serialize
+    data = to_dict(f1)
+
+    # Deserialize
+    f2 = Flow.from_dict(data)
+
+    # CRITICAL: Verify name index is rebuilt (was broken before model_post_init)
+    assert len(f2._progression_names) == 3
+    assert "stage1" in f2._progression_names
+    assert "stage2" in f2._progression_names
+    assert "stage3" in f2._progression_names
+
+    # Verify name-based access works
+    retrieved_prog1 = f2.get_progression("stage1")
+    retrieved_prog2 = f2.get_progression("stage2")
+    retrieved_prog3 = f2.get_progression("stage3")
+
+    assert retrieved_prog1.name == "stage1"
+    assert retrieved_prog2.name == "stage2"
+    assert retrieved_prog3.name == "stage3"
+
+    # Verify UUIDs match
+    assert retrieved_prog1.id == prog1.id
+    assert retrieved_prog2.id == prog2.id
+    assert retrieved_prog3.id == prog3.id
 
 
 # ==================== Integration Tests ====================

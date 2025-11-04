@@ -47,13 +47,22 @@ class Flow(Element, Generic[E, P]):
     )
     _progression_names: dict[str, UUID] = PrivateAttr(default_factory=dict)
 
-    @field_validator("items", "progressions", mode="before")
+    @field_validator("items", "progressions", mode="wrap")
     @classmethod
-    def _validate_piles(cls, v: Any) -> Any:
+    def _validate_piles(cls, v: Any, handler: Any) -> Any:
         """Convert dict to Pile during deserialization."""
         if isinstance(v, dict):
             return Pile.from_dict(v)
-        return v
+        # Let Pydantic handle it
+        return handler(v)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Rebuild _progression_names index after deserialization."""
+        super().model_post_init(__context)
+        # Rebuild name index from progressions
+        for progression in self.progressions:
+            if progression.name:
+                self._progression_names[progression.name] = progression.id
 
     def __init__(
         self,
@@ -187,3 +196,30 @@ class Flow(Element, Generic[E, P]):
     def __repr__(self) -> str:
         name_str = f" name='{self.name}'" if self.name else ""
         return f"Flow(items={len(self.items)}, progressions={len(self.progressions)}{name_str})"
+
+    def to_dict(
+        self,
+        mode: str = "python",
+        created_at_format: str | None = None,
+        meta_key: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Serialize Flow with proper Pile serialization for items and progressions.
+
+        Overrides Element.to_dict() to ensure Pile fields are properly serialized
+        with their items, not just metadata.
+        """
+        # Get base Element serialization
+        data = super().to_dict(
+            mode=mode, created_at_format=created_at_format, meta_key=meta_key, **kwargs
+        )
+
+        # Replace Pile fields with their proper serialization (includes items)
+        data["items"] = self.items.to_dict(
+            mode=mode, created_at_format=created_at_format, meta_key=meta_key
+        )
+        data["progressions"] = self.progressions.to_dict(
+            mode=mode, created_at_format=created_at_format, meta_key=meta_key
+        )
+
+        return data
