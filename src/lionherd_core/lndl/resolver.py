@@ -6,16 +6,18 @@ from pydantic import (
     ValidationError as PydanticValidationError,
 )
 
+from lionherd_core.libs.schema_handlers._function_call_parser import parse_function_call
 from lionherd_core.types import Operable
 
 from .errors import MissingFieldError, TypeMismatchError
 from .parser import parse_value
-from .types import LNDLOutput, LvarMetadata
+from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata
 
 
 def resolve_references_prefixed(
     out_fields: dict[str, list[str] | str],
     lvars: dict[str, LvarMetadata],
+    lacts: dict[str, LactMetadata],
     operable: Operable,
 ) -> LNDLOutput:
     """Resolve namespace-prefixed OUT{} fields and validate against operable specs.
@@ -23,6 +25,7 @@ def resolve_references_prefixed(
     Args:
         out_fields: Parsed OUT{} block (field -> list of var names OR literal value)
         lvars: Extracted namespace-prefixed lvar declarations
+        lacts: Extracted action declarations (name -> LactMetadata)
         operable: Operable containing allowed specs
 
     Returns:
@@ -31,8 +34,17 @@ def resolve_references_prefixed(
     Raises:
         MissingFieldError: Required spec field not in OUT{}
         TypeMismatchError: Variable model doesn't match spec type
-        ValueError: Variable not found or field mismatch
+        ValueError: Variable not found, field mismatch, or name collision
     """
+    # Check for name collisions between lvars and lacts
+    lvar_names = set(lvars.keys())
+    lact_names = set(lacts.keys())
+    collisions = lvar_names & lact_names
+
+    if collisions:
+        raise ValueError(
+            f"Name collision detected: {collisions} used in both <lvar> and <lact> declarations"
+        )
     # Check all fields in OUT{} are allowed by operable
     operable.check_allowed(*out_fields.keys())
 
@@ -44,6 +56,7 @@ def resolve_references_prefixed(
 
     # Resolve and validate each field (collect all errors)
     validated_fields = {}
+    parsed_actions: dict[str, ActionCall] = {}  # Actions referenced in OUT{}
     errors: list[Exception] = []
 
     for field_name, value in out_fields.items():
@@ -64,17 +77,48 @@ def resolve_references_prefixed(
             if is_scalar:
                 # Handle scalar assignment
                 if isinstance(value, list):
-                    # Array syntax for scalar - should be single variable
+                    # Array syntax for scalar - should be single variable or action
                     if len(value) != 1:
                         raise ValueError(
                             f"Scalar field '{field_name}' cannot use multiple variables, got {value}"
                         )
                     var_name = value[0]
 
+                    # Check if this is an action reference
+                    if var_name in lacts:
+                        # Get action metadata
+                        lact_meta = lacts[var_name]
+
+                        # Parse function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in action '{var_name}' for scalar field '{field_name}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
+
+                        # Create ActionCall instance
+                        action_call = ActionCall(
+                            name=var_name,
+                            function=parsed_call["tool"],
+                            arguments=parsed_call["arguments"],
+                            raw_call=lact_meta.call,
+                        )
+                        parsed_actions[var_name] = action_call
+
+                        # For scalar actions, we mark this field for later execution
+                        # The actual execution happens externally, we just store the action
+                        # For now, we can't validate the result type, so we skip type conversion
+                        # The field will be populated with the action result during execution
+                        validated_fields[field_name] = action_call
+                        continue
+
                     # Look up variable in lvars
                     if var_name not in lvars:
                         raise ValueError(
-                            f"Variable '{var_name}' referenced in OUT{{}} but not declared"
+                            f"Variable or action '{var_name}' referenced in OUT{{}} but not declared"
                         )
 
                     lvar_meta = lvars[var_name]
@@ -109,13 +153,85 @@ def resolve_references_prefixed(
                         f"got {target_type}"
                     )
 
-                # Build kwargs from variable list
+                # Special case: single action reference that returns entire model
+                if len(var_list) == 1 and var_list[0] in lacts:
+                    action_name = var_list[0]
+                    lact_meta = lacts[action_name]
+
+                    # Direct actions (no namespace) can return entire model
+                    if lact_meta.model is None:
+                        # Parse function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in direct action '{action_name}' for BaseModel field '{field_name}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
+
+                        # Create ActionCall instance
+                        action_call = ActionCall(
+                            name=action_name,
+                            function=parsed_call["tool"],
+                            arguments=parsed_call["arguments"],
+                            raw_call=lact_meta.call,
+                        )
+                        parsed_actions[action_name] = action_call
+
+                        # Store action as field value (will be executed to get model instance)
+                        validated_fields[field_name] = action_call
+                        continue
+                    # If namespaced, fall through to mixing logic below
+
+                # Build kwargs from variable list - supports mixing lvars and namespaced actions
                 kwargs = {}
                 for var_name in var_list:
+                    # Check if this is an action reference
+                    if var_name in lacts:
+                        lact_meta = lacts[var_name]
+
+                        # Namespaced actions must specify which field they populate
+                        if lact_meta.model is None or lact_meta.field is None:
+                            raise ValueError(
+                                f"Direct action '{var_name}' cannot be mixed with lvars in BaseModel field '{field_name}'. "
+                                f"Use namespaced syntax: <lact {target_type.__name__}.fieldname {var_name}>...< /lact>"
+                            )
+
+                        # Validate: model name matches
+                        if lact_meta.model != target_type.__name__:
+                            raise TypeMismatchError(
+                                f"Action '{var_name}' is for model '{lact_meta.model}', "
+                                f"but field '{field_name}' expects '{target_type.__name__}'"
+                            )
+
+                        # Parse action function call with context
+                        try:
+                            parsed_call = parse_function_call(lact_meta.call)
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid function call syntax in namespaced action '{var_name}' for field '{lact_meta.model}.{lact_meta.field}':\n"
+                                f"  Action call: {lact_meta.call}\n"
+                                f"  Parse error: {e}"
+                            ) from e
+
+                        # Create ActionCall instance
+                        action_call = ActionCall(
+                            name=var_name,
+                            function=parsed_call["tool"],
+                            arguments=parsed_call["arguments"],
+                            raw_call=lact_meta.call,
+                        )
+                        parsed_actions[var_name] = action_call
+
+                        # Use the namespaced field to map action result
+                        kwargs[lact_meta.field] = action_call
+                        continue
+
                     # Look up variable in lvars
                     if var_name not in lvars:
                         raise ValueError(
-                            f"Variable '{var_name}' referenced in OUT{{}} but not declared"
+                            f"Variable or action '{var_name}' referenced in OUT{{}} but not declared"
                         )
 
                     lvar_meta = lvars[var_name]
@@ -131,8 +247,17 @@ def resolve_references_prefixed(
                     kwargs[lvar_meta.field] = parse_value(lvar_meta.value)
 
                 # Construct Pydantic model instance
+                # WARNING: model_construct() bypasses Pydantic validation when ActionCall objects present.
+                # Caller MUST re-validate after executing actions using revalidate_with_action_results().
+                # See LNDLOutput docstring for complete action execution lifecycle.
+                has_actions = any(isinstance(v, ActionCall) for v in kwargs.values())
                 try:
-                    instance = target_type(**kwargs)
+                    if has_actions:
+                        # PARTIAL VALIDATION: Field constraints, validators, and type checking bypassed
+                        instance = target_type.model_construct(**kwargs)
+                    else:
+                        # FULL VALIDATION: Normal Pydantic validation for models without actions
+                        instance = target_type(**kwargs)
                 except PydanticValidationError as e:
                     raise ValueError(
                         f"Failed to construct {target_type.__name__} for field '{field_name}': {e}"
@@ -158,27 +283,41 @@ def resolve_references_prefixed(
     if errors:
         raise ExceptionGroup("LNDL validation failed", errors)
 
-    return LNDLOutput(fields=validated_fields, lvars=lvars, raw_out_block=str(out_fields))
+    return LNDLOutput(
+        fields=validated_fields,
+        lvars=lvars,
+        lacts=lacts,
+        actions=parsed_actions,
+        raw_out_block=str(out_fields),
+    )
 
 
 def parse_lndl(response: str, operable: Operable) -> LNDLOutput:
     """Parse LNDL response and validate against operable specs.
 
     Args:
-        response: Full LLM response containing lvars and OUT{}
+        response: Full LLM response containing lvars, lacts, and OUT{}
         operable: Operable containing allowed specs
 
     Returns:
-        LNDLOutput with validated fields
+        LNDLOutput with validated fields and parsed actions
     """
-    from .parser import extract_lvars_prefixed, extract_out_block, parse_out_block_array
+    from .parser import (
+        extract_lacts_prefixed,
+        extract_lvars_prefixed,
+        extract_out_block,
+        parse_out_block_array,
+    )
 
     # 1. Extract namespace-prefixed lvars
     lvars_prefixed = extract_lvars_prefixed(response)
 
-    # 2. Extract and parse OUT{} block with array syntax
+    # 2. Extract action declarations (with namespace support)
+    lacts_prefixed = extract_lacts_prefixed(response)
+
+    # 3. Extract and parse OUT{} block with array syntax
     out_content = extract_out_block(response)
     out_fields = parse_out_block_array(out_content)
 
-    # 3. Resolve references and validate
-    return resolve_references_prefixed(out_fields, lvars_prefixed, operable)
+    # 4. Resolve references and validate
+    return resolve_references_prefixed(out_fields, lvars_prefixed, lacts_prefixed, operable)

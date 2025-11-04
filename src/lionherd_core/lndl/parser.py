@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .errors import MissingOutBlockError
-from .types import LvarMetadata
+from .types import LactMetadata, LvarMetadata
 
 
 def extract_lvars(text: str) -> dict[str, str]:
@@ -51,6 +51,89 @@ def extract_lvars_prefixed(text: str) -> dict[str, LvarMetadata]:
         lvars[local] = LvarMetadata(model=model, field=field, local_name=local, value=value.strip())
 
     return lvars
+
+
+def extract_lacts(text: str) -> dict[str, str]:
+    """Extract <lact name>function_call</lact> action declarations (legacy, non-namespaced).
+
+    DEPRECATED: Use extract_lacts_prefixed() for namespace support.
+
+    Actions represent tool/function invocations using pythonic syntax.
+    They are only executed if referenced in the OUT{} block.
+
+    Args:
+        text: Response text containing <lact> declarations
+
+    Returns:
+        Dict mapping action names to Python function call strings
+
+    Examples:
+        >>> text = '<lact search>search(query="AI", limit=5)</lact>'
+        >>> extract_lacts(text)
+        {'search': 'search(query="AI", limit=5)'}
+    """
+    pattern = r"<lact\s+(\w+)>(.*?)</lact>"
+    matches = re.findall(pattern, text, re.DOTALL)
+
+    lacts = {}
+    for name, call_str in matches:
+        # Strip whitespace but preserve the function call structure
+        lacts[name] = call_str.strip()
+
+    return lacts
+
+
+def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
+    """Extract <lact> action declarations with optional namespace prefix.
+
+    Supports two patterns:
+        Namespaced: <lact Model.field alias>function_call()</lact>
+        Direct: <lact name>function_call()</lact>
+
+    Args:
+        text: Response text containing <lact> declarations
+
+    Returns:
+        Dict mapping local names to LactMetadata
+
+    Examples:
+        >>> text = "<lact Report.summary s>generate_summary(...)</lact>"
+        >>> extract_lacts_prefixed(text)
+        {'s': LactMetadata(model="Report", field="summary", local_name="s", call="generate_summary(...)")}
+
+        >>> text = '<lact search>search(query="AI")</lact>'
+        >>> extract_lacts_prefixed(text)
+        {'search': LactMetadata(model=None, field=None, local_name="search", call='search(query="AI")')}
+    """
+    # Pattern matches both forms with strict identifier validation:
+    # <lact Model.field alias>call</lact>  OR  <lact name>call</lact>
+    # Groups: (1) identifier (Model or name), (2) optional .field, (3) optional alias, (4) call
+    # Rejects: multiple dots, leading/trailing dots, numeric prefixes
+    # Note: \w* allows single-character identifiers (e.g., alias="t")
+    pattern = r"<lact\s+([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?(?:\s+([A-Za-z_]\w*))?>(.*?)</lact>"
+    matches = re.findall(pattern, text, re.DOTALL)
+
+    lacts = {}
+    for identifier, field, alias, call_str in matches:
+        # Check if field group is present (namespaced pattern)
+        if field:
+            # Namespaced: <lact Model.field alias>
+            model = identifier
+            local_name = alias if alias else field  # Use alias or default to field name
+        else:
+            # Direct: <lact name>
+            model = None
+            field = None
+            local_name = identifier  # identifier is the name
+
+        lacts[local_name] = LactMetadata(
+            model=model,
+            field=field,
+            local_name=local_name,
+            call=call_str.strip(),
+        )
+
+    return lacts
 
 
 def extract_out_block(text: str) -> str:

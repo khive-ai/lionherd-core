@@ -224,7 +224,7 @@ class TestResolveReferencesPrefixed:
         }
         operable = Operable([Spec(Report, name="report")])
 
-        output = resolve_references_prefixed(out_fields, lvars, operable)
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert output.report.title == "Good Title"
         assert output.report.summary == "Summary text"
@@ -240,7 +240,7 @@ class TestResolveReferencesPrefixed:
         }
         operable = Operable([Spec(Reason, name="reasoning")])
 
-        output = resolve_references_prefixed(out_fields, lvars, operable)
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert output.reasoning.confidence == 0.85  # String "0.85" → float
         assert output.reasoning.analysis == "Analysis text"
@@ -261,7 +261,7 @@ class TestResolveReferencesPrefixed:
         }
         operable = Operable([Spec(Report, name="report"), Spec(Reason, name="reasoning")])
 
-        output = resolve_references_prefixed(out_fields, lvars, operable)
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert output.report.title == "Title"
         assert output.reasoning.confidence == 0.9
@@ -277,7 +277,7 @@ class TestResolveReferencesPrefixed:
         }
         operable = Operable([Spec(Reason, name="reasoning")])
 
-        output = resolve_references_prefixed(out_fields, lvars, operable)
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert output.reasoning.confidence == 0.75
         assert output.reasoning.analysis == "Text"
@@ -291,7 +291,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(Reason, name="reasoning", required=True)])
 
         with pytest.raises(MissingFieldError, match="reasoning"):
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
     def test_resolve_type_mismatch_error(self):
         """Test error when variable model doesn't match spec."""
@@ -304,7 +304,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(Reason, name="reasoning")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         # Verify ExceptionGroup contains TypeMismatchError
         assert len(exc_info.value.exceptions) == 1
@@ -323,7 +323,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(Reason, name="reasoning")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         # Verify ExceptionGroup contains ValueError about missing var
         assert len(exc_info.value.exceptions) == 1
@@ -341,7 +341,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(float, name="quality_score")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         # Verify ExceptionGroup contains ValueError about missing var
         assert len(exc_info.value.exceptions) == 1
@@ -361,7 +361,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(Reason, name="reasoning")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         # Verify ExceptionGroup contains ValueError from Pydantic validation
         assert len(exc_info.value.exceptions) == 1
@@ -378,7 +378,7 @@ class TestResolveReferencesPrefixed:
 
         # This raises ValueError from operable.check_allowed() at line 47
         with pytest.raises(ValueError, match="not allowed"):
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
     def test_basemodel_field_literal_error(self):
         """Test error when BaseModel field gets literal value."""
@@ -389,7 +389,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(Report, name="report")])
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert len(exc_info.value.exceptions) == 1
         assert "requires array syntax" in str(exc_info.value.exceptions[0])
@@ -405,7 +405,7 @@ class TestResolveReferencesPrefixed:
         operable = Operable([Spec(list, name="invalid")])  # list is not BaseModel
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         assert len(exc_info.value.exceptions) == 1
         assert "must be a Pydantic BaseModel or scalar type" in str(exc_info.value.exceptions[0])
@@ -426,7 +426,7 @@ class TestResolveReferencesPrefixed:
         operable_mock.get = Mock(return_value=None)  # Returns None
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable_mock)
+            resolve_references_prefixed(out_fields, lvars, {}, operable_mock)
 
         # Should raise ValueError with clear message
         assert len(exc_info.value.exceptions) == 1
@@ -996,7 +996,7 @@ class TestHardeningImprovements:
         )
 
         with pytest.raises(ExceptionGroup) as exc_info:
-            resolve_references_prefixed(out_fields, lvars, operable)
+            resolve_references_prefixed(out_fields, lvars, {}, operable)
 
         # Should have 3 errors
         assert len(exc_info.value.exceptions) == 3
