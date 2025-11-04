@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
 from dataclasses import dataclass
 from enum import (
     Enum as _Enum,
@@ -167,7 +167,7 @@ class Params:
         match copy_containers:
             case "shallow":
                 for k, v in dict_.items():
-                    if k not in kwargs and isinstance(v, list | dict | set):
+                    if k not in kwargs and isinstance(v, (MutableSequence, MutableMapping, MutableSet)):
                         dict_[k] = v.copy()
                 return _out(dict_)
 
@@ -175,7 +175,7 @@ class Params:
                 import copy
 
                 for k, v in dict_.items():
-                    if k not in kwargs and isinstance(v, list | dict | set):
+                    if k not in kwargs and isinstance(v, (MutableSequence, MutableMapping, MutableSet)):
                         dict_[k] = copy.deepcopy(v)
                 return _out(dict_)
 
@@ -264,7 +264,7 @@ class DataClass:
         match copy_containers:
             case "shallow":
                 for k, v in dict_.items():
-                    if k not in kwargs and isinstance(v, list | dict | set):
+                    if k not in kwargs and isinstance(v, (MutableSequence, MutableMapping, MutableSet)):
                         dict_[k] = v.copy()
                 return _out(dict_)
 
@@ -272,7 +272,7 @@ class DataClass:
                 import copy
 
                 for k, v in dict_.items():
-                    if k not in kwargs and isinstance(v, list | dict | set):
+                    if k not in kwargs and isinstance(v, (MutableSequence, MutableMapping, MutableSet)):
                         dict_[k] = copy.deepcopy(v)
                 return _out(dict_)
 

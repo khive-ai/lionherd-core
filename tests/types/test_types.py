@@ -1229,6 +1229,40 @@ def test_dataclass_with_updates_invalid_copy_containers():
         obj.with_updates(copy_containers="Deep", items=[3, 4])
 
 
+def test_params_with_updates_abc_collections():
+    """Test copy_containers works with collections.abc types (deque, defaultdict, etc).
+
+    **Protocol-Based Coverage**: Uses isinstance with MutableSequence, MutableMapping,
+    MutableSet to cover all standard mutable collections, not just list/dict/set.
+
+    Covers: deque, defaultdict, OrderedDict, Counter, UserList, etc.
+    """
+    from collections import defaultdict, deque
+    from dataclasses import dataclass
+    from typing import Any
+
+    @dataclass(frozen=True)
+    class ParamsWithABCCollections(Params):
+        _config: ClassVar[ModelConfig] = ModelConfig()
+        queue: Any = Unset
+        counts: Any = Unset
+
+    # Test deque (MutableSequence but not list subclass)
+    params = ParamsWithABCCollections(queue=deque([1, 2, 3]), counts=defaultdict(int))
+    params.counts["a"] = 5
+
+    shallow = params.with_updates(copy_containers="shallow")
+    assert isinstance(shallow.queue, deque)
+    assert isinstance(shallow.counts, defaultdict)
+
+    # Verify shallow copy behavior
+    shallow.queue.append(999)
+    assert 999 not in params.queue  # Original unchanged
+
+    shallow.counts["b"] = 10
+    assert "b" not in params.counts  # Original unchanged
+
+
 # ============================================================================
 # Test Meta Class
 # ============================================================================
