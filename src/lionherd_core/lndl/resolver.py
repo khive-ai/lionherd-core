@@ -6,9 +6,8 @@ from pydantic import (
     ValidationError as PydanticValidationError,
 )
 
-from lionherd_core.types import Operable
-
 from lionherd_core.libs.schema_handlers._function_call_parser import parse_function_call
+from lionherd_core.types import Operable
 
 from .errors import MissingFieldError, TypeMismatchError
 from .parser import parse_value

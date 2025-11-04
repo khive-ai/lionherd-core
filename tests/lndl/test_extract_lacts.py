@@ -25,7 +25,7 @@ class TestExtractLacts:
         assert "search" in result
         assert "validate" in result
         assert 'query="AI"' in result["search"]
-        assert "validate(data)" == result["validate"]
+        assert result["validate"] == "validate(data)"
 
     def test_lact_with_multiline(self):
         """Test action with multiline function call."""
@@ -81,7 +81,9 @@ class TestExtractLacts:
 
     def test_complex_arguments(self):
         """Test action with complex arguments."""
-        text = '<lact api>fetch(url="https://api.com", headers={"Auth": "token"}, timeout=30)</lact>'
+        text = (
+            '<lact api>fetch(url="https://api.com", headers={"Auth": "token"}, timeout=30)</lact>'
+        )
         result = extract_lacts(text)
         assert "api" in result
         assert "fetch(" in result["api"]
@@ -89,7 +91,7 @@ class TestExtractLacts:
 
     def test_positional_args(self):
         """Test action with positional arguments."""
-        text = '<lact calc>calculate(10, 20, 30)</lact>'
+        text = "<lact calc>calculate(10, 20, 30)</lact>"
         result = extract_lacts(text)
         assert result == {"calc": "calculate(10, 20, 30)"}
 

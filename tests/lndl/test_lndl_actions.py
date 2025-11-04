@@ -118,9 +118,9 @@ class TestActionResolution:
             "summary": LvarMetadata("Report", "summary", "summary", "Summary"),
         }
         lacts = {
-            "draft1": 'compute(version=1)',
-            "draft2": 'compute(version=2)',
-            "final": 'compute(version=3)',
+            "draft1": "compute(version=1)",
+            "draft2": "compute(version=2)",
+            "final": "compute(version=3)",
         }
         operable = Operable([Spec(Report, name="report"), Spec(float, name="quality_score")])
 
@@ -198,7 +198,7 @@ class TestEndToEndActionParsing:
         # Note: dict is not a BaseModel, so this will fail validation
         # But the action should still be parsed correctly
         with pytest.raises(ExceptionGroup):
-            output = parse_lndl(response, operable)
+            parse_lndl(response, operable)
 
     def test_scratch_actions_not_in_out_block(self):
         """Test that scratch actions (not in OUT{}) are not parsed."""
