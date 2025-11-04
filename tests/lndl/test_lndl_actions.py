@@ -554,3 +554,66 @@ class TestActionErrorHandling:
         assert len(errors) == 1
         assert "not declared" in str(errors[0])
         assert "'action'" in str(errors[0])
+
+    def test_scalar_action_malformed_syntax(self):
+        """Test error context for malformed action in scalar field."""
+        response = "<lact calc>broken_syntax_no_parens</lact>\nOUT{score:[calc]}"
+        operable = Operable([Spec(float, name="score")])
+
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+        assert "action 'calc'" in str(errors[0])
+        assert "scalar field 'score'" in str(errors[0])
+
+    def test_scalar_action_empty_call(self):
+        """Test error for empty action call in scalar field."""
+        response = "<lact calc></lact>\nOUT{score:[calc]}"
+        operable = Operable([Spec(float, name="score")])
+
+        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+            parse_lndl(response, operable)
+
+        errors = exc_info.value.exceptions
+        assert len(errors) == 1
+        assert "Invalid function call syntax" in str(errors[0])
+
+    def test_reserved_keyword_warning_keyword(self):
+        """Test warning when action name is Python keyword."""
+        import warnings
+
+        response = "<lact class>some_function()</lact>\nOUT{result:[class]}"
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            output = parse_lndl(response, operable)
+
+            # Should issue a warning
+            assert len(w) == 1
+            assert "reserved keyword" in str(w[0].message)
+            assert "'class'" in str(w[0].message)
+
+        # Should still parse successfully
+        assert isinstance(output.result, ActionCall)
+
+    def test_reserved_keyword_warning_builtin(self):
+        """Test warning when action name is Python builtin."""
+        import warnings
+
+        response = "<lact print>some_function()</lact>\nOUT{result:[print]}"
+        operable = Operable([Spec(SearchResults, name="result")])
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            output = parse_lndl(response, operable)
+
+            # Should issue a warning
+            assert len(w) == 1
+            assert "reserved keyword or builtin" in str(w[0].message)
+            assert "'print'" in str(w[0].message)
+
+        assert isinstance(output.result, ActionCall)

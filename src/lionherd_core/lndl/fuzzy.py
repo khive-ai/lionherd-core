@@ -3,7 +3,10 @@
 
 import logging
 
-from lionherd_core.libs.string_handlers._string_similarity import string_similarity
+from lionherd_core.libs.string_handlers._string_similarity import (
+    SIMILARITY_ALGO_MAP,
+    string_similarity,
+)
 from lionherd_core.types import Operable
 
 from .errors import AmbiguousMatchError, MissingFieldError
@@ -72,33 +75,25 @@ def _correct_name(
             f"Available: {candidates}"
         )
 
-    # result is str | list[str] | None
-    if isinstance(result, list):
-        # Calculate scores for tie detection
-        # Get similarity scores directly from algorithms
-        from lionherd_core.libs.string_handlers._string_similarity import SIMILARITY_ALGO_MAP
+    # Calculate scores for tie detection
+    algo_func = SIMILARITY_ALGO_MAP["jaro_winkler"]
+    scores = {candidate: algo_func(target, candidate) for candidate in result}
 
-        algo_func = SIMILARITY_ALGO_MAP["jaro_winkler"]
-        scores = {candidate: algo_func(target, candidate) for candidate in result}
+    # Find max score
+    max_score = max(scores.values())
 
-        # Find max score
-        max_score = max(scores.values())
+    # Check for ties (matches within 0.05)
+    ties = [k for k, v in scores.items() if abs(v - max_score) < 0.05]
 
-        # Check for ties (matches within 0.05)
-        ties = [k for k, v in scores.items() if abs(v - max_score) < 0.05]
+    if len(ties) > 1:
+        scores_str = ", ".join(f"'{k}': {scores[k]:.3f}" for k in ties)
+        raise AmbiguousMatchError(
+            f"Ambiguous match for {context} '{target}': [{scores_str}]. "
+            f"Multiple candidates scored within 0.05. Be more specific."
+        )
 
-        if len(ties) > 1:
-            scores_str = ", ".join(f"'{k}': {scores[k]:.3f}" for k in ties)
-            raise AmbiguousMatchError(
-                f"Ambiguous match for {context} '{target}': [{scores_str}]. "
-                f"Multiple candidates scored within 0.05. Be more specific."
-            )
-
-        # Single clear winner
-        match = result[0]
-    else:
-        # Single match returned (str)
-        match = str(result)
+    # Single clear winner
+    match = result[0]
 
     # Log correction
     if match != target:
@@ -183,15 +178,12 @@ def parse_lndl_fuzzy(
 
         # Validate field names exist for each model
         for lvar in lvars_raw.values():
-            # Get spec for this model
+            # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
             spec = None
             for s in operable.get_specs():
                 if s.base_type.__name__ == lvar.model:
                     spec = s
                     break
-
-            if spec is None:
-                continue  # Already caught above
 
             # Check if field exists
             expected_fields = list(spec.base_type.model_fields.keys())
@@ -260,15 +252,12 @@ def parse_lndl_fuzzy(
         corrected_model = model_corrections[raw_model]
 
         # Get expected fields for this model from spec
+        # (spec guaranteed to exist: corrected_model from fuzzy match against expected_models)
         spec = None
         for s in operable.get_specs():
             if s.base_type.__name__ == corrected_model:
                 spec = s
                 break
-
-        if spec is None:
-            # Model not in operable - let strict resolver handle error
-            continue
 
         # Get field names from Pydantic model
         expected_fields = list(spec.base_type.model_fields.keys())

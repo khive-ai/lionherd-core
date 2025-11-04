@@ -620,6 +620,34 @@ class TestThresholdConfiguration:
         )
         assert result.report.title == "Title"
 
+    def test_strict_model_threshold_with_fuzzy_main(self):
+        """Test threshold_model=1.0 (strict) with fuzzy main threshold."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl.errors import MissingFieldError
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+
+        operable = Operable([Spec(Report, name="report")])
+
+        # Model name typo with fuzzy main threshold but strict model threshold
+        lndl_text = """\
+        <lvar Reprot.title t>Title</lvar>
+        OUT{report: [t]}
+        """
+
+        # Should fail: threshold_model=1.0 requires exact match
+        with pytest.raises(MissingFieldError, match="Model 'Reprot' not found"):
+            parse_lndl_fuzzy(
+                lndl_text,
+                operable,
+                threshold=0.85,  # Main threshold is fuzzy
+                threshold_model=1.0,  # But model threshold is strict
+            )
+
 
 class TestFuzzyErrorHandling:
     """Test error handling and edge cases."""
@@ -860,3 +888,203 @@ class TestFuzzyCoverageEdgeCases:
 
         result = parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
         assert result.count == 42
+
+
+class TestFuzzyNamespacedActions:
+    """Test fuzzy correction for namespaced action syntax."""
+
+    def test_fuzzy_corrects_action_model_typo(self):
+        """Fuzzy corrects typo in action model name (via lvar corrections)."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl import ActionCall
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        # Include lvar to build model correction ("Reprot" -> "Report")
+        response = """
+<lvar Reprot.title t>Title</lvar>
+<lact Reprot.summary s>generate_summary(length=100)</lact>
+OUT{report:[t, s]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        # Should correct "Reprot" -> "Report" (from lvar correction)
+        assert output.report.title == "Title"
+        assert isinstance(output.report.summary, ActionCall)
+        assert output.report.summary.function == "generate_summary"
+
+    def test_fuzzy_corrects_action_field_typo(self):
+        """Fuzzy corrects typo in action field name (via lvar corrections)."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl import ActionCall
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        # Include lvar with same field typo to build field correction ("sumary" -> "summary")
+        response = """
+<lvar Report.title t>Title</lvar>
+<lvar Report.sumary x>Extra</lvar>
+<lact Report.sumary s>generate_summary(length=100)</lact>
+OUT{report:[t, s]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        # Should correct "sumary" -> "summary" (from lvar correction)
+        assert output.report.title == "Title"
+        assert isinstance(output.report.summary, ActionCall)
+        assert output.report.summary.function == "generate_summary"
+
+    def test_fuzzy_corrects_action_model_and_field(self):
+        """Fuzzy corrects typos in both model and field names (via lvar corrections)."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl import ActionCall
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        # Include lvars to build BOTH model ("Reprot"->"Report") and field ("sumary"->"summary") corrections
+        response = """
+<lvar Reprot.title t>Title</lvar>
+<lvar Reprot.sumary x>Extra</lvar>
+<lact Reprot.sumary s>generate_summary()</lact>
+OUT{report:[t, s]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        # Should correct both: "Reprot.sumary" -> "Report.summary"
+        assert output.report.title == "Title"
+        assert isinstance(output.report.summary, ActionCall)
+
+    def test_strict_mode_action_model_not_found(self):
+        """Strict mode raises error when action model doesn't exist."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        response = """
+<lact NonExistent.field a>generate()</lact>
+OUT{report:[a]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(MissingFieldError) as exc_info:
+            parse_lndl_fuzzy(response, operable, threshold=1.0)
+
+        assert "Action model 'NonExistent' not found" in str(exc_info.value)
+        assert "strict mode" in str(exc_info.value)
+
+    def test_strict_mode_action_field_not_found(self):
+        """Strict mode raises error when action field doesn't exist."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        response = """
+<lact Report.nonexistent a>generate()</lact>
+OUT{report:[a]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(MissingFieldError) as exc_info:
+            parse_lndl_fuzzy(response, operable, threshold=1.0)
+
+        assert "Action field 'nonexistent' not found" in str(exc_info.value)
+        assert "model Report" in str(exc_info.value)
+
+    def test_fuzzy_direct_action_no_correction_needed(self):
+        """Direct actions (no namespace) skip fuzzy correction."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl import ActionCall
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class SearchResults(BaseModel):
+            items: list[str]
+            count: int
+
+        response = """
+<lact search>search_api(query="test")</lact>
+OUT{result:[search]}
+"""
+        operable = Operable([Spec(SearchResults, name="result")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        # Direct action should work without correction
+        assert isinstance(output.result, ActionCall)
+        assert output.result.function == "search_api"
+
+
+class TestFuzzyEdgeCases:
+    """Test edge cases in fuzzy matching logic."""
+
+    def test_strict_mode_field_name_typo_error(self):
+        """Strict mode with field typo raises clear error."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+            summary: str
+
+        response = """
+<lvar Report.titl t>Value</lvar>
+OUT{report:[t]}
+"""
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(MissingFieldError) as exc_info:
+            parse_lndl_fuzzy(response, operable, threshold=1.0)
+
+        assert "Field 'titl' not found" in str(exc_info.value)
+        assert "strict mode: exact match required" in str(exc_info.value)
+
+    def test_fuzzy_single_match_above_threshold(self):
+        """Single match above threshold returned in list (len=1)."""
+        from pydantic import BaseModel
+
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+        from lionherd_core.types import Operable, Spec
+
+        # Model with only one field to ensure single match
+        class SingleFieldModel(BaseModel):
+            field: str
+
+        response = """
+<lvar SingleFieldModel.fild f>Value</lvar>
+OUT{model:[f]}
+"""
+        operable = Operable([Spec(SingleFieldModel, name="model")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        # Should correct "fild" -> "field" (single candidate, returned in list)
+        assert output.model.field == "Value"
