@@ -19,7 +19,7 @@ systems your way.
 - ✅ **Type-safe runtime validation** (Pydantic V2) - catch bugs before they
   bite
 - ✅ **Async-first** with thread-safe operations - scale without tears
-- ✅ **99% test coverage** (1851 tests) - production-ready from day one
+- ✅ **99% test coverage** (1908 tests) - production-ready from day one
 - ✅ **Minimal dependencies** (pydapter + anyio) - no dependency hell
 
 lionherd-core gives you composable primitives that work exactly how you want
@@ -94,65 +94,60 @@ found = agents[researcher.id]
 idle_agents = agents.get(lambda a: a.status == "idle")
 ```
 
-### 2. Workflow State Machines
+### 2. Directed Graphs
 
 ```python
-from lionherd_core import Flow, Node
+from lionherd_core import Graph, Node, Edge
 
-workflow = Flow()
+graph = Graph()
 
-# Define workflow steps
-research_id = workflow.register_node("research", Node(content="Research"))
-analyze_id = workflow.register_node("analyze", Node(content="Analyze"))
-report_id = workflow.register_node("report", Node(content="Report"))
+# Add nodes
+research = Node(content="Research")
+analyze = Node(content="Analyze")
+report = Node(content="Report")
 
-# Define execution flow
-workflow.register_edge(research_id, analyze_id)
-workflow.register_edge(analyze_id, report_id)
+graph.add_node(research)
+graph.add_node(analyze)
+graph.add_node(report)
 
-# Create progression
-workflow.register_progression(
-    name="main",
-    order=[research_id, analyze_id, report_id],
-    progressive=True
-)
+# Define execution flow with edges
+graph.add_edge(Edge(head=research.id, tail=analyze.id))
+graph.add_edge(Edge(head=analyze.id, tail=report.id))
 
-# Execute
-for step_id in workflow.get_progression("main"):
-    node = workflow.get_node(step_id)
-    print(f"Executing: {node.content}")
+# Traverse graph
+current = research
+while current:
+    print(f"Executing: {current.content}")
+    successors = graph.get_successors(current.id)
+    current = successors[0] if successors else None
 ```
 
-### 3. Structured LLM Outputs
+### 3. Structured LLM Outputs (LNDL)
 
 ```python
 from lionherd_core import Spec, Operable
 from lionherd_core.lndl import parse_lndl_fuzzy
 from pydantic import BaseModel
 
-class ResearchOutput(BaseModel):
+class Research(BaseModel):
     query: str
     findings: list[str]
-    confidence: float
+    confidence: float = 0.8
 
 # Define schema
-operable = Operable([
-    Spec(str, name="query", description="Research query"),
-    Spec(list[str], name="findings", description="Key findings"),
-    Spec(float, name="confidence", description="Score 0-1", default=0.8)
-], name="Research")
+operable = Operable([Spec(Research, name="research")])
 
-# Parse LLM output (tolerates formatting chaos)
+# Parse LLM output (tolerates typos and formatting variations)
 llm_response = """
-OUT{research: [{
-    query: "AI architectures",
-    findings: ["Protocol-based", "Async-first"],
-    confidence: 0.92
-}]}
+<lvar Research.query q>AI architectures</lvar>
+<lvar Research.findings f>["Protocol-based", "Async-first"]</lvar>
+<lvar Research.confidence c>0.92</lvar>
+OUT{research: [q, f, c]}
 """
 
 result = parse_lndl_fuzzy(llm_response, operable)
-print(result.confidence)  # 0.92
+print(result.research.confidence)  # 0.92
+print(result.research.query)       # "AI architectures"
 ```
 
 ### 4. Protocol-Based Design
@@ -188,9 +183,9 @@ class CustomAgent:
 | **Element** | UUID + metadata | You need unique identity |
 | **Node** | Polymorphic content | You need flexible content storage |
 | **Pile[T]** | Type-safe collections | You need thread-safe typed collections |
-| **Graph** | Directed graph with conditions | You need workflow DAGs |
-| **Flow** | Workflow state machine | You need stateful orchestration |
-| **Progression** | Named UUID ordering | You need execution sequences |
+| **Graph** | Directed graph with edges | You need workflow DAGs |
+| **Flow** | Pile of progressions + items | You need ordered sequences |
+| **Progression** | Ordered UUID sequence | You need to track execution order |
 | **LNDL** | LLM output parser | You need structured LLM outputs |
 
 ### Protocols (Rust-Inspired)
@@ -232,35 +227,45 @@ class AnalystAgent(Element):
 researchers = Pile[ResearchAgent](item_type=ResearchAgent)
 analysts = Pile[AnalystAgent](item_type=AnalystAgent)
 
-# Workflow orchestration
-workflow = Flow()
-research_phase = workflow.register_node("research")
-analysis_phase = workflow.register_node("analysis")
-workflow.register_edge(research_phase, analysis_phase)
+# Workflow orchestration with Graph
+workflow = Graph()
+research_phase = Node(content="research")
+analysis_phase = Node(content="analysis")
+
+workflow.add_node(research_phase)
+workflow.add_node(analysis_phase)
+workflow.add_edge(Edge(head=research_phase.id, tail=analysis_phase.id))
 
 # Execute with conditional branching
 current = research_phase
 while current:
     # Dispatch to appropriate agents
-    if current == research_phase:
+    if current.content == "research":
         execute_research(researchers)
-    elif current == analysis_phase:
+    elif current.content == "analysis":
         execute_analysis(analysts)
 
     # Progress workflow
-    successors = workflow.get_successors(current)
+    successors = workflow.get_successors(current.id)
     current = successors[0] if successors else None
 ```
 
 ### Tool Calling & Function Execution
 
 ```python
-from lionherd_core import Node, Pile
+from lionherd_core import Element, Pile, Spec, Operable
+from lionherd_core.lndl import parse_lndl_fuzzy
+from collections.abc import Callable
+from pydantic import BaseModel
+from typing import Any
 
 class Tool(Element):
     name: str
     description: str
-    func: callable
+    func: Callable[..., Any]
+
+    class Config:
+        arbitrary_types_allowed = True
 
 # Tool registry
 tools = Pile[Tool](item_type=Tool)
@@ -270,22 +275,30 @@ tools.include([
 ])
 
 # Parse LLM tool call
-tool_call_spec = Operable([
-    Spec(str, name="tool", description="Tool name"),
-    Spec(dict, name="args", description="Arguments"),
-], name="ToolCall")
+class ToolCall(BaseModel):
+    tool: str
+    args: dict
 
-parsed = parse_lndl_fuzzy(llm_output, tool_call_spec)
+operable = Operable([Spec(ToolCall, name="call")])
+
+llm_output = """
+<lvar ToolCall.tool t>search</lvar>
+<lvar ToolCall.args a>{"query": "AI agents"}</lvar>
+OUT{call: [t, a]}
+"""
+
+parsed = parse_lndl_fuzzy(llm_output, operable)
 
 # Execute
-tool = tools.get(lambda t: t.name == parsed.tool)[0]
-result = tool.func(**parsed.args)
+tool = tools.get(lambda t: t.name == parsed.call.tool)[0]
+result = tool.func(**parsed.call.args)
 ```
 
 ### Memory Systems
 
 ```python
-from lionherd_core import Node, Graph
+from lionherd_core import Node, Graph, Edge
+from datetime import datetime
 
 class Memory(Node):
     timestamp: datetime
@@ -296,17 +309,30 @@ class Memory(Node):
 memory_graph = Graph()
 
 # Add memories
-mem1_id = memory_graph.add_node(Memory(content="User likes Python"))
-mem2_id = memory_graph.add_node(Memory(content="User dislikes Java"))
+mem1 = Memory(
+    content="User likes Python",
+    timestamp=datetime.now(),
+    importance=0.9,
+    tags=["preference"]
+)
+mem2 = Memory(
+    content="User dislikes Java",
+    timestamp=datetime.now(),
+    importance=0.7,
+    tags=["preference"]
+)
+
+memory_graph.add_node(mem1)
+memory_graph.add_node(mem2)
 
 # Connect related memories
-memory_graph.add_edge(mem1_id, mem2_id, label="preference")
+memory_graph.add_edge(Edge(head=mem1.id, tail=mem2.id, label=["preference"]))
 
 # Query by importance
-important_memories = memory_pile.get(lambda m: m.importance > 0.8)
+important_memories = memory_graph.nodes.get(lambda m: m.importance > 0.8)
 
 # Traverse connections
-related = memory_graph.get_successors(mem1_id)
+related = memory_graph.get_successors(mem1.id)
 ```
 
 ### RAG Pipelines
@@ -383,7 +409,7 @@ uv run ruff format .
 uv run mypy src/
 ```
 
-**Test Coverage**: 99% (1851 tests, 31k lines)
+**Test Coverage**: 99% (1908 tests, 43k lines)
 
 ---
 
