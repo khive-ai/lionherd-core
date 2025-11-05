@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, field_validator
 
+from ..errors import TimeoutError as LionherdTimeoutError
 from ..protocols import Invocable, Serializable, implements
 from ..types import MaybeSentinel, MaybeUnset, Unset, is_sentinel
 from .element import LN_ELEMENT_FIELDS, Element
@@ -159,6 +161,27 @@ class Event(Element):
     execution: Execution = Field(default_factory=Execution)
     timeout: float | None = Field(None, exclude=True)
 
+    @field_validator("timeout")
+    @classmethod
+    def _validate_timeout(cls, v: float | None) -> float | None:
+        """Validate timeout is positive and finite.
+
+        Args:
+            v: Timeout value in seconds
+
+        Returns:
+            Validated timeout value
+
+        Raises:
+            ValueError: If timeout is ≤0, NaN, or infinite
+        """
+        if v is not None:
+            if not math.isfinite(v):
+                raise ValueError(f"timeout must be finite, got {v}")
+            if v <= 0:
+                raise ValueError(f"timeout must be positive, got {v}")
+        return v
+
     @field_serializer("execution")
     def _serialize_execution(self, val: Execution) -> dict:
         """Serialize Execution to dict."""
@@ -219,8 +242,8 @@ class Event(Element):
 
         except TimeoutError:
             # Handle builtin TimeoutError from fail_after - convert to LionherdTimeoutError
-            from lionherd_core.errors import TimeoutError as LionherdTimeoutError
-
+            # Status: CANCELLED matches existing cancellation semantics (see lines 271-276)
+            # Timeouts are cancellation signals, not exceptions from user code
             lionherd_timeout = LionherdTimeoutError(
                 f"Operation timed out after {self.timeout}s",
                 retryable=True,
@@ -229,7 +252,7 @@ class Event(Element):
             self.execution.response = Unset  # Timeout before completion, no response
             self.execution.error = lionherd_timeout
             self.execution.status = EventStatus.CANCELLED
-            self.execution.retryable = True  # Timeouts are retryable
+            self.execution.retryable = lionherd_timeout.retryable  # Use error's retryable flag
             return None
 
         except Exception as e:

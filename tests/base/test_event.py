@@ -1423,3 +1423,79 @@ async def test_event_timeout_duration_measured():
     assert event.execution.duration is not None
     assert event.execution.duration >= 0.1  # At least the timeout duration
     assert event.execution.duration < 1.0  # But not the full delay
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_zero_rejected():
+    """Test timeout=0 raises ValueError during construction.
+
+    Edge Case: Zero timeout is invalid - operations cannot complete in zero time.
+    The field validator should reject this at construction time.
+    """
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        SimpleEvent(return_value=42, timeout=0)
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_negative_rejected():
+    """Test negative timeout raises ValueError during construction.
+
+    Edge Case: Negative timeout is semantically invalid.
+    The field validator should reject this at construction time.
+    """
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        SimpleEvent(return_value=42, timeout=-1.0)
+
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        SimpleEvent(return_value=42, timeout=-10.5)
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_infinite_rejected():
+    """Test infinite timeout raises ValueError during construction.
+
+    Edge Case: Infinite timeout (float('inf')) is invalid.
+    The field validator should reject non-finite values.
+    """
+    with pytest.raises(ValueError, match="timeout must be finite"):
+        SimpleEvent(return_value=42, timeout=float("inf"))
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_nan_rejected():
+    """Test NaN timeout raises ValueError during construction.
+
+    Edge Case: NaN timeout is invalid - not a meaningful time duration.
+    The field validator should reject non-finite values.
+    """
+    with pytest.raises(ValueError, match="timeout must be finite"):
+        SimpleEvent(return_value=42, timeout=float("nan"))
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_with_exception_before_timeout():
+    """Test exception raised before timeout expires takes precedence.
+
+    Critical Edge Case: If _invoke() raises an exception before the timeout
+    expires, the exception handling should work normally without interference
+    from the timeout mechanism.
+
+    This tests that the exception handling order is correct:
+    1. TimeoutError is caught first (line 243)
+    2. Regular exceptions caught second (line 258)
+
+    An exception raised before timeout should be handled as FAILED, not CANCELLED.
+    """
+    # Exception occurs immediately, timeout is 5 seconds
+    event = FailingEvent(error_message="boom", timeout=5.0)
+
+    result = await event.invoke()
+
+    # Exception handling should work normally
+    assert result is None
+    assert event.status == EventStatus.FAILED  # FAILED, not CANCELLED
+    assert isinstance(event.execution.error, ValueError)
+    assert "boom" in str(event.execution.error)
+    assert event.execution.retryable is True  # Unknown exceptions are retryable
+    assert event.execution.duration is not None
+    assert event.execution.duration < 1.0  # Completed quickly (before timeout)
