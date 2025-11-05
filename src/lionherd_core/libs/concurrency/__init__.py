@@ -12,6 +12,7 @@ from ._cancel import (
 from ._errors import get_cancelled_exc_class, is_cancelled, non_cancel_subgroup, shield
 from ._patterns import CompletionStream, bounded_map, gather, race, retry
 from ._primitives import CapacityLimiter, Condition, Event, Lock, Queue, Semaphore
+from ._priority_queue import PriorityQueue, QueueEmpty, QueueFull
 from ._resource_tracker import LeakInfo, LeakTracker, track_resource, untrack_resource
 from ._task import TaskGroup, create_task_group
 from ._utils import current_time, is_coro_func, run_sync, sleep
@@ -30,7 +31,10 @@ __all__ = (
     "LeakInfo",
     "LeakTracker",
     "Lock",
+    "PriorityQueue",
     "Queue",
+    "QueueEmpty",
+    "QueueFull",
     "Semaphore",
     "TaskGroup",
     "bounded_map",
