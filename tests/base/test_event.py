@@ -47,6 +47,14 @@ Event lifecycle follows a deterministic finite state automaton:
 Transitions are irreversible - terminal states cannot move back to PENDING.
 Use as_fresh_event() to create a new event with pristine state.
 
+Status Semantics
+----------------
+CANCELLED is used for both timeout and explicit cancellation (CancelledError).
+Rationale: Timeouts are cancellation signals from the runtime, not exceptions
+from user code. This maintains consistency with anyio's cancellation model
+where timeouts trigger CancelledError which is caught and converted to
+LionherdTimeoutError with status=CANCELLED.
+
 Observability Properties
 ------------------------
 Every execution captures:
