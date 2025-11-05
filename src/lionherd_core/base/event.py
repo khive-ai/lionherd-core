@@ -5,14 +5,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any
+from typing import Any, final
 
 from pydantic import Field, field_serializer, field_validator
 
 from ..errors import TimeoutError as LionherdTimeoutError
 from ..protocols import Invocable, Serializable, implements
-from ..types import MaybeSentinel, MaybeUnset, Unset, is_sentinel
+from ..types import Enum, MaybeSentinel, MaybeUnset, Unset, is_sentinel
 from .element import LN_ELEMENT_FIELDS, Element
 
 __all__ = (
@@ -22,7 +21,7 @@ __all__ = (
 )
 
 
-class EventStatus(str, Enum):
+class EventStatus(Enum):
     """Event execution status states.
 
     Values:
@@ -47,13 +46,13 @@ class EventStatus(str, Enum):
 @implements(Serializable)
 @dataclass(slots=True)
 class Execution:
-    """Execution state tracking for Events.
+    """Execution state (status, duration, response, error, retryable).
 
     Attributes:
         status: Current execution status
         duration: Elapsed time in seconds (Unset until complete)
-        response: Execution result (Unset/value/None)
-        error: Exception if failed (Unset/None/BaseException for proper exception hierarchy)
+        response: Result (Unset if unavailable, None if legitimate null)
+        error: Exception if failed (Unset/None/BaseException)
         retryable: Whether retry is safe (Unset/bool)
     """
 
@@ -67,31 +66,27 @@ class Execution:
         """Serialize to dict with sentinel handling."""
         from ._utils import get_json_serializable
 
-        # Serialize response: Unset → None, else serialize value
         if is_sentinel(self.response):
-            res_ = None  # Unset: no response value
+            res_ = None
         else:
-            # Try to serialize the actual response
             res_ = get_json_serializable(self.response)
             if res_ is Unset:
                 res_ = "<unserializable>"
 
-        # Serialize error
         error_dict = None
         if self.error is not Unset and self.error is not None:
             from lionherd_core.errors import LionherdError
 
             if isinstance(self.error, LionherdError):
-                error_dict = self.error.to_dict()  # rich structured info
+                error_dict = self.error.to_dict()
             elif isinstance(self.error, ExceptionGroup):
-                error_dict = self._serialize_exception_group(self.error)  # serialize all exceptions
+                error_dict = self._serialize_exception_group(self.error)
             else:
                 error_dict = {
                     "error": type(self.error).__name__,
                     "message": str(self.error),
                 }
 
-        # Convert sentinels to None for JSON serialization
         duration_value = None if self.duration is Unset else self.duration
         retryable_value = None if self.retryable is Unset else self.retryable
 
@@ -146,15 +141,12 @@ class Execution:
 
 @implements(Invocable)
 class Event(Element):
-    """Base event with lifecycle tracking and execution.
+    """Base event with lifecycle tracking and execution state.
 
-    Subclasses implement _invoke(). invoke() manages status transitions, timing, error capture.
-    Supports ExceptionGroup for multi-error scenarios.
+    Subclasses implement _invoke(). invoke() manages transitions, timing, errors.
 
     Attributes:
         execution: Execution state
-        status: Property for execution.status
-        response: Property for execution.response (read-only)
         timeout: Optional timeout in seconds (None = no timeout)
     """
 
@@ -164,17 +156,7 @@ class Event(Element):
     @field_validator("timeout")
     @classmethod
     def _validate_timeout(cls, v: float | None) -> float | None:
-        """Validate timeout is positive and finite.
-
-        Args:
-            v: Timeout value in seconds
-
-        Returns:
-            Validated timeout value
-
-        Raises:
-            ValueError: If timeout is ≤0, NaN, or infinite
-        """
+        """Validate timeout is positive and finite (raises ValueError if not)."""
         if v is not None:
             if not math.isfinite(v):
                 raise ValueError(f"timeout must be finite, got {v}")
@@ -215,8 +197,9 @@ class Event(Element):
         """Execute event. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement _invoke()")
 
+    @final
     async def invoke(self) -> Any:
-        """Execute with status tracking, timing, error capture. Returns result or None (check status)."""
+        """Execute with status tracking, timing, error capture (check status for result)."""
         from lionherd_core.libs.concurrency import current_time
 
         start = current_time()
@@ -224,7 +207,6 @@ class Event(Element):
         try:
             self.execution.status = EventStatus.PROCESSING
 
-            # Execute with optional timeout
             if self.timeout is not None:
                 from lionherd_core.libs.concurrency import fail_after
 
@@ -233,72 +215,57 @@ class Event(Element):
             else:
                 result = await self._invoke()
 
-            # Success path: set response and clear error
-            self.execution.response = result  # Can be None or any value
-            self.execution.error = None  # Explicitly no error
+            # Success path
+            self.execution.response = result
+            self.execution.error = None
             self.execution.status = EventStatus.COMPLETED
-            self.execution.retryable = False  # Success - no need to retry
+            self.execution.retryable = False
             return result
 
         except TimeoutError:
-            # Handle builtin TimeoutError from fail_after - convert to LionherdTimeoutError
-            # Status: CANCELLED matches existing cancellation semantics (see lines 290-302)
-            # Timeouts are cancellation signals, not exceptions from user code
             lionherd_timeout = LionherdTimeoutError(
                 f"Operation timed out after {self.timeout}s",
                 retryable=True,
             )
 
-            self.execution.response = Unset  # Timeout before completion, no response
+            self.execution.response = Unset
             self.execution.error = lionherd_timeout
             self.execution.status = EventStatus.CANCELLED
-            self.execution.retryable = lionherd_timeout.retryable  # Use error's retryable flag
+            self.execution.retryable = lionherd_timeout.retryable
             return None
 
         except Exception as e:
-            # Catch all regular exceptions - execution state is the API
-            # Handle ExceptionGroup specially (Python 3.11+ async task groups)
             from lionherd_core.errors import LionherdError
 
             if isinstance(e, ExceptionGroup):
-                # ExceptionGroup: ALL exceptions must be retryable for group to be retryable
-                # If even ONE exception is non-retryable, don't retry the whole group
-                retryable = True  # Start optimistic
+                # All exceptions must be retryable for group to be retryable
+                retryable = True
                 for exc in e.exceptions:
                     if isinstance(exc, LionherdError) and not exc.retryable:
                         retryable = False
                         break
-                    # Unknown exceptions keep default (True)
 
                 self.execution.retryable = retryable
             else:
-                # Single exception: use standard logic
                 if isinstance(e, LionherdError):
-                    # Use retryable flag from our error hierarchy
                     self.execution.retryable = e.retryable
                 else:
-                    # Unknown exceptions are retryable by default (safe assumption)
                     self.execution.retryable = True
 
-            # Failure path: response is Unset (execution failed, no valid response)
             self.execution.response = Unset
-            self.execution.error = e  # Store exception (single or ExceptionGroup)
+            self.execution.error = e
             self.execution.status = EventStatus.FAILED
-            return None  # Return None on failure, caller checks status
+            return None
 
         except BaseException as e:
-            # Catch cancellation signals (CancelledError, KeyboardInterrupt, etc.)
-            # These are BaseException subclasses that are NOT Exception subclasses
             from lionherd_core.libs.concurrency import get_cancelled_exc_class
 
             if isinstance(e, get_cancelled_exc_class()):
-                # CancelledError from anyio - set state and propagate
-                self.execution.response = Unset  # Cancelled before completion, no response
-                self.execution.error = e  # Store the cancellation exception
+                self.execution.response = Unset
+                self.execution.error = e
                 self.execution.status = EventStatus.CANCELLED
-                self.execution.retryable = True  # Cancellations (esp. timeouts) are retryable
+                self.execution.retryable = True
 
-            # Always propagate BaseException (cancellation, KeyboardInterrupt, etc.)
             raise
 
         finally:
@@ -309,24 +276,19 @@ class Event(Element):
         raise NotImplementedError("Subclasses must implement stream() if streaming=True")
 
     def as_fresh_event(self, copy_meta: bool = False) -> Event:
-        """Create pristine clone with reset execution, fresh ID, PENDING status."""
-        # Get dict representation and remove execution state
+        """Clone with reset execution (fresh ID, PENDING status)."""
         d_ = self.to_dict()
         for key in ["execution", *LN_ELEMENT_FIELDS]:
             d_.pop(key, None)
 
-        # Create fresh instance with same configuration
         fresh = self.__class__(**d_)
 
-        # Preserve timeout configuration (excluded from serialization but part of config)
         if hasattr(self, "timeout") and self.timeout is not None:
             fresh.timeout = self.timeout
 
-        # Optionally copy metadata
         if copy_meta and hasattr(self, "metadata"):
             fresh.metadata = self.metadata.copy()
 
-        # Track original event in metadata
         if hasattr(fresh, "metadata"):
             fresh.metadata["original"] = {
                 "id": str(self.id),
