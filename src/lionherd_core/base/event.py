@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, field_validator
 
+from ..errors import TimeoutError as LionherdTimeoutError
 from ..protocols import Invocable, Serializable, implements
 from ..types import MaybeSentinel, MaybeUnset, Unset, is_sentinel
 from .element import LN_ELEMENT_FIELDS, Element
@@ -153,9 +155,32 @@ class Event(Element):
         execution: Execution state
         status: Property for execution.status
         response: Property for execution.response (read-only)
+        timeout: Optional timeout in seconds (None = no timeout)
     """
 
     execution: Execution = Field(default_factory=Execution)
+    timeout: float | None = Field(None, exclude=True)
+
+    @field_validator("timeout")
+    @classmethod
+    def _validate_timeout(cls, v: float | None) -> float | None:
+        """Validate timeout is positive and finite.
+
+        Args:
+            v: Timeout value in seconds
+
+        Returns:
+            Validated timeout value
+
+        Raises:
+            ValueError: If timeout is ≤0, NaN, or infinite
+        """
+        if v is not None:
+            if not math.isfinite(v):
+                raise ValueError(f"timeout must be finite, got {v}")
+            if v <= 0:
+                raise ValueError(f"timeout must be positive, got {v}")
+        return v
 
     @field_serializer("execution")
     def _serialize_execution(self, val: Execution) -> dict:
@@ -198,7 +223,15 @@ class Event(Element):
 
         try:
             self.execution.status = EventStatus.PROCESSING
-            result = await self._invoke()
+
+            # Execute with optional timeout
+            if self.timeout is not None:
+                from lionherd_core.libs.concurrency import fail_after
+
+                with fail_after(self.timeout):
+                    result = await self._invoke()
+            else:
+                result = await self._invoke()
 
             # Success path: set response and clear error
             self.execution.response = result  # Can be None or any value
@@ -206,6 +239,21 @@ class Event(Element):
             self.execution.status = EventStatus.COMPLETED
             self.execution.retryable = False  # Success - no need to retry
             return result
+
+        except TimeoutError:
+            # Handle builtin TimeoutError from fail_after - convert to LionherdTimeoutError
+            # Status: CANCELLED matches existing cancellation semantics (see lines 290-302)
+            # Timeouts are cancellation signals, not exceptions from user code
+            lionherd_timeout = LionherdTimeoutError(
+                f"Operation timed out after {self.timeout}s",
+                retryable=True,
+            )
+
+            self.execution.response = Unset  # Timeout before completion, no response
+            self.execution.error = lionherd_timeout
+            self.execution.status = EventStatus.CANCELLED
+            self.execution.retryable = lionherd_timeout.retryable  # Use error's retryable flag
+            return None
 
         except Exception as e:
             # Catch all regular exceptions - execution state is the API
@@ -269,6 +317,10 @@ class Event(Element):
 
         # Create fresh instance with same configuration
         fresh = self.__class__(**d_)
+
+        # Preserve timeout configuration (excluded from serialization but part of config)
+        if hasattr(self, "timeout") and self.timeout is not None:
+            fresh.timeout = self.timeout
 
         # Optionally copy metadata
         if copy_meta and hasattr(self, "metadata"):
