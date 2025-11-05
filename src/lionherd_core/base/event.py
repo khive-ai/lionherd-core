@@ -242,7 +242,7 @@ class Event(Element):
 
         except TimeoutError:
             # Handle builtin TimeoutError from fail_after - convert to LionherdTimeoutError
-            # Status: CANCELLED matches existing cancellation semantics (see lines 271-276)
+            # Status: CANCELLED matches existing cancellation semantics (see lines 290-302)
             # Timeouts are cancellation signals, not exceptions from user code
             lionherd_timeout = LionherdTimeoutError(
                 f"Operation timed out after {self.timeout}s",
