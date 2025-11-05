@@ -1363,7 +1363,7 @@ async def test_event_timeout_retryable_flag():
     """Test retryable flag is set correctly on timeout."""
     event = SlowEvent(delay=10.0, timeout=0.05)
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Timeout should be retryable
     assert event.execution.retryable is True
@@ -1417,7 +1417,7 @@ async def test_event_timeout_duration_measured():
     """Test duration is measured correctly even with timeout."""
     event = SlowEvent(delay=10.0, timeout=0.1)
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Duration should reflect time until timeout
     assert event.execution.duration is not None
