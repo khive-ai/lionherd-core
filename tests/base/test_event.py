@@ -1226,3 +1226,200 @@ async def test_exception_group_backward_compatibility():
     assert serialized["error"]["error"] == "ValueError"
     assert serialized["error"]["message"] == "single error"
     assert "exceptions" not in serialized["error"]  # No exceptions array for single error
+
+
+# ============================================================================
+# Timeout Support Tests (Issue #13)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_none_default():
+    """Test Event with timeout=None (no timeout) - default behavior.
+
+    This verifies backward compatibility: existing code without timeout
+    continues to work exactly as before.
+    """
+    event = SimpleEvent(return_value=42)
+
+    # Default timeout is None
+    assert event.timeout is None
+
+    # Execute normally
+    result = await event.invoke()
+
+    # Success as usual
+    assert result == 42
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == 42
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_completes_in_time():
+    """Test Event with timeout set and operation completes within timeout."""
+    from lionherd_core.types._sentinel import Unset
+
+    # Fast operation with generous timeout
+    event = SlowEvent(delay=0.05, return_value="completed", timeout=1.0)
+
+    assert event.timeout == 1.0
+
+    # Execute - should complete successfully
+    result = await event.invoke()
+
+    # Success path
+    assert result == "completed"
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == "completed"
+    assert event.execution.error is None
+    assert event.execution.duration < 1.0
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_exceeded():
+    """Test Event timeout exceeded - converts to LionherdTimeoutError.
+
+    Timeout Behavior:
+    - Operation takes longer than timeout
+    - builtin TimeoutError is caught
+    - Converted to LionherdTimeoutError
+    - Status: CANCELLED
+    - Retryable: True (timeouts are transient)
+    """
+    from lionherd_core.errors import TimeoutError as LionherdTimeoutError
+    from lionherd_core.types._sentinel import Unset
+
+    # Slow operation with short timeout
+    event = SlowEvent(delay=5.0, timeout=0.1)
+
+    assert event.timeout == 0.1
+
+    # Execute - should timeout
+    result = await event.invoke()
+
+    # Timeout handling
+    assert result is None  # Returns None on timeout
+    assert event.status == EventStatus.CANCELLED
+    assert event.execution.response is Unset  # No response due to timeout
+    assert isinstance(event.execution.error, LionherdTimeoutError)
+    assert "timed out after 0.1s" in str(event.execution.error)
+    assert event.execution.retryable is True  # Timeouts are retryable
+    assert event.execution.duration is not None
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_different_event_types():
+    """Test timeout works with different event types."""
+    from lionherd_core.errors import TimeoutError as LionherdTimeoutError
+
+    # Test with SimpleEvent
+    simple = SimpleEvent(return_value="fast", timeout=1.0)
+    result = await simple.invoke()
+    assert result == "fast"
+    assert simple.status == EventStatus.COMPLETED
+
+    # Test with SlowEvent that times out
+    slow = SlowEvent(delay=5.0, timeout=0.05)
+    result = await slow.invoke()
+    assert result is None
+    assert slow.status == EventStatus.CANCELLED
+    assert isinstance(slow.execution.error, LionherdTimeoutError)
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_error_conversion():
+    """Test builtin TimeoutError is converted to LionherdTimeoutError."""
+    from lionherd_core.errors import TimeoutError as LionherdTimeoutError
+
+    event = SlowEvent(delay=10.0, timeout=0.05)
+
+    result = await event.invoke()
+
+    # Error should be LionherdTimeoutError, not builtin TimeoutError
+    assert result is None
+    assert isinstance(event.execution.error, LionherdTimeoutError)
+    assert not isinstance(event.execution.error, TimeoutError.__bases__)  # Not builtin
+    assert event.execution.error.retryable is True  # LionherdTimeoutError has retryable
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_status_transitions():
+    """Test status transitions with timeout: PENDING → PROCESSING → CANCELLED."""
+    event = SlowEvent(delay=5.0, timeout=0.05)
+
+    # Initial state
+    assert event.status == EventStatus.PENDING
+
+    # Execute (will timeout)
+    result = await event.invoke()
+
+    # Final state after timeout
+    assert event.status == EventStatus.CANCELLED
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_retryable_flag():
+    """Test retryable flag is set correctly on timeout."""
+    event = SlowEvent(delay=10.0, timeout=0.05)
+
+    result = await event.invoke()
+
+    # Timeout should be retryable
+    assert event.execution.retryable is True
+    assert event.status == EventStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_serialization():
+    """Test Event with timeout serializes correctly."""
+    from lionherd_core.errors import TimeoutError as LionherdTimeoutError
+
+    event = SlowEvent(delay=5.0, timeout=0.05)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Check serialization
+    assert serialized["status"] == "cancelled"
+    assert serialized["response"] is None  # Unset → None in serialization
+    assert serialized["error"] is not None
+    assert "TimeoutError" in serialized["error"]["error"]
+    assert "timed out after 0.05s" in serialized["error"]["message"]
+    assert serialized["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_with_as_fresh_event():
+    """Test as_fresh_event preserves timeout configuration."""
+    original = SlowEvent(delay=10.0, timeout=0.05)
+
+    # Execute and timeout
+    await original.invoke()
+    assert original.status == EventStatus.CANCELLED
+
+    # Create fresh event
+    fresh = original.as_fresh_event()
+
+    # Fresh event should preserve timeout configuration
+    assert fresh.timeout == original.timeout
+    assert fresh.timeout == 0.05
+    assert fresh.status == EventStatus.PENDING
+
+    # Fresh event should timeout the same way
+    result = await fresh.invoke()
+    assert result is None
+    assert fresh.status == EventStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_event_timeout_duration_measured():
+    """Test duration is measured correctly even with timeout."""
+    event = SlowEvent(delay=10.0, timeout=0.1)
+
+    result = await event.invoke()
+
+    # Duration should reflect time until timeout
+    assert event.execution.duration is not None
+    assert event.execution.duration >= 0.1  # At least the timeout duration
+    assert event.execution.duration < 1.0  # But not the full delay
