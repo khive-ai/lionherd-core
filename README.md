@@ -19,7 +19,7 @@ systems your way.
 - ✅ **Type-safe runtime validation** (Pydantic V2) - catch bugs before they
   bite
 - ✅ **Async-first** with thread-safe operations - scale without tears
-- ✅ **99% test coverage** (1908 tests) - production-ready from day one
+- ✅ **99% test coverage** (1999 tests) - production-ready from day one
 - ✅ **Minimal dependencies** (pydapter + anyio) - no dependency hell
 
 lionherd-core gives you composable primitives that work exactly how you want
@@ -409,7 +409,7 @@ uv run ruff format .
 uv run mypy src/
 ```
 
-**Test Coverage**: 99% (1908 tests, 43k lines)
+**Test Coverage**: 99% (1999 tests, 4.2k SLOC)
 
 ---
 
