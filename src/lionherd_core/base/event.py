@@ -217,7 +217,7 @@ class Event(Element):
             self.execution.retryable = False  # Success - no need to retry
             return result
 
-        except TimeoutError as e:
+        except TimeoutError:
             # Handle builtin TimeoutError from fail_after - convert to LionherdTimeoutError
             from lionherd_core.errors import TimeoutError as LionherdTimeoutError
 
