@@ -1,13 +1,6 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Priority queue implementation using lionherd_core concurrency primitives.
-
-Provides async PriorityQueue using anyio primitives. Note that unlike
-asyncio.PriorityQueue, the nowait methods (get_nowait/put_nowait) are async
-because anyio.Condition requires async lock acquisition for thread safety.
-"""
-
 from __future__ import annotations
 
 import heapq
@@ -29,17 +22,9 @@ class QueueFull(Exception):  # noqa: N818
 
 
 class PriorityQueue(Generic[T]):
-    """Async priority queue using heapq + anyio concurrency primitives.
+    """Async priority queue (heapq + anyio.Condition).
 
-    Similar interface to asyncio.PriorityQueue but with key difference:
-    get_nowait() and put_nowait() are async methods (must be awaited).
-    This is required because anyio.Condition uses async lock acquisition.
-
-    Use cases:
-    - await q.get_nowait()  # Must await (unlike asyncio)
-    - await q.put_nowait(item)  # Must await (unlike asyncio)
-    - await q.get()  # Blocking get
-    - await q.put(item)  # Blocking put
+    API: Similar to asyncio.PriorityQueue, but nowait methods are async.
 
     Attributes:
         maxsize: Maximum queue size (0 = unlimited)
@@ -49,17 +34,17 @@ class PriorityQueue(Generic[T]):
         """Initialize priority queue.
 
         Args:
-            maxsize: Maximum queue size (0 = unlimited)
+            maxsize: Max size (0 = unlimited)
         """
         self.maxsize = maxsize
         self._queue: list[T] = []
         self._condition = Condition()
 
     async def put(self, item: T) -> None:
-        """Put item into queue.
+        """Put item into queue (blocks if full).
 
         Args:
-            item: Item to add (should be tuple with priority as first element)
+            item: Item (tuple with priority as first element)
         """
         async with self._condition:
             # Wait if queue is full
@@ -70,14 +55,10 @@ class PriorityQueue(Generic[T]):
             self._condition.notify()
 
     async def put_nowait(self, item: T) -> None:
-        """Put item into queue without blocking (async method).
-
-        Note: Unlike asyncio.PriorityQueue.put_nowait(), this is an async method
-        and must be awaited. This is required because anyio.Condition uses async
-        lock acquisition for thread safety.
+        """Put item without blocking (async, unlike asyncio).
 
         Args:
-            item: Item to add (should be tuple with priority as first element)
+            item: Item (tuple with priority as first element)
 
         Raises:
             QueueFull: If queue is at maxsize
@@ -91,7 +72,7 @@ class PriorityQueue(Generic[T]):
             self._condition.notify()
 
     async def get(self) -> T:
-        """Get highest priority item from queue (blocking).
+        """Get highest priority item (blocks if empty).
 
         Returns:
             Highest priority item (lowest value first)
@@ -106,11 +87,7 @@ class PriorityQueue(Generic[T]):
             return item
 
     async def get_nowait(self) -> T:
-        """Get item without blocking (async method).
-
-        Note: Unlike asyncio.PriorityQueue.get_nowait(), this is an async method
-        and must be awaited. This is required because anyio.Condition uses async
-        lock acquisition for thread safety.
+        """Get item without blocking (async, unlike asyncio).
 
         Returns:
             Highest priority item
@@ -128,7 +105,9 @@ class PriorityQueue(Generic[T]):
             return item
 
     def qsize(self) -> int:
-        """Get current queue size.
+        """Approximate queue size (unlocked, racy).
+
+        Note: Value may be stale immediately. Use for monitoring only.
 
         Returns:
             Number of items in queue
@@ -136,7 +115,9 @@ class PriorityQueue(Generic[T]):
         return len(self._queue)
 
     def empty(self) -> bool:
-        """Check if queue is empty.
+        """Check if queue is empty (unlocked, racy).
+
+        Note: Value may be stale immediately. Use for monitoring only.
 
         Returns:
             True if queue is empty
@@ -144,7 +125,9 @@ class PriorityQueue(Generic[T]):
         return len(self._queue) == 0
 
     def full(self) -> bool:
-        """Check if queue is full.
+        """Check if queue is full (unlocked, racy).
+
+        Note: Value may be stale immediately. Use for monitoring only.
 
         Returns:
             True if queue is at maxsize
