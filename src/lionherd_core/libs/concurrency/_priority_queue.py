@@ -3,7 +3,9 @@
 
 """Priority queue implementation using lionherd_core concurrency primitives.
 
-Provides async PriorityQueue without direct asyncio dependency.
+Provides async PriorityQueue using anyio primitives. Note that unlike
+asyncio.PriorityQueue, the nowait methods (get_nowait/put_nowait) are async
+because anyio.Condition requires async lock acquisition for thread safety.
 """
 
 from __future__ import annotations
@@ -27,10 +29,17 @@ class QueueFull(Exception):  # noqa: N818
 
 
 class PriorityQueue(Generic[T]):
-    """Async priority queue using heapq + concurrency primitives.
+    """Async priority queue using heapq + anyio concurrency primitives.
 
-    Compatible interface with asyncio.PriorityQueue but uses lionherd_core
-    concurrency primitives instead of direct asyncio usage.
+    Similar interface to asyncio.PriorityQueue but with key difference:
+    get_nowait() and put_nowait() are async methods (must be awaited).
+    This is required because anyio.Condition uses async lock acquisition.
+
+    Use cases:
+    - await q.get_nowait()  # Must await (unlike asyncio)
+    - await q.put_nowait(item)  # Must await (unlike asyncio)
+    - await q.get()  # Blocking get
+    - await q.put(item)  # Blocking put
 
     Attributes:
         maxsize: Maximum queue size (0 = unlimited)
@@ -61,7 +70,11 @@ class PriorityQueue(Generic[T]):
             self._condition.notify()
 
     async def put_nowait(self, item: T) -> None:
-        """Put item into queue without blocking.
+        """Put item into queue without blocking (async method).
+
+        Note: Unlike asyncio.PriorityQueue.put_nowait(), this is an async method
+        and must be awaited. This is required because anyio.Condition uses async
+        lock acquisition for thread safety.
 
         Args:
             item: Item to add (should be tuple with priority as first element)
@@ -93,7 +106,11 @@ class PriorityQueue(Generic[T]):
             return item
 
     async def get_nowait(self) -> T:
-        """Get item without blocking.
+        """Get item without blocking (async method).
+
+        Note: Unlike asyncio.PriorityQueue.get_nowait(), this is an async method
+        and must be awaited. This is required because anyio.Condition uses async
+        lock acquisition for thread safety.
 
         Returns:
             Highest priority item
