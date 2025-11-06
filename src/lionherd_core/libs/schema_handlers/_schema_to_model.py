@@ -16,7 +16,6 @@ from pydantic import BaseModel, PydanticUserError
 
 from lionherd_core import ln
 
-
 B = TypeVar("B", bound=BaseModel)
 
 
@@ -156,8 +155,7 @@ def _extract_model_class(
     available = [
         attr
         for attr in dir(module)
-        if _is_valid_model(getattr(module, attr, None))
-        and getattr(module, attr) is not BaseModel
+        if _is_valid_model(getattr(module, attr, None)) and getattr(module, attr) is not BaseModel
     ]
     msg = (
         f"Could not find '{model_name}' or 'Model' in {output_file}. "
