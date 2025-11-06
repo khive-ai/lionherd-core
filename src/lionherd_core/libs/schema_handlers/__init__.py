@@ -10,9 +10,20 @@ from ._minimal_yaml import minimal_yaml
 from ._typescript import typescript_schema
 
 __all__ = (
+    "load_pydantic_model_from_schema",
     "map_positional_args",
     "minimal_yaml",
     "nest_arguments_by_schema",
     "parse_function_call",
     "typescript_schema",
 )
+
+
+def __getattr__(name: str):
+    """Lazy import for optional dependencies."""
+    if name == "load_pydantic_model_from_schema":
+        from ._schema_to_model import load_pydantic_model_from_schema
+
+        return load_pydantic_model_from_schema
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
