@@ -1,6 +1,7 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
+import contextlib
 import re
 from typing import Any
 
@@ -34,12 +35,11 @@ def extract_json(
     input_str = "\n".join(input_data) if isinstance(input_data, list) else input_data
 
     # 1. Try direct parsing
-    try:
+
+    with contextlib.suppress(Exception):
         if fuzzy_parse:
             return fuzzy_json(input_str)
         return orjson.loads(input_str)
-    except Exception:
-        pass
 
     # 2. Attempt extracting JSON blocks from markdown
     matches = _JSON_BLOCK_PATTERN.findall(input_str)
@@ -49,21 +49,17 @@ def extract_json(
     # If only one match, return single dict; if multiple, return list of dicts
     if return_one_if_single and len(matches) == 1:
         data_str = matches[0]
-        try:
+        with contextlib.suppress(Exception):
             if fuzzy_parse:
                 return fuzzy_json(data_str)
             return orjson.loads(data_str)
-        except Exception:
-            return []
+        return []
 
     # Multiple matches
     results: list[Any] = []
     for m in matches:
-        try:
+        with contextlib.suppress(Exception):
             parsed = fuzzy_json(m) if fuzzy_parse else orjson.loads(m)
             # Append valid JSON (dicts, lists, or primitives)
             results.append(parsed)
-        except Exception:
-            # Skip invalid JSON blocks
-            continue
     return results

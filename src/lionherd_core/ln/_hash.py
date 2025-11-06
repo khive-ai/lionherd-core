@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from typing import Any
 
@@ -95,14 +96,13 @@ def _generate_hashable_representation(item: Any) -> Any:
         )
 
     # Fallback for other types (e.g., custom objects not derived from the above)
-    try:
+    with contextlib.suppress(Exception):
         return str(item)
-    except Exception:
-        try:
-            return repr(item)
-        except Exception:
-            # If both str() and repr() fail, return a stable fallback based on type and id
-            return f"<unhashable:{type(item).__name__}:{id(item)}>"
+    with contextlib.suppress(Exception):
+        return repr(item)
+
+    # If both str() and repr() fail, return a stable fallback based on type and id
+    return f"<unhashable:{type(item).__name__}:{id(item)}>"
 
 
 def hash_dict(data: Any, strict: bool = False) -> int:

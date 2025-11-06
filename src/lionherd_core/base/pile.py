@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections.abc import Callable, Iterator
 from typing import Any, Generic, Literal, TypeVar, overload
@@ -564,12 +565,10 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     @synchronized
     def __contains__(self, item: UUID | str | Element) -> bool:
         """Check if item exists in pile."""
-
-        try:
+        with contextlib.suppress(Exception):
             uid = to_uuid(item)
             return uid in self._items
-        except Exception:
-            return False
+        return False
 
     @synchronized
     def __len__(self) -> int:

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import decimal
 import re
@@ -149,16 +150,13 @@ def get_orjson_default(
                 # Duck-typed support for common data holders
                 md = getattr(obj, "model_dump", None)
                 if callable(md):
-                    try:
+                    with contextlib.suppress(Exception):
                         return md()
-                    except Exception:
-                        pass
+
                 dd = getattr(obj, "dict", None)
                 if callable(dd):
-                    try:
+                    with contextlib.suppress(Exception):
                         return dd()
-                    except Exception:
-                        pass
                 if safe_fallback:
                     if isinstance(obj, Exception):
                         return _safe_exception_payload(obj)
