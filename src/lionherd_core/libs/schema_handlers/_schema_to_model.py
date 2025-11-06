@@ -1,8 +1,6 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Dynamic Pydantic model generation from JSON schemas."""
-
 from __future__ import annotations
 
 import importlib.util
@@ -34,19 +32,29 @@ def _get_python_version_enum(python_version_module: Any) -> Any:
 
 
 def _sanitize_model_name(name: str) -> str:
-    """Extract valid Python identifier from string."""
+    """Extract valid Python identifier from string.
+
+    Raises:
+        ValueError: If name cannot be converted to valid Python identifier.
+    """
     valid_chars = string.ascii_letters + string.digits + "_"
     sanitized = "".join(c for c in name.replace(" ", "") if c in valid_chars)
-    return sanitized if sanitized and sanitized[0].isalpha() else ""
+
+    if not sanitized or not sanitized[0].isalpha():
+        msg = f"Cannot extract valid Python identifier from: {name!r}"
+        raise ValueError(msg)
+
+    return sanitized
 
 
 def _extract_model_name_from_schema(schema_dict: dict[str, Any], default: str) -> str:
     """Extract model name from schema title or use default."""
     title = schema_dict.get("title")
     if title and isinstance(title, str):
-        sanitized = _sanitize_model_name(title)
-        if sanitized:
-            return sanitized
+        try:
+            return _sanitize_model_name(title)
+        except ValueError:
+            pass  # Fall back to default if title cannot be sanitized
     return default
 
 
@@ -226,7 +234,7 @@ def load_pydantic_model_from_schema(
     pydantic_version = pydantic_version or DataModelType.PydanticV2BaseModel
     python_version = python_version or _get_python_version_enum(PythonVersion)
 
-    schema_json, _schema_dict, resolved_name = _prepare_schema_input(schema, model_name)
+    schema_json, _, resolved_name = _prepare_schema_input(schema, model_name)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
