@@ -7,7 +7,7 @@ from enum import Enum
 
 import pytest
 
-from lionherd_core.libs.string_handlers._to_dict import (
+from lionherd_core.ln._to_dict import (
     _convert_top_level_to_dict,
     _enum_class_to_dict,
     _is_na,
@@ -926,7 +926,7 @@ def test_convert_top_level_non_sequence_to_string():
 def test_preprocess_recursive_enum_conversion_error():
     """Test enum class conversion error in recursion (lines 195-196)"""
     # Use monkeypatch to make _enum_class_to_dict raise an exception
-    import lionherd_core.libs.string_handlers._to_dict as to_dict_module
+    import lionherd_core.ln._to_dict as to_dict_module
 
     original_func = to_dict_module._enum_class_to_dict
 
@@ -1005,7 +1005,7 @@ def test_convert_top_level_dataclass_fallback():
     obj = FallbackDataclass(value=42)
 
     # Temporarily patch _object_to_mapping_like to raise an exception
-    import lionherd_core.libs.string_handlers._to_dict as to_dict_module
+    import lionherd_core.ln._to_dict as to_dict_module
 
     original_func = to_dict_module._object_to_mapping_like
     call_count = [0]

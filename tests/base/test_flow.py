@@ -106,7 +106,7 @@ from uuid import UUID
 import pytest
 
 from lionherd_core.base import Element, Flow, Pile, Progression
-from lionherd_core.libs.string_handlers._to_dict import to_dict
+from lionherd_core.ln import to_dict
 
 # ==================== Fixtures ====================
 
@@ -769,7 +769,7 @@ def test_flow_progression_names_persisted_after_deserialization():
 
     This test catches the blocking bug identified by architect + tester reviews.
     """
-    from lionherd_core.libs.string_handlers._to_dict import to_dict
+    from lionherd_core.ln import to_dict
 
     # Create flow with named progressions
     f1 = Flow[FlowTestItem, FlowTestProgression](name="workflow")

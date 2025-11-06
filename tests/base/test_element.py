@@ -1167,7 +1167,7 @@ def test_class_name_serialization_across_subclasses():
     not just Flow.
     """
     from lionherd_core.base import Flow, Node, Pile, Progression
-    from lionherd_core.libs.string_handlers._to_dict import to_dict
+    from lionherd_core.ln import to_dict
 
     # Test Element
     elem = Element()

@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import orjson
 
-from ._fuzzy_json import fuzzy_json
+from ..libs.string_handlers._fuzzy_json import fuzzy_json
 
 
 def _is_na(obj: Any) -> bool:

@@ -67,7 +67,7 @@ class Element(BaseModel):
             return {}
 
         if not isinstance(val, dict):
-            from lionherd_core.libs.string_handlers import to_dict
+            from lionherd_core.ln import to_dict
 
             val = to_dict(val, recursive=True, suppress=True)
 
