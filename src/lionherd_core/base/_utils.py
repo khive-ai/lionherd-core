@@ -226,20 +226,14 @@ def coerce_created_at(v) -> dt.datetime:
     if isinstance(v, (int, float)):
         return dt.datetime.fromtimestamp(v, tz=dt.UTC)
 
-    # String - try timestamp first, then ISO format
     if isinstance(v, str):
         # Try parsing as float timestamp
-        try:
+        with contextlib.suppress(ValueError):
             timestamp = float(v)
             return dt.datetime.fromtimestamp(timestamp, tz=dt.UTC)
-        except ValueError:
-            pass
-
         # Try parsing as ISO format
-        try:
+        with contextlib.suppress(ValueError):
             return dt.datetime.fromisoformat(v)
-        except ValueError:
-            pass
 
         raise ValueError(f"String '{v}' is neither a valid timestamp nor ISO format datetime")
 
@@ -262,22 +256,22 @@ def get_json_serializable(data) -> dict[str, Any] | Any:
     if isinstance(data, _SIMPLE_TYPE):
         return data
 
-    try:
+    with contextlib.suppress(Exception):
         # Check if response is JSON serializable
         json_dumpb(data)
         return data
 
-    except Exception:
-        with contextlib.suppress(Exception):
-            # Attempt to force convert to dict recursively
-            d_ = to_dict(
-                data,
-                recursive=True,
-                recursive_python_only=False,
-                use_enum_values=True,
-            )
-            json_dumpb(d_)
-            return d_
+    with contextlib.suppress(Exception):
+        # Attempt to force convert to dict recursively
+        d_ = to_dict(
+            data,
+            recursive=True,
+            recursive_python_only=False,
+            use_enum_values=True,
+        )
+        json_dumpb(d_)
+        return d_
+
     return Unset
 
 

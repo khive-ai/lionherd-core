@@ -59,6 +59,7 @@ markers = [
 filterwarnings = [
   "ignore::RuntimeWarning",
   "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+  "ignore:Pydantic serializer warnings:UserWarning:pydantic",
 ]
 
 [dependency-groups]

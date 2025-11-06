@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, overload
 from uuid import UUID
 
@@ -68,12 +69,8 @@ class Progression(Element):
 
         result = []
         for item in value:
-            try:
+            with contextlib.suppress(Exception):
                 result.append(to_uuid(item))
-            except Exception:
-                # Skip invalid items
-                continue
-
         return result
 
     # ==================== Core Operations ====================
@@ -127,11 +124,10 @@ class Progression(Element):
         """Check if item is in progression."""
         from ._utils import to_uuid
 
-        try:
+        with contextlib.suppress(Exception):
             uid = to_uuid(item)
             return uid in self.order
-        except Exception:
-            return False
+        return False
 
     def __len__(self) -> int:
         """Return number of items."""

@@ -130,18 +130,16 @@ def _preprocess_recursive(
 
     # Strings: try to parse; on failure, keep as-is
     if t is str:
-        try:
-            parsed = _parse_str(obj, **str_parse_opts)
-        except Exception:
-            return obj
-        return _preprocess_recursive(
-            parsed,
-            depth=depth + 1,
-            max_depth=max_depth,
-            recursive_custom_types=recursive_custom_types,
-            str_parse_opts=str_parse_opts,
-            prioritize_model_dump=prioritize_model_dump,
-        )
+        with contextlib.suppress(Exception):
+            return _preprocess_recursive(
+                _parse_str(obj, **str_parse_opts),
+                depth=depth + 1,
+                max_depth=max_depth,
+                recursive_custom_types=recursive_custom_types,
+                str_parse_opts=str_parse_opts,
+                prioritize_model_dump=prioritize_model_dump,
+            )
+        return obj
 
     # Dict-like
     if isinstance(obj, Mapping):
@@ -182,7 +180,7 @@ def _preprocess_recursive(
 
     # Enum *class* (rare in values, but preserve your original attempt)
     if isinstance(obj, type) and issubclass(obj, _Enum):
-        try:
+        with contextlib.suppress(Exception):
             enum_map = _enum_class_to_dict(
                 obj,
                 use_enum_values=str_parse_opts.get("use_enum_values", True),
@@ -195,8 +193,7 @@ def _preprocess_recursive(
                 str_parse_opts=str_parse_opts,
                 prioritize_model_dump=prioritize_model_dump,
             )
-        except Exception:
-            return obj
+        return obj
 
     # Custom objects
     if recursive_custom_types:
@@ -259,7 +256,7 @@ def _convert_top_level_to_dict(
 
     # Try "custom" object conversions
     # (Covers BaseModel via model_dump, dataclasses, __dict__, json-strings, etc.)
-    try:
+    with contextlib.suppress(Exception):
         # If it's *not* a Sequence (e.g., numbers, objects) we try object conversion first,
         # faithfully following your previous "non-Sequence -> model path" behavior.
         if not isinstance(obj, Sequence):
@@ -283,10 +280,6 @@ def _convert_top_level_to_dict(
             # Best effort final cast
             return dict(converted)
 
-    except Exception:
-        # Fall through to other strategies
-        pass
-
     # Iterable (list/tuple/namedtuple/frozenset/…): enumerate
     if isinstance(obj, Iterable) and not isinstance(obj, str | bytes | bytearray):
         return cast(dict[str | int, Any], _enumerate_iterable(obj))
@@ -298,11 +291,6 @@ def _convert_top_level_to_dict(
 
     # Last-ditch attempt
     return dict(obj)  # may raise, handled by top-level try/except
-
-
-# ---------------
-# Public function
-# ---------------
 
 
 def to_dict(
@@ -323,7 +311,6 @@ def to_dict(
     Convert various input types to a dictionary, with optional recursive processing.
 
     Supports JSON string parsing via orjson (or custom parser).
-    XML support removed to avoid optional dependencies in core package.
 
     Args:
         input_: Object to convert to dict
