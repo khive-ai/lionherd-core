@@ -64,8 +64,7 @@ import pytest
 
 from lionherd_core.base import Element, Progression
 from lionherd_core.libs.concurrency import create_task_group, gather
-from lionherd_core.libs.string_handlers._to_dict import to_dict
-from lionherd_core.ln import to_list
+from lionherd_core.ln import to_dict, to_list
 
 
 class TestProgressionInstantiation:

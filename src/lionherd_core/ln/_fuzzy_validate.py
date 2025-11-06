@@ -8,9 +8,9 @@ from lionherd_core.errors import ValidationError
 
 from ..libs.string_handlers._extract_json import extract_json
 from ..libs.string_handlers._string_similarity import SIMILARITY_TYPE
-from ..libs.string_handlers._to_dict import to_dict
 from ..types import KeysLike
 from ._fuzzy_match import FuzzyMatchKeysParams, fuzzy_match_keys
+from ._to_dict import to_dict
 
 if TYPE_CHECKING:
     from pydantic import BaseModel

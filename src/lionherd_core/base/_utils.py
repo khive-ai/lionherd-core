@@ -253,8 +253,7 @@ _SIMPLE_TYPE = (str, bytes, bytearray, int, float, type(None), Enum)
 
 def get_json_serializable(data) -> dict[str, Any] | Any:
     """Serialize to dict."""
-    from ..libs.string_handlers._to_dict import to_dict
-    from ..ln import json_dumpb
+    from ..ln import json_dumpb, to_dict
     from ..types._sentinel import Unset
 
     if data is Unset:
