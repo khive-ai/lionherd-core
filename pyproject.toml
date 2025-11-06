@@ -30,6 +30,9 @@ classifiers = [
 ]
 dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
 
+[project.optional-dependencies]
+schema-gen = ["datamodel-code-generator>=0.25.0"]
+
 [project.urls]
 Homepage = "https://github.com/khive-ai/lionherd-core"
 Documentation = "https://github.com/khive-ai/lionherd-core/blob/main/README.md"
@@ -53,7 +56,10 @@ markers = [
   "property: Property-based tests",
   "slow: Slow tests (deselect with '-m \"not slow\"')",
 ]
-filterwarnings = ["ignore::RuntimeWarning"]
+filterwarnings = [
+  "ignore::RuntimeWarning",
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+]
 
 [dependency-groups]
 dev = [
