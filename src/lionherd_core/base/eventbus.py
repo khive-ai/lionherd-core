@@ -53,12 +53,15 @@ class EventBus:
                 return True
         return False
 
-    async def emit(self, topic: str, *args: Any, **kwargs: Any) -> None:
-        """Emit event to all subscribers. Handlers run concurrently, exceptions suppressed."""
-        if topic not in self._subs:
-            return
+    def _cleanup_dead_refs(self, topic: str) -> list[Handler]:
+        """Remove garbage-collected handlers and return list of live handlers.
 
-        # Resolve weak references, filter out dead ones, and update list
+        Lazily cleans up dead weakrefs during normal operations (emit/handler_count).
+        Updates subscription list in-place to remove dead references.
+
+        Returns:
+            List of live handler callables (weakrefs resolved).
+        """
         weak_refs = self._subs[topic]
         handlers = []
         alive_refs = []
@@ -71,7 +74,18 @@ class EventBus:
 
         # Update subscription list to remove dead references
         self._subs[topic] = alive_refs
+        return handlers
 
+    async def emit(self, topic: str, *args: Any, **kwargs: Any) -> None:
+        """Emit event to all subscribers.
+
+        Handlers run concurrently via gather(), exceptions suppressed.
+        Dead weakrefs are lazily cleaned up during emission.
+        """
+        if topic not in self._subs:
+            return
+
+        handlers = self._cleanup_dead_refs(topic)
         if not handlers:
             return
 
@@ -94,17 +108,5 @@ class EventBus:
         if topic not in self._subs:
             return 0
 
-        # Clean up dead references and count live ones
-        weak_refs = self._subs[topic]
-        alive_refs = []
-        count = 0
-
-        for ref in weak_refs:
-            if ref() is not None:
-                alive_refs.append(ref)
-                count += 1
-
-        # Update subscription list to remove dead references
-        self._subs[topic] = alive_refs
-
-        return count
+        handlers = self._cleanup_dead_refs(topic)
+        return len(handlers)
