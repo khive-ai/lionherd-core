@@ -193,6 +193,111 @@ def test_collection_fields_with_action_calls():
         ensure_no_action_calls(batch_with_dict)
 
 
+def test_multiple_action_calls_in_model():
+    """Test error message with multiple ActionCall fields (>3 fields)."""
+
+    class MultiFieldReport(BaseModel):
+        field1: str
+        field2: str
+        field3: str
+        field4: str
+        field5: str
+
+    action_call = ActionCall(name="a", function="action", arguments={}, raw_call="action()")
+
+    # Model with 4 ActionCalls (more than 3)
+    multi = MultiFieldReport.model_construct(
+        field1=action_call,
+        field2=action_call,
+        field3=action_call,
+        field4=action_call,
+        field5="valid",
+    )
+
+    assert has_action_calls(multi) is True
+
+    # Error message should show first 3 fields + count of remaining
+    with pytest.raises(ValueError, match=r"\(and 1 more\)"):
+        ensure_no_action_calls(multi)
+
+
+def test_direct_action_call_in_collections():
+    """Test ActionCall directly in collections (not nested in models)."""
+
+    class DirectCollectionReport(BaseModel):
+        items: list
+
+    action_call = ActionCall(name="a", function="action", arguments={}, raw_call="action()")
+
+    # ActionCall directly in list (not inside a Report)
+    direct_list = DirectCollectionReport.model_construct(items=[action_call, "string"])
+
+    assert has_action_calls(direct_list) is True
+    with pytest.raises(ValueError, match="items\\[0\\]"):
+        ensure_no_action_calls(direct_list)
+
+
+def test_tuple_collections():
+    """Test ActionCall detection in tuple collections.
+
+    Note: ActionCall is unhashable (contains dict field), so cannot be added to sets.
+    This test only covers tuples as they are the realistic collection type for ActionCall.
+    """
+
+    class TupleReport(BaseModel):
+        tuple_field: tuple
+
+    action_call = ActionCall(name="a", function="action", arguments={}, raw_call="action()")
+
+    # ActionCall in tuple
+    with_tuple = TupleReport.model_construct(tuple_field=(action_call, "other"))
+
+    assert has_action_calls(with_tuple) is True
+    with pytest.raises(ValueError, match="tuple_field\\[0\\]"):
+        ensure_no_action_calls(with_tuple)
+
+
+def test_deeply_nested_action_calls():
+    """Test ActionCall detection in deeply nested structures."""
+
+    class Level3(BaseModel):
+        data: str
+
+    class Level2(BaseModel):
+        inner: Level3
+
+    class Level1(BaseModel):
+        middle: Level2
+
+    action_call = ActionCall(name="a", function="action", arguments={}, raw_call="action()")
+
+    # ActionCall 3 levels deep
+    deep = Level1.model_construct(
+        middle=Level2.model_construct(inner=Level3.model_construct(data=action_call))
+    )
+
+    assert has_action_calls(deep) is True
+    with pytest.raises(ValueError, match="middle\\.inner\\.data"):
+        ensure_no_action_calls(deep)
+
+
+def test_empty_collections_pass():
+    """Test that empty collections don't trigger false positives."""
+
+    class EmptyCollectionsReport(BaseModel):
+        empty_list: list
+        empty_dict: dict
+        empty_tuple: tuple
+        empty_set: set
+
+    empty = EmptyCollectionsReport(empty_list=[], empty_dict={}, empty_tuple=(), empty_set=set())
+
+    assert has_action_calls(empty) is False
+    # Should pass without raising
+    result = ensure_no_action_calls(empty)
+    assert result is empty
+
+
 # Mock database save function
 def db_save(model: BaseModel):
     """Mock database save - would serialize model to JSON."""
