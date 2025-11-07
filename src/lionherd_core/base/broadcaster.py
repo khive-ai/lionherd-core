@@ -41,6 +41,8 @@ class Broadcaster:
 
         Callbacks stored as weak references for automatic cleanup when callback
         objects are garbage collected. Prevents cross-tenant/session leaks.
+
+        Supports both regular callables and bound methods via WeakMethod.
         """
         # Check if callback already subscribed (compare actual callbacks, not weakrefs)
         for weak_ref in cls._subscribers:
@@ -48,7 +50,11 @@ class Broadcaster:
                 return  # Already subscribed
 
         # Store as weakref for automatic cleanup
-        weak_callback = weakref.ref(callback)
+        # Use WeakMethod for bound methods, weakref for regular callables
+        if hasattr(callback, "__self__"):
+            weak_callback = weakref.WeakMethod(callback)
+        else:
+            weak_callback = weakref.ref(callback)
         cls._subscribers.append(weak_callback)
 
     @classmethod
@@ -63,12 +69,18 @@ class Broadcaster:
                 return
 
     @classmethod
-    async def broadcast(cls, event: Any) -> None:
-        """Broadcast event to all subscribers."""
-        if not isinstance(event, cls._event_type):
-            raise ValueError(f"Event must be of type {cls._event_type.__name__}")
+    def _cleanup_dead_refs(cls) -> list[Callable[[Any], None] | Callable[[Any], Awaitable[None]]]:
+        """Remove garbage-collected callbacks and return list of live callbacks.
 
-        # Resolve weak references and filter out dead ones
+        Lazily cleans up dead weakrefs during normal operations (broadcast/get_subscriber_count).
+        Updates ClassVar subscription list in-place to preserve identity.
+
+        Note: Uses in-place slice assignment (cls._subscribers[:] = alive_refs) rather than
+        reassignment to maintain ClassVar identity across subclasses.
+
+        Returns:
+            List of live callback callables (weakrefs resolved).
+        """
         callbacks = []
         alive_refs = []
 
@@ -78,8 +90,21 @@ class Broadcaster:
                 callbacks.append(callback)
                 alive_refs.append(weak_ref)
 
-        # Update subscriber list to remove dead references
-        cls._subscribers[:] = alive_refs  # In-place update for ClassVar
+        # In-place update to maintain ClassVar identity
+        cls._subscribers[:] = alive_refs
+
+        return callbacks
+
+    @classmethod
+    async def broadcast(cls, event: Any) -> None:
+        """Broadcast event to all subscribers.
+
+        Dead weakrefs are lazily cleaned up during broadcast.
+        """
+        if not isinstance(event, cls._event_type):
+            raise ValueError(f"Event must be of type {cls._event_type.__name__}")
+
+        callbacks = cls._cleanup_dead_refs()
 
         # Broadcast to live callbacks
         for callback in callbacks:
@@ -95,17 +120,9 @@ class Broadcaster:
 
     @classmethod
     def get_subscriber_count(cls) -> int:
-        """Get live subscriber count (excludes garbage-collected callbacks)."""
-        # Clean up dead references and count live ones
-        alive_refs = []
-        count = 0
+        """Get live subscriber count (excludes garbage-collected callbacks).
 
-        for ref in cls._subscribers:
-            if ref() is not None:
-                alive_refs.append(ref)
-                count += 1
-
-        # Update subscriber list to remove dead references
-        cls._subscribers[:] = alive_refs  # In-place update for ClassVar
-
-        return count
+        Note: This method mutates state by cleaning up dead weakrefs as a side effect.
+        """
+        callbacks = cls._cleanup_dead_refs()
+        return len(callbacks)
