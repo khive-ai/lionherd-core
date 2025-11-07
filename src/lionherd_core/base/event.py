@@ -128,7 +128,7 @@ class Execution:
             return {
                 "error": "ExceptionGroup",
                 "message": f"Max nesting depth ({MAX_DEPTH}) exceeded",
-                "nested_count": len(eg.exceptions) if hasattr(eg, 'exceptions') else 0,
+                "nested_count": len(eg.exceptions) if hasattr(eg, "exceptions") else 0,
             }
 
         # Initialize cycle detection set on first call
