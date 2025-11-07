@@ -12,7 +12,7 @@ present after references are deleted.
 
 import gc
 import weakref
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -35,6 +35,7 @@ async def test_eventbus_subscription_memory_leak():
 
     # Subscribe 100 handlers, keeping external references
     for i in range(100):
+
         async def handler(*args, **kwargs):
             """Handler closure that captures loop variable."""
             _ = i  # Capture variable to create closure
@@ -81,6 +82,7 @@ async def test_eventbus_subscription_accumulation():
 
     # Simulate 1000 requests, each subscribing a handler
     for request_id in range(1000):
+
         async def request_handler(*args, **kwargs):
             """Handler for single request (should be cleaned after request)."""
             _ = request_id  # Capture request context
@@ -125,8 +127,10 @@ async def test_eventbus_manual_cleanup_burden():
 
     # User subscribes handlers
     for i in range(50):
+
         async def handler(*args):
             pass
+
         bus.subscribe("topic", handler)
         handlers_to_cleanup.append(handler)
 
