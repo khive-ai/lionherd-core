@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections import deque
 from typing import Any, Literal
 from uuid import UUID
@@ -22,6 +23,7 @@ from ..protocols import (
     Serializable,
     implements,
 )
+from ._utils import synchronized
 from .element import Element
 from .node import Node
 from .pile import Pile
@@ -136,6 +138,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     )
     _out_edges: dict[UUID, set[UUID]] = PrivateAttr(default_factory=dict)
     _in_edges: dict[UUID, set[UUID]] = PrivateAttr(default_factory=dict)
+    _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
     @field_validator("nodes", "edges", mode="wrap")
     @classmethod
@@ -209,8 +212,14 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     # ==================== Edge Operations ====================
 
+    @synchronized
     def add_edge(self, edge: Edge) -> None:
-        """Add edge to graph. Raises ValueError if exists or head/tail missing."""
+        """Add edge to graph. Raises ValueError if exists or head/tail missing.
+
+        Thread-safe: Uses @synchronized to ensure atomic operation across
+        edges.add() and adjacency list updates. Critical for Rust port and
+        Python 3.13+ nogil where GIL won't protect dict operations.
+        """
         if edge.id in self.edges:
             raise ValueError(f"Edge {edge.id} already exists in graph")
         if edge.head not in self.nodes:
