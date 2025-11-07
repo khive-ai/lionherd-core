@@ -207,10 +207,18 @@ class Event(Element):
     @final
     @async_synchronized
     async def invoke(self) -> Any:
-        """Execute with status tracking, timing, error capture (check status for result).
+        """Execute with status tracking, timing, error capture (idempotent).
 
-        Idempotent: Multiple concurrent calls execute _invoke() exactly once.
-        Subsequent calls return cached result.
+        **Idempotency**: Multiple concurrent calls execute _invoke() exactly once.
+        Subsequent calls return cached result without re-execution. Once COMPLETED
+        or FAILED, invoke() will return the cached response.
+
+        **Retry Pattern**: To retry after FAILED status, use `as_fresh_event()` to
+        create a new Event with reset execution state. Direct invoke() calls on
+        completed events always return cached results.
+
+        Returns:
+            Execution result (same for all concurrent callers)
         """
         from lionherd_core.libs.concurrency import current_time
 
