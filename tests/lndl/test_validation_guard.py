@@ -124,7 +124,11 @@ def test_guard_provides_helpful_error_message():
 
 
 def test_nested_models_with_action_calls():
-    """Guard should detect ActionCalls in nested models too."""
+    """Guard should detect ActionCalls in nested models recursively.
+
+    CRITICAL: This tests recursive detection - ActionCall is in nested.main.summary,
+    and the guard must detect it when called on the outer 'nested' object.
+    """
 
     class NestedReport(BaseModel):
         main: Report
@@ -137,11 +141,56 @@ def test_nested_models_with_action_calls():
         appendix="Appendix text",
     )
 
-    # Should detect ActionCall in nested model
+    # Should detect ActionCall in nested model (inner check)
     assert has_action_calls(nested.main) is True
 
+    # CRITICAL: Should also detect when checking outer model (recursive detection)
+    assert has_action_calls(nested) is True, "Recursive detection must work on outer model"
+
+    # Guard should raise when checking inner model directly
     with pytest.raises(ValueError, match="contains unexecuted actions"):
         ensure_no_action_calls(nested.main)
+
+    # CRITICAL: Guard should also raise when checking outer model (prevents bypass)
+    with pytest.raises(ValueError, match="contains unexecuted actions"):
+        ensure_no_action_calls(nested)
+
+    # Error message should show field path
+    with pytest.raises(ValueError, match="main\\.summary"):
+        ensure_no_action_calls(nested)
+
+
+def test_collection_fields_with_action_calls():
+    """Guard should detect ActionCalls in collection fields (list, dict)."""
+
+    class BatchReport(BaseModel):
+        reports: list[Report]
+        metadata: dict[str, Report]
+
+    action_call = ActionCall(name="s", function="summarize", arguments={}, raw_call="summarize()")
+
+    # ActionCall in list
+    batch_with_list = BatchReport.model_construct(
+        reports=[
+            Report.model_construct(title="Report 1", summary=action_call, score=85),
+            Report(title="Report 2", summary="Valid summary", score=90),
+        ],
+        metadata={},
+    )
+
+    assert has_action_calls(batch_with_list) is True
+    with pytest.raises(ValueError, match="reports\\[0\\]\\.summary"):
+        ensure_no_action_calls(batch_with_list)
+
+    # ActionCall in dict
+    batch_with_dict = BatchReport.model_construct(
+        reports=[],
+        metadata={"key1": Report.model_construct(title="Report", summary=action_call, score=75)},
+    )
+
+    assert has_action_calls(batch_with_dict) is True
+    with pytest.raises(ValueError, match="metadata\\['key1'\\]\\.summary"):
+        ensure_no_action_calls(batch_with_dict)
 
 
 # Mock database save function
