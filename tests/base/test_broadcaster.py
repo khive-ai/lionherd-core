@@ -202,7 +202,8 @@ class TestBroadcaster:
 
         TestBroadcaster.subscribe(callback)
 
-        assert callback in TestBroadcaster._subscribers
+        # Check that a weakref to the callback exists
+        assert any(ref() is callback for ref in TestBroadcaster._subscribers)
         assert TestBroadcaster.get_subscriber_count() == 1
 
     def test_subscribe_prevents_duplicates(self):
@@ -419,10 +420,11 @@ class TestBroadcaster:
 
         assert BroadcasterA.get_subscriber_count() == 1
         assert BroadcasterB.get_subscriber_count() == 1
-        assert callback_a in BroadcasterA._subscribers
-        assert callback_a not in BroadcasterB._subscribers
-        assert callback_b in BroadcasterB._subscribers
-        assert callback_b not in BroadcasterA._subscribers
+        # Check that weakrefs point to correct callbacks
+        assert any(ref() is callback_a for ref in BroadcasterA._subscribers)
+        assert not any(ref() is callback_a for ref in BroadcasterB._subscribers)
+        assert any(ref() is callback_b for ref in BroadcasterB._subscribers)
+        assert not any(ref() is callback_b for ref in BroadcasterA._subscribers)
 
     @pytest.mark.asyncio
     async def test_broadcast_mixed_sync_async_callbacks(self):
