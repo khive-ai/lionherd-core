@@ -30,8 +30,6 @@ from .pile import Pile
 
 __all__ = ("Edge", "EdgeCondition", "Graph")
 
-GRAPH_REGISTRY: dict[str, type[Graph]] = {}
-
 
 # ==================== EdgeCondition ====================
 

@@ -39,8 +39,6 @@ __all__ = ("Pile",)
 
 T = TypeVar("T", bound=Element)
 
-PILE_REGISTRY: dict[str, type[Pile]] = {}
-
 
 @implements(Containable, Adaptable, AsyncAdaptable, Serializable, Deserializable)
 class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
