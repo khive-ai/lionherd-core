@@ -27,6 +27,7 @@ from .types import (
     LNDLOutput,
     LvarMetadata,
     ParsedConstructor,
+    ensure_no_action_calls,
     has_action_calls,
     revalidate_with_action_results,
 )
@@ -45,6 +46,7 @@ __all__ = (
     "MissingOutBlockError",
     "ParsedConstructor",
     "TypeMismatchError",
+    "ensure_no_action_calls",
     "extract_lacts",
     "extract_lacts_prefixed",
     "extract_lvars",  # backward compatibility

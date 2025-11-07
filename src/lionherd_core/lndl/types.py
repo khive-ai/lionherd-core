@@ -124,18 +124,117 @@ class LNDLOutput:
 def has_action_calls(model: BaseModel) -> bool:
     """Check if a BaseModel instance contains any ActionCall objects in its fields.
 
+    Recursively checks nested BaseModel fields and collection fields (list, dict, tuple, set)
+    to detect ActionCall objects at any depth.
+
     Args:
         model: Pydantic BaseModel instance to check
 
     Returns:
-        True if any field value is an ActionCall, False otherwise
+        True if any field value is an ActionCall (at any nesting level), False otherwise
 
     Example:
         >>> report = Report.model_construct(title="Report", summary=ActionCall(...))
         >>> has_action_calls(report)
         True
+        >>> # Also detects in nested models
+        >>> nested = NestedReport(main=report)
+        >>> has_action_calls(nested)
+        True
     """
-    return any(isinstance(value, ActionCall) for value in model.__dict__.values())
+
+    def _check_value(value: Any) -> bool:
+        """Recursively check a value for ActionCall objects."""
+        # Direct ActionCall
+        if isinstance(value, ActionCall):
+            return True
+
+        # Nested BaseModel - recurse
+        if isinstance(value, BaseModel):
+            return has_action_calls(value)
+
+        # Collections - check items
+        if isinstance(value, (list, tuple, set)):
+            return any(_check_value(item) for item in value)
+
+        if isinstance(value, dict):
+            return any(_check_value(v) for v in value.values())
+
+        return False
+
+    return any(_check_value(value) for value in model.__dict__.values())
+
+
+def ensure_no_action_calls(model: BaseModel) -> BaseModel:
+    """Validate that model contains no unexecuted ActionCall objects.
+
+    Use this guard before persisting models to prevent database corruption or logic errors.
+    Models with ActionCall placeholders must be re-validated with action results first.
+
+    Recursively checks nested models and collections for ActionCall objects.
+
+    Args:
+        model: BaseModel instance to validate
+
+    Returns:
+        The same model instance if validation passes
+
+    Raises:
+        ValueError: If model contains any ActionCall objects, with field path details
+
+    Example:
+        >>> # CRITICAL: Always guard before persistence
+        >>> output = parse_lndl_fuzzy(llm_response, operable)
+        >>> report = output.report
+        >>>
+        >>> # Execute actions first
+        >>> action_results = execute_actions(output.actions)
+        >>> validated_report = revalidate_with_action_results(report, action_results)
+        >>>
+        >>> # Safe to persist - guard will pass
+        >>> db.save(ensure_no_action_calls(validated_report))
+        >>>
+        >>> # BAD: Forgot revalidation - guard prevents corruption
+        >>> db.save(ensure_no_action_calls(report))  # Raises ValueError!
+    """
+
+    def _find_action_call_fields(obj: Any, path: str = "") -> list[str]:
+        """Find all field paths containing ActionCall objects."""
+        paths = []
+
+        if isinstance(obj, ActionCall):
+            return [path] if path else ["<root>"]
+
+        if isinstance(obj, BaseModel):
+            for field_name, value in obj.__dict__.items():
+                field_path = f"{path}.{field_name}" if path else field_name
+                paths.extend(_find_action_call_fields(value, field_path))
+
+        elif isinstance(obj, (list, tuple, set)):
+            for idx, item in enumerate(obj):
+                item_path = f"{path}[{idx}]"
+                paths.extend(_find_action_call_fields(item, item_path))
+
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                dict_path = f"{path}[{key!r}]"
+                paths.extend(_find_action_call_fields(value, dict_path))
+
+        return paths
+
+    if has_action_calls(model):
+        model_name = type(model).__name__
+        action_call_fields = _find_action_call_fields(model)
+        fields_str = ", ".join(action_call_fields[:3])  # Show first 3 fields
+        if len(action_call_fields) > 3:
+            fields_str += f" (and {len(action_call_fields) - 3} more)"
+
+        raise ValueError(
+            f"{model_name} contains unexecuted actions in fields: {fields_str}. "
+            f"Models with ActionCall placeholders must be re-validated after action execution. "
+            f"Call revalidate_with_action_results() before using this model."
+        )
+    return model
 
 
 def revalidate_with_action_results(
