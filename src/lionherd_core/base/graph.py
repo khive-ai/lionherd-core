@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections import deque
 from typing import Any, Literal
 from uuid import UUID
@@ -22,6 +23,7 @@ from ..protocols import (
     Serializable,
     implements,
 )
+from ._utils import synchronized
 from .element import Element
 from .node import Node
 from .pile import Pile
@@ -136,6 +138,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     )
     _out_edges: dict[UUID, set[UUID]] = PrivateAttr(default_factory=dict)
     _in_edges: dict[UUID, set[UUID]] = PrivateAttr(default_factory=dict)
+    _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
     @field_validator("nodes", "edges", mode="wrap")
     @classmethod
@@ -168,8 +171,13 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     # ==================== Node Operations ====================
 
+    @synchronized
     def add_node(self, node: Node) -> None:
-        """Add node to graph. Raises ValueError if exists."""
+        """Add node to graph. Raises ValueError if exists.
+
+        Thread-safe: Uses @synchronized to ensure atomic operation across
+        nodes.add() and adjacency dict initialization.
+        """
         if node.id in self.nodes:
             raise ValueError(f"Node {node.id} already exists in graph")
 
@@ -177,8 +185,14 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         self._out_edges[node.id] = set()
         self._in_edges[node.id] = set()
 
+    @synchronized
     def remove_node(self, node_id: UUID | Node) -> Node:
-        """Remove node and all connected edges. Raises ValueError if not found."""
+        """Remove node and all connected edges. Raises ValueError if not found.
+
+        Thread-safe: Uses @synchronized with RLock to allow nested calls to
+        remove_edge(). Ensures atomic operation across edge removal, dict
+        cleanup, and node removal.
+        """
         from ._utils import to_uuid
 
         nid = to_uuid(node_id)
@@ -209,8 +223,14 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     # ==================== Edge Operations ====================
 
+    @synchronized
     def add_edge(self, edge: Edge) -> None:
-        """Add edge to graph. Raises ValueError if exists or head/tail missing."""
+        """Add edge to graph. Raises ValueError if exists or head/tail missing.
+
+        Thread-safe: Uses @synchronized to ensure atomic operation across
+        edges.add() and adjacency list updates. Critical for Rust port and
+        Python 3.13+ nogil where GIL won't protect dict operations.
+        """
         if edge.id in self.edges:
             raise ValueError(f"Edge {edge.id} already exists in graph")
         if edge.head not in self.nodes:
@@ -222,8 +242,14 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         self._out_edges[edge.head].add(edge.id)
         self._in_edges[edge.tail].add(edge.id)
 
+    @synchronized
     def remove_edge(self, edge_id: UUID | Edge) -> Edge:
-        """Remove edge from graph. Raises ValueError if not found."""
+        """Remove edge from graph. Raises ValueError if not found.
+
+        Thread-safe: Uses @synchronized to ensure atomic operation across
+        adjacency dict updates and edges.remove(). RLock allows nested calls
+        from remove_node().
+        """
         from ._utils import to_uuid
 
         eid = to_uuid(edge_id)
