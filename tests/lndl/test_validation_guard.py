@@ -130,9 +130,7 @@ def test_nested_models_with_action_calls():
         main: Report
         appendix: str
 
-    action_call = ActionCall(
-        name="s", function="summarize", arguments={}, raw_call="summarize()"
-    )
+    action_call = ActionCall(name="s", function="summarize", arguments={}, raw_call="summarize()")
 
     nested = NestedReport.model_construct(
         main=Report.model_construct(title="Test", summary=action_call, score=80),
