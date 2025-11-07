@@ -138,6 +138,46 @@ def has_action_calls(model: BaseModel) -> bool:
     return any(isinstance(value, ActionCall) for value in model.__dict__.values())
 
 
+def ensure_no_action_calls(model: BaseModel) -> BaseModel:
+    """Validate that model contains no unexecuted ActionCall objects.
+
+    Use this guard before persisting models to prevent database corruption or logic errors.
+    Models with ActionCall placeholders must be re-validated with action results first.
+
+    Args:
+        model: BaseModel instance to validate
+
+    Returns:
+        The same model instance if validation passes
+
+    Raises:
+        ValueError: If model contains any ActionCall objects
+
+    Example:
+        >>> # CRITICAL: Always guard before persistence
+        >>> output = parse_lndl_fuzzy(llm_response, operable)
+        >>> report = output.report
+        >>>
+        >>> # Execute actions first
+        >>> action_results = execute_actions(output.actions)
+        >>> validated_report = revalidate_with_action_results(report, action_results)
+        >>>
+        >>> # Safe to persist - guard will pass
+        >>> db.save(ensure_no_action_calls(validated_report))
+        >>>
+        >>> # BAD: Forgot revalidation - guard prevents corruption
+        >>> db.save(ensure_no_action_calls(report))  # Raises ValueError!
+    """
+    if has_action_calls(model):
+        model_name = type(model).__name__
+        raise ValueError(
+            f"{model_name} contains unexecuted actions. "
+            f"Models with ActionCall placeholders must be re-validated after action execution. "
+            f"Call revalidate_with_action_results() before using this model."
+        )
+    return model
+
+
 def revalidate_with_action_results(
     model: BaseModel,
     action_results: dict[str, Any],
