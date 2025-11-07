@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
 from dataclasses import dataclass
 from typing import Any, final
@@ -11,6 +10,7 @@ from typing import Any, final
 from pydantic import Field, field_serializer, field_validator
 
 from ..errors import TimeoutError as LionherdTimeoutError
+from ..libs.concurrency import Lock
 from ..protocols import Invocable, Serializable, implements
 from ..types import Enum, MaybeSentinel, MaybeUnset, Unset, is_sentinel
 from ._utils import async_synchronized
@@ -158,7 +158,7 @@ class Event(Element):
     def model_post_init(self, __context) -> None:
         """Initialize async lock for thread-safe invoke()."""
         super().model_post_init(__context)
-        self._async_lock = asyncio.Lock()
+        self._async_lock = Lock()
 
     @field_validator("timeout")
     @classmethod
