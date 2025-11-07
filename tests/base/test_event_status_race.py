@@ -13,7 +13,6 @@ from pydantic import Field
 
 from lionherd_core.base.event import Event, EventStatus
 
-
 # Module-level tracking to avoid Pydantic field issues
 _execution_counts = {}
 _execution_locks = {}
