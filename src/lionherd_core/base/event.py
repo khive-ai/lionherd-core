@@ -10,8 +10,10 @@ from typing import Any, final
 from pydantic import Field, field_serializer, field_validator
 
 from ..errors import TimeoutError as LionherdTimeoutError
+from ..libs.concurrency import Lock
 from ..protocols import Invocable, Serializable, implements
 from ..types import Enum, MaybeSentinel, MaybeUnset, Unset, is_sentinel
+from ._utils import async_synchronized
 from .element import LN_ELEMENT_FIELDS, Element
 
 __all__ = (
@@ -153,6 +155,11 @@ class Event(Element):
     execution: Execution = Field(default_factory=Execution)
     timeout: float | None = Field(None, exclude=True)
 
+    def model_post_init(self, __context) -> None:
+        """Initialize async lock for thread-safe invoke()."""
+        super().model_post_init(__context)
+        self._async_lock = Lock()
+
     @field_validator("timeout")
     @classmethod
     def _validate_timeout(cls, v: float | None) -> float | None:
@@ -198,9 +205,26 @@ class Event(Element):
         raise NotImplementedError("Subclasses must implement _invoke()")
 
     @final
+    @async_synchronized
     async def invoke(self) -> Any:
-        """Execute with status tracking, timing, error capture (check status for result)."""
+        """Execute with status tracking, timing, error capture (idempotent).
+
+        **Idempotency**: Multiple concurrent calls execute _invoke() exactly once.
+        Subsequent calls return cached result without re-execution. Once COMPLETED
+        or FAILED, invoke() will return the cached response.
+
+        **Retry Pattern**: To retry after FAILED status, use `as_fresh_event()` to
+        create a new Event with reset execution state. Direct invoke() calls on
+        completed events always return cached results.
+
+        Returns:
+            Execution result (same for all concurrent callers)
+        """
         from lionherd_core.libs.concurrency import current_time
+
+        # Idempotency: Return cached result if already executed
+        if self.execution.status != EventStatus.PENDING:
+            return self.execution.response
 
         start = current_time()
 
