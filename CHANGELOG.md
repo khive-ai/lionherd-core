@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0a3](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha3) - 2025-11-06
+
+### Fixed
+
+- **Memory Leaks**: `EventBus` (#22) and `Broadcaster` (#24) now use
+  `weakref` for automatic callback cleanup. Prevents unbounded growth in
+  long-running apps.
+- **TOCTOU Races**: `Graph.add_edge()` (#21) and `Event.invoke()` (#26)
+  synchronized with decorators. Eliminates 10% duplicate execution rate
+  under concurrency.
+- **LNDL Guard**: `ensure_no_action_calls()` (#23) prevents `ActionCall`
+  persistence. Recursively detects placeholders in nested models/collections.
+- **Backend Agnostic**: `Event._async_lock` now anyio-based (was
+  `asyncio.Lock`). Enables Trio support.
+
+### Changed
+
+- **Event Idempotency**: Clarified `invoke()` caches results after
+  COMPLETED/FAILED. Use `as_fresh_event()` for retry.
+
+### Added
+
+- Race/memory leak tests with GC validation. 100% coverage for guards.
+
 ## [1.0.0a2](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha2) - 2025-11-05
 
 ### Added
