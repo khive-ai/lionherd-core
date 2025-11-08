@@ -1446,6 +1446,189 @@ async def test_exception_group_cycle_detection_dag_allowed():
         "DAG structure should not trigger circular reference detection"
 
 
+@pytest.mark.asyncio
+async def test_exception_group_with_lionherd_error():
+    """Test ExceptionGroup containing LionherdError uses to_dict() serialization.
+
+    Edge Case Coverage:
+    -------------------
+    When an ExceptionGroup contains LionherdError instances, the serialization
+    should use the LionherdError.to_dict() method instead of generic error handling.
+    This provides richer error context (retryable flag, error codes, etc.).
+
+    This test covers line 152 in event.py.
+    """
+    from lionherd_core.errors import ValidationError, ConnectionError
+
+    class LionherdErrorGroupEvent(Event):
+        async def _invoke(self) -> Any:
+            """Raise ExceptionGroup with LionherdError instances."""
+            errors = [
+                ValidationError("invalid input", retryable=False),
+                ConnectionError("network failure", retryable=True),
+                ValueError("standard error"),  # Non-LionherdError
+            ]
+            raise ExceptionGroup("mixed errors", errors)
+
+    event = LionherdErrorGroupEvent()
+    await event.invoke()
+
+    # Should fail and capture ExceptionGroup
+    assert event.status == EventStatus.FAILED
+    assert isinstance(event.execution.error, ExceptionGroup)
+
+    # Serialize and verify LionherdError.to_dict() was used
+    serialized = event.execution.to_dict()
+
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+
+    # Check nested exceptions
+    exceptions = serialized["error"]["exceptions"]
+    assert len(exceptions) == 3
+
+    # ValidationError should have retryable=False from to_dict()
+    validation_error = exceptions[0]
+    assert validation_error["error"] == "ValidationError"
+    assert "invalid input" in validation_error["message"]
+    assert validation_error["retryable"] is False  # From LionherdError.to_dict()
+
+    # ConnectionError should have retryable=True from to_dict()
+    connection_error = exceptions[1]
+    assert connection_error["error"] == "ConnectionError"
+    assert "network failure" in connection_error["message"]
+    assert connection_error["retryable"] is True  # From LionherdError.to_dict()
+
+    # ValueError should use generic serialization (no retryable field)
+    value_error = exceptions[2]
+    assert value_error["error"] == "ValueError"
+    assert "standard error" in value_error["message"]
+    assert "retryable" not in value_error  # Not a LionherdError
+
+
+@pytest.mark.asyncio
+async def test_lionherd_error_retryable_flag_respected():
+    """Test Event respects LionherdError.retryable flag.
+
+    Edge Case Coverage:
+    -------------------
+    When a LionherdError with retryable=False is raised, the Execution
+    should capture this flag instead of defaulting to True (unknown exception behavior).
+
+    This test covers line 320 in event.py.
+    """
+    from lionherd_core.errors import ValidationError, ConnectionError
+
+    # Test 1: LionherdError with retryable=False
+    class NonRetryableErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise ValidationError("bad input", retryable=False)
+
+    event1 = NonRetryableErrorEvent()
+    await event1.invoke()
+
+    assert event1.status == EventStatus.FAILED
+    assert isinstance(event1.execution.error, ValidationError)
+    assert event1.execution.retryable is False  # Should respect LionherdError flag
+
+    # Test 2: LionherdError with retryable=True
+    class RetryableErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise ConnectionError("network issue", retryable=True)
+
+    event2 = RetryableErrorEvent()
+    await event2.invoke()
+
+    assert event2.status == EventStatus.FAILED
+    assert isinstance(event2.execution.error, ConnectionError)
+    assert event2.execution.retryable is True  # Should respect LionherdError flag
+
+    # Test 3: Non-LionherdError defaults to retryable=True
+    class UnknownErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise RuntimeError("unknown error")
+
+    event3 = UnknownErrorEvent()
+    await event3.invoke()
+
+    assert event3.status == EventStatus.FAILED
+    assert isinstance(event3.execution.error, RuntimeError)
+    assert event3.execution.retryable is True  # Unknown exceptions default to True
+
+
+@pytest.mark.asyncio
+async def test_event_idempotency_returns_cached_result():
+    """Test Event.invoke() is idempotent and returns cached result on subsequent calls.
+
+    Edge Case Coverage:
+    -------------------
+    When invoke() is called multiple times, it should not re-execute _invoke().
+    Instead, it should return the cached response from the first execution.
+
+    This test covers line 272 in event.py (idempotency check).
+    """
+    invocation_count = 0
+
+    class CountingEvent(Event):
+        async def _invoke(self) -> Any:
+            nonlocal invocation_count
+            invocation_count += 1
+            return f"result_{invocation_count}"
+
+    event = CountingEvent()
+
+    # First invocation - should execute _invoke()
+    result1 = await event.invoke()
+    assert result1 == "result_1"
+    assert invocation_count == 1
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == "result_1"
+
+    # Second invocation - should return cached result WITHOUT executing _invoke()
+    result2 = await event.invoke()
+    assert result2 == "result_1"  # Same result as first call
+    assert invocation_count == 1  # Counter NOT incremented (idempotent)
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == "result_1"
+
+    # Third invocation - still cached
+    result3 = await event.invoke()
+    assert result3 == "result_1"
+    assert invocation_count == 1  # Still only executed once
+    assert event.status == EventStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_event_idempotency_works_for_failed_events():
+    """Test idempotency also works for failed events."""
+    from lionherd_core.types._sentinel import Unset
+
+    invocation_count = 0
+
+    class FailingCountingEvent(Event):
+        async def _invoke(self) -> Any:
+            nonlocal invocation_count
+            invocation_count += 1
+            raise ValueError(f"error_{invocation_count}")
+
+    event = FailingCountingEvent()
+
+    # First invocation - should execute _invoke() and fail
+    result1 = await event.invoke()
+    assert result1 is None  # Failed events return None
+    assert invocation_count == 1
+    assert event.status == EventStatus.FAILED
+    assert "error_1" in str(event.execution.error)
+    assert event.execution.response is Unset  # Failed events have Unset response
+
+    # Second invocation - should return cached result (Unset) WITHOUT executing
+    result2 = await event.invoke()
+    assert result2 is Unset  # Idempotency returns cached response (Unset for failures)
+    assert invocation_count == 1  # Counter NOT incremented (idempotent)
+    assert event.status == EventStatus.FAILED
+    assert "error_1" in str(event.execution.error)  # Same error
+
+
 # ============================================================================
 # Timeout Support Tests (Issue #13)
 # ============================================================================
