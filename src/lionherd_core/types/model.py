@@ -3,18 +3,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 import orjson
 from pydantic import BaseModel, ConfigDict
-from typing_extensions import Self
 
-from ..protocols import implements, Serializable, Deserializable, Hashable
 from ..ln._hash import hash_dict
 from ..ln._json_dump import get_orjson_default, json_dumps
+from ..protocols import Deserializable, Hashable, Serializable, implements
 from ._sentinel import not_sentinel
 
-__all__ = ("HashableModel", "ConversionMode")
+__all__ = ("ConversionMode", "HashableModel")
 
 ConversionMode = Literal["python", "json"]
 
