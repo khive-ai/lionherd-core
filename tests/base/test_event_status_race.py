@@ -91,6 +91,92 @@ class CountingEvent(Event):
         return f"result_{count}"
 
 
+class TimeoutEvent(Event):
+    """Test event that times out during execution."""
+
+    counter_key: str = Field(default="default", exclude=True)
+    timeout: float = Field(default=0.001)  # Very short timeout
+
+    def model_post_init(self, __context) -> None:
+        """Initialize tracking after Pydantic validation."""
+        super().model_post_init(__context)
+        key = str(self.id)
+        self.counter_key = key
+        _execution_counts[key] = 0
+        _execution_locks[key] = asyncio.Lock()
+
+    @property
+    def execution_count(self) -> int:
+        """Get execution count for this event."""
+        return _execution_counts.get(self.counter_key, 0)
+
+    async def _invoke(self):
+        """Simulate work that exceeds timeout."""
+        async with _execution_locks[self.counter_key]:
+            _execution_counts[self.counter_key] += 1
+
+        # Sleep longer than timeout to trigger timeout
+        await asyncio.sleep(self.timeout * 10)
+        return "should_not_reach"
+
+
+class FailingEvent(Event):
+    """Test event that raises an exception during execution."""
+
+    counter_key: str = Field(default="default", exclude=True)
+
+    def model_post_init(self, __context) -> None:
+        """Initialize tracking after Pydantic validation."""
+        super().model_post_init(__context)
+        key = str(self.id)
+        self.counter_key = key
+        _execution_counts[key] = 0
+        _execution_locks[key] = asyncio.Lock()
+
+    @property
+    def execution_count(self) -> int:
+        """Get execution count for this event."""
+        return _execution_counts.get(self.counter_key, 0)
+
+    async def _invoke(self):
+        """Raise an exception during execution."""
+        # Increment counter before raising
+        async with _execution_locks[self.counter_key]:
+            _execution_counts[self.counter_key] += 1
+
+        # Simulate some async work before failing
+        await asyncio.sleep(0.01)
+        raise ValueError("Intentional test failure")
+
+
+class SlowEvent(Event):
+    """Test event with slow execution for cancellation testing."""
+
+    counter_key: str = Field(default="default", exclude=True)
+
+    def model_post_init(self, __context) -> None:
+        """Initialize tracking after Pydantic validation."""
+        super().model_post_init(__context)
+        key = str(self.id)
+        self.counter_key = key
+        _execution_counts[key] = 0
+        _execution_locks[key] = asyncio.Lock()
+
+    @property
+    def execution_count(self) -> int:
+        """Get execution count for this event."""
+        return _execution_counts.get(self.counter_key, 0)
+
+    async def _invoke(self):
+        """Simulate slow work that can be cancelled."""
+        async with _execution_locks[self.counter_key]:
+            _execution_counts[self.counter_key] += 1
+
+        # Long sleep to allow cancellation
+        await asyncio.sleep(1.0)
+        return "should_not_complete"
+
+
 @pytest.mark.asyncio
 async def test_concurrent_invoke_executes_once(execution_tracker):
     """Multiple concurrent invoke() calls should execute _invoke() exactly once.
@@ -180,3 +266,115 @@ async def test_invoke_idempotency_with_delay(execution_tracker):
         f"Expected instant return of cached result."
     )
     assert event.execution_count == 1  # Still 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_invoke_with_timeout_race():
+    """Multiple concurrent invoke() calls during timeout should execute once.
+
+    Verifies that @async_synchronized prevents duplicate execution even when
+    the first execution times out.
+    """
+    from lionherd_core.types._sentinel import Unset
+
+    event = TimeoutEvent(timeout=0.001)
+
+    # Sanity check - starts in PENDING
+    assert event.status == EventStatus.PENDING
+    assert event.execution_count == 0
+
+    # Launch 10 concurrent calls
+    results = await asyncio.gather(*[event.invoke() for _ in range(10)])
+
+    # CRITICAL: Only one execution (that times out)
+    assert event.execution_count == 1, (
+        f"Expected 1 execution, got {event.execution_count}. "
+        f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
+    )
+
+    # All callers should get None or Unset (timeout results in no meaningful response)
+    # First caller may get None (cached response), waiters get Unset
+    assert all(r is None or r is Unset for r in results), f"Expected None or Unset, got: {results}"
+
+    # Event should be CANCELLED (timeout)
+    assert event.status == EventStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_concurrent_invoke_with_exception_race():
+    """Multiple concurrent invoke() calls when _invoke() raises should execute once.
+
+    Verifies that @async_synchronized prevents duplicate execution even when
+    the first execution raises an exception.
+    """
+    from lionherd_core.types._sentinel import Unset
+
+    event = FailingEvent()
+
+    # Sanity check - starts in PENDING
+    assert event.status == EventStatus.PENDING
+    assert event.execution_count == 0
+
+    # Launch 10 concurrent calls
+    results = await asyncio.gather(*[event.invoke() for _ in range(10)])
+
+    # CRITICAL: Only one execution (that fails)
+    assert event.execution_count == 1, (
+        f"Expected 1 execution, got {event.execution_count}. "
+        f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
+    )
+
+    # All callers should get None or Unset (error results in no meaningful response)
+    # First caller may get None (cached response), waiters get Unset
+    assert all(r is None or r is Unset for r in results), f"Expected None or Unset, got: {results}"
+
+    # Event should be FAILED
+    assert event.status == EventStatus.FAILED
+
+    # Error should be captured
+    assert event.execution.error is not None
+    assert "Intentional test failure" in str(event.execution.error)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_invoke_with_cancellation_race():
+    """Multiple concurrent invoke() calls during cancellation should execute once.
+
+    Verifies that @async_synchronized prevents duplicate execution even when
+    tasks are cancelled mid-execution.
+    """
+    event = SlowEvent()
+
+    # Sanity check - starts in PENDING
+    assert event.status == EventStatus.PENDING
+    assert event.execution_count == 0
+
+    # Launch 10 concurrent tasks
+    tasks = [asyncio.create_task(event.invoke()) for _ in range(10)]
+
+    # Let execution start
+    await asyncio.sleep(0.02)
+
+    # Verify execution started
+    assert event.execution_count == 1, "Execution should have started"
+
+    # Cancel all tasks
+    for task in tasks:
+        task.cancel()
+
+    # Wait for cancellation (gather with return_exceptions to catch CancelledError)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # CRITICAL: Only one execution started (then cancelled)
+    assert event.execution_count == 1, (
+        f"Expected 1 execution, got {event.execution_count}. "
+        f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
+    )
+
+    # All tasks should be cancelled
+    assert all(isinstance(r, asyncio.CancelledError) for r in results), (
+        f"Expected all CancelledError, got: {results}"
+    )
+
+    # Event should be CANCELLED
+    assert event.status == EventStatus.CANCELLED
