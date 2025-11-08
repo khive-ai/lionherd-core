@@ -6,35 +6,76 @@ instead of once, causing duplicate execution, double API calls, and double charg
 This test demonstrates the TOCTOU (Time-Of-Check-Time-Of-Use) footgun.
 """
 
+from __future__ import annotations
+
 import asyncio
+from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 from pydantic import Field
 
 from lionherd_core.base.event import Event, EventStatus
 
-# Module-level tracking to avoid Pydantic field issues
-_execution_counts = {}
-_execution_locks = {}
+
+@dataclass
+class ExecutionTracker:
+    """Fixture-scoped execution tracking for race condition tests.
+
+    Provides isolated state management per test, preventing cross-test pollution
+    and ensuring automatic cleanup.
+    """
+
+    _counts: dict[str, int] = field(default_factory=dict)
+    _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+
+    def register(self, key: str) -> None:
+        """Register a new tracking key with initial count and lock."""
+        self._counts[key] = 0
+        self._locks[key] = asyncio.Lock()
+
+    def get_count(self, key: str) -> int:
+        """Get current execution count for a key."""
+        return self._counts.get(key, 0)
+
+    async def increment(self, key: str) -> int:
+        """Atomically increment and return count for a key."""
+        async with self._locks[key]:
+            self._counts[key] += 1
+            return self._counts[key]
+
+
+@pytest.fixture
+def execution_tracker() -> ExecutionTracker:
+    """Provide execution tracking for race condition tests.
+
+    Automatically cleans up after each test to prevent state leaks.
+    """
+    tracker = ExecutionTracker()
+    yield tracker
+    # Cleanup is automatic via dataclass field factories
 
 
 class CountingEvent(Event):
-    """Test event that tracks execution count via module-level dict."""
+    """Test event that tracks execution count via injected tracker."""
 
+    tracker: Any = Field(default=None, exclude=True)
     counter_key: str = Field(default="default", exclude=True)
 
     def model_post_init(self, __context) -> None:
         """Initialize tracking after Pydantic validation."""
         super().model_post_init(__context)
-        key = str(self.id)
-        self.counter_key = key
-        _execution_counts[key] = 0
-        _execution_locks[key] = asyncio.Lock()
+        if self.tracker is not None:
+            key = str(self.id)
+            self.counter_key = key
+            self.tracker.register(key)
 
     @property
     def execution_count(self) -> int:
         """Get execution count for this event."""
-        return _execution_counts.get(self.counter_key, 0)
+        if self.tracker is None:
+            return 0
+        return self.tracker.get_count(self.counter_key)
 
     async def _invoke(self):
         """Track execution count and simulate work."""
@@ -42,21 +83,22 @@ class CountingEvent(Event):
         await asyncio.sleep(0.01)
 
         # Increment counter (the resource that should only be touched once)
-        async with _execution_locks[self.counter_key]:
-            _execution_counts[self.counter_key] += 1
-            count = _execution_counts[self.counter_key]
+        if self.tracker is not None:
+            count = await self.tracker.increment(self.counter_key)
+        else:
+            count = 1
 
         return f"result_{count}"
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invoke_executes_once():
+async def test_concurrent_invoke_executes_once(execution_tracker):
     """Multiple concurrent invoke() calls should execute _invoke() exactly once.
 
     WITHOUT fix: Both calls execute _invoke() → execution_count = 2
     WITH fix: Second call waits or returns cached result → execution_count = 1
     """
-    event = CountingEvent()
+    event = CountingEvent(tracker=execution_tracker)
 
     # Sanity check - starts in PENDING
     assert event.status == EventStatus.PENDING
@@ -79,9 +121,9 @@ async def test_concurrent_invoke_executes_once():
 
 
 @pytest.mark.asyncio
-async def test_invoke_returns_cached_result_after_completion():
+async def test_invoke_returns_cached_result_after_completion(execution_tracker):
     """After first execution completes, subsequent invoke() should return cached result."""
-    event = CountingEvent()
+    event = CountingEvent(tracker=execution_tracker)
 
     # First execution
     result1 = await event.invoke()
@@ -100,9 +142,9 @@ async def test_invoke_returns_cached_result_after_completion():
 
 
 @pytest.mark.asyncio
-async def test_racing_invoke_calls_high_concurrency():
+async def test_racing_invoke_calls_high_concurrency(execution_tracker):
     """Stress test: 100 concurrent invoke() calls should still execute once."""
-    event = CountingEvent()
+    event = CountingEvent(tracker=execution_tracker)
 
     # Launch 100 concurrent calls
     results = await asyncio.gather(*[event.invoke() for _ in range(100)])
@@ -117,9 +159,9 @@ async def test_racing_invoke_calls_high_concurrency():
 
 
 @pytest.mark.asyncio
-async def test_invoke_idempotency_with_delay():
+async def test_invoke_idempotency_with_delay(execution_tracker):
     """invoke() after completion should be instant (no re-execution delay)."""
-    event = CountingEvent()
+    event = CountingEvent(tracker=execution_tracker)
 
     # First invoke (takes ~10ms due to sleep)
     await event.invoke()
