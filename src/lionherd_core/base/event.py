@@ -100,29 +100,74 @@ class Execution:
             "retryable": retryable_value,
         }
 
-    def _serialize_exception_group(self, eg: ExceptionGroup) -> dict[str, Any]:
-        """Recursively serialize ExceptionGroup and nested exceptions."""
+    def _serialize_exception_group(
+        self,
+        eg: ExceptionGroup,
+        depth: int = 0,
+        _seen: set[int] | None = None,
+    ) -> dict[str, Any]:
+        """Recursively serialize ExceptionGroup with depth limit and cycle detection.
+
+        Args:
+            eg: ExceptionGroup to serialize
+            depth: Current recursion depth (internal)
+            _seen: Set of seen exception IDs for cycle detection (internal)
+
+        Returns:
+            Serialized exception group dict
+
+        Note:
+            Maximum depth is 100 to prevent stack overflow.
+            Circular references are detected and handled gracefully.
+        """
         from lionherd_core.errors import LionherdError
 
-        exceptions = []
-        for exc in eg.exceptions:
-            if isinstance(exc, LionherdError):
-                exceptions.append(exc.to_dict())
-            elif isinstance(exc, ExceptionGroup):
-                exceptions.append(self._serialize_exception_group(exc))
-            else:
-                exceptions.append(
-                    {
-                        "error": type(exc).__name__,
-                        "message": str(exc),
-                    }
-                )
+        # Depth limit to prevent stack overflow
+        MAX_DEPTH = 100
+        if depth > MAX_DEPTH:
+            return {
+                "error": "ExceptionGroup",
+                "message": f"Max nesting depth ({MAX_DEPTH}) exceeded",
+                "nested_count": len(eg.exceptions) if hasattr(eg, "exceptions") else 0,
+            }
 
-        return {
-            "error": type(eg).__name__,
-            "message": str(eg),
-            "exceptions": exceptions,
-        }
+        # Initialize cycle detection set on first call
+        if _seen is None:
+            _seen = set()
+
+        # Cycle detection using object id tracking
+        eg_id = id(eg)
+        if eg_id in _seen:
+            return {
+                "error": "ExceptionGroup",
+                "message": "Circular reference detected",
+            }
+
+        _seen.add(eg_id)
+
+        try:
+            exceptions = []
+            for exc in eg.exceptions:
+                if isinstance(exc, LionherdError):
+                    exceptions.append(exc.to_dict())
+                elif isinstance(exc, ExceptionGroup):
+                    exceptions.append(self._serialize_exception_group(exc, depth + 1, _seen))
+                else:
+                    exceptions.append(
+                        {
+                            "error": type(exc).__name__,
+                            "message": str(exc),
+                        }
+                    )
+
+            return {
+                "error": type(eg).__name__,
+                "message": str(eg),
+                "exceptions": exceptions,
+            }
+        finally:
+            # Cleanup seen set for this exception group
+            _seen.discard(eg_id)
 
     def add_error(self, exc: BaseException) -> None:
         """Add error to execution. Creates ExceptionGroup if multiple errors."""

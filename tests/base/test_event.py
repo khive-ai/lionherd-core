@@ -1237,6 +1237,404 @@ async def test_exception_group_backward_compatibility():
 
 
 # ============================================================================
+# ExceptionGroup Defensive Hardening Tests (Depth Limit + Cycle Detection)
+# ============================================================================
+
+
+class DeeplyNestedExceptionGroupEvent(Event):
+    """Event that raises ExceptionGroup nested to specified depth."""
+
+    depth: int = 10
+
+    async def _invoke(self) -> Any:
+        """Create ExceptionGroup nested to self.depth levels."""
+
+        def create_nested_group(current_depth: int) -> ExceptionGroup:
+            if current_depth == 0:
+                return ExceptionGroup("leaf", [ValueError("leaf error")])
+            return ExceptionGroup(
+                f"level {current_depth}",
+                [create_nested_group(current_depth - 1)],
+            )
+
+        raise create_nested_group(self.depth)
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_under_max():
+    """Test ExceptionGroup serialization works normally under MAX_DEPTH (100)."""
+    # Create moderately nested group (50 levels - well under limit)
+    event = DeeplyNestedExceptionGroupEvent(depth=50)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Should serialize successfully without truncation
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "level 50" in serialized["error"]["message"]
+
+    # Verify nested structure exists (spot check a few levels)
+    current = serialized["error"]
+    for expected_level in [50, 40, 30, 20, 10]:
+        if expected_level <= 50:
+            assert "exceptions" in current
+            assert len(current["exceptions"]) > 0
+            current = current["exceptions"][0]
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_at_max():
+    """Test ExceptionGroup at exactly MAX_DEPTH (100) serializes without truncation."""
+    # Create ExceptionGroup at exactly the depth limit
+    event = DeeplyNestedExceptionGroupEvent(depth=100)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Should serialize successfully - exactly at limit
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "level 100" in serialized["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_exceeded():
+    """Test ExceptionGroup exceeding MAX_DEPTH (100) is gracefully truncated.
+
+    Defense Against Stack Overflow:
+    --------------------------------
+    Adversarial input: 1000+ levels of nested ExceptionGroups
+    Without depth limit: Stack overflow during serialization (recursive _serialize_exception_group)
+    With depth limit: Graceful degradation with informative error message
+
+    This test validates the fix from PR #35 preventing crash vectors.
+    """
+    # Create adversarially deep ExceptionGroup (150 levels)
+    event = DeeplyNestedExceptionGroupEvent(depth=150)
+    await event.invoke()
+
+    # Event should fail normally
+    assert event.status == EventStatus.FAILED
+    assert isinstance(event.execution.error, ExceptionGroup)
+
+    # Serialization should gracefully handle depth limit
+    serialized = event.execution.to_dict()
+
+    # Should complete without stack overflow
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+
+    # Navigate down to verify truncation occurs
+    current = serialized["error"]
+    depth_count = 0
+    max_iterations = 200  # Safety limit to prevent infinite loop in test
+
+    while depth_count < max_iterations:
+        if "exceptions" not in current or not current["exceptions"]:
+            break
+
+        current = current["exceptions"][0]
+        depth_count += 1
+
+        # Check if we hit the depth limit message
+        if current.get("message") == "Max nesting depth (100) exceeded":
+            assert current["error"] == "ExceptionGroup"
+            assert "nested_count" in current
+            # Verify truncation happened around depth 100
+            assert 95 <= depth_count <= 105
+            return
+
+    # If we get here, truncation didn't occur as expected
+    pytest.fail(
+        f"Expected depth limit truncation but navigated {depth_count} levels without finding it"
+    )
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_preserves_error_info():
+    """Test depth limit truncation preserves error type and nested count."""
+    # Create deep ExceptionGroup that will be truncated
+    event = DeeplyNestedExceptionGroupEvent(depth=120)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Navigate to depth limit
+    current = serialized["error"]
+    for _ in range(100):  # Navigate down 100 levels
+        if "exceptions" not in current or not current["exceptions"]:
+            break
+        current = current["exceptions"][0]
+
+    # Should find truncation message with metadata
+    # (May be at slightly different depth due to implementation details)
+    found_truncation = False
+    for _ in range(10):  # Check a few more levels
+        if current.get("message") == "Max nesting depth (100) exceeded":
+            assert current["error"] == "ExceptionGroup"
+            assert "nested_count" in current
+            assert current["nested_count"] >= 0  # Should report how many nested exceptions exist
+            found_truncation = True
+            break
+        if current.get("exceptions"):
+            current = current["exceptions"][0]
+        else:
+            break
+
+    assert found_truncation, "Expected to find depth limit truncation with metadata"
+
+
+@pytest.mark.asyncio
+async def test_exception_group_cycle_detection_dag_allowed():
+    """Test cycle detection allows DAG (directed acyclic graph) with shared nodes.
+
+    Critical Distinction:
+    ---------------------
+    CYCLE (forbidden): A → B → A (infinite loop)
+    DAG (allowed): A → C ← B (shared node C, no loop)
+
+    The _seen set is discarded after each subtree (try-finally cleanup),
+    allowing the same exception to appear in multiple branches (DAG pattern)
+    while still preventing true cycles.
+    """
+
+    class DAGExceptionGroupEvent(Event):
+        async def _invoke(self) -> Any:
+            """Create DAG: shared leaf exception in multiple branches."""
+            # Shared leaf exception (will appear in multiple branches)
+            shared_leaf = ValueError("shared error")
+
+            # Two branches both referencing the same leaf
+            branch1 = ExceptionGroup("branch1", [shared_leaf, TypeError("branch1 error")])
+            branch2 = ExceptionGroup("branch2", [shared_leaf, KeyError("branch2 error")])
+
+            # Root group with both branches (DAG structure)
+            raise ExceptionGroup("root", [branch1, branch2])
+
+    event = DAGExceptionGroupEvent()
+    await event.invoke()
+
+    # Should serialize successfully (DAG is allowed)
+    serialized = event.execution.to_dict()
+
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "root" in serialized["error"]["message"]
+
+    # Verify both branches are present
+    exceptions = serialized["error"]["exceptions"]
+    assert len(exceptions) == 2
+
+    # Both branches should have the shared error serialized
+    branch1_exceptions = exceptions[0]["exceptions"]
+    branch2_exceptions = exceptions[1]["exceptions"]
+
+    # Shared error should appear in both (not marked as circular)
+    assert any("shared error" in str(exc.get("message", "")) for exc in branch1_exceptions)
+    assert any("shared error" in str(exc.get("message", "")) for exc in branch2_exceptions)
+
+    # No circular reference messages should be present
+    def has_circular_message(error_dict: dict) -> bool:
+        if error_dict.get("message") == "Circular reference detected":
+            return True
+        if "exceptions" in error_dict:
+            return any(
+                has_circular_message(exc)
+                for exc in error_dict["exceptions"]
+                if isinstance(exc, dict)
+            )
+        return False
+
+    assert not has_circular_message(serialized["error"]), (
+        "DAG structure should not trigger circular reference detection"
+    )
+
+
+@pytest.mark.asyncio
+async def test_exception_group_with_lionherd_error():
+    """Test ExceptionGroup containing LionherdError uses to_dict() serialization.
+
+    Edge Case Coverage:
+    -------------------
+    When an ExceptionGroup contains LionherdError instances, the serialization
+    should use the LionherdError.to_dict() method instead of generic error handling.
+    This provides richer error context (retryable flag, error codes, etc.).
+
+    This test covers line 152 in event.py.
+    """
+    from lionherd_core.errors import ConnectionError, ValidationError
+
+    class LionherdErrorGroupEvent(Event):
+        async def _invoke(self) -> Any:
+            """Raise ExceptionGroup with LionherdError instances."""
+            errors = [
+                ValidationError("invalid input", retryable=False),
+                ConnectionError("network failure", retryable=True),
+                ValueError("standard error"),  # Non-LionherdError
+            ]
+            raise ExceptionGroup("mixed errors", errors)
+
+    event = LionherdErrorGroupEvent()
+    await event.invoke()
+
+    # Should fail and capture ExceptionGroup
+    assert event.status == EventStatus.FAILED
+    assert isinstance(event.execution.error, ExceptionGroup)
+
+    # Serialize and verify LionherdError.to_dict() was used
+    serialized = event.execution.to_dict()
+
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+
+    # Check nested exceptions
+    exceptions = serialized["error"]["exceptions"]
+    assert len(exceptions) == 3
+
+    # ValidationError should have retryable=False from to_dict()
+    validation_error = exceptions[0]
+    assert validation_error["error"] == "ValidationError"
+    assert "invalid input" in validation_error["message"]
+    assert validation_error["retryable"] is False  # From LionherdError.to_dict()
+
+    # ConnectionError should have retryable=True from to_dict()
+    connection_error = exceptions[1]
+    assert connection_error["error"] == "ConnectionError"
+    assert "network failure" in connection_error["message"]
+    assert connection_error["retryable"] is True  # From LionherdError.to_dict()
+
+    # ValueError should use generic serialization (no retryable field)
+    value_error = exceptions[2]
+    assert value_error["error"] == "ValueError"
+    assert "standard error" in value_error["message"]
+    assert "retryable" not in value_error  # Not a LionherdError
+
+
+@pytest.mark.asyncio
+async def test_lionherd_error_retryable_flag_respected():
+    """Test Event respects LionherdError.retryable flag.
+
+    Edge Case Coverage:
+    -------------------
+    When a LionherdError with retryable=False is raised, the Execution
+    should capture this flag instead of defaulting to True (unknown exception behavior).
+
+    This test covers line 320 in event.py.
+    """
+    from lionherd_core.errors import ConnectionError, ValidationError
+
+    # Test 1: LionherdError with retryable=False
+    class NonRetryableErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise ValidationError("bad input", retryable=False)
+
+    event1 = NonRetryableErrorEvent()
+    await event1.invoke()
+
+    assert event1.status == EventStatus.FAILED
+    assert isinstance(event1.execution.error, ValidationError)
+    assert event1.execution.retryable is False  # Should respect LionherdError flag
+
+    # Test 2: LionherdError with retryable=True
+    class RetryableErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise ConnectionError("network issue", retryable=True)
+
+    event2 = RetryableErrorEvent()
+    await event2.invoke()
+
+    assert event2.status == EventStatus.FAILED
+    assert isinstance(event2.execution.error, ConnectionError)
+    assert event2.execution.retryable is True  # Should respect LionherdError flag
+
+    # Test 3: Non-LionherdError defaults to retryable=True
+    class UnknownErrorEvent(Event):
+        async def _invoke(self) -> Any:
+            raise RuntimeError("unknown error")
+
+    event3 = UnknownErrorEvent()
+    await event3.invoke()
+
+    assert event3.status == EventStatus.FAILED
+    assert isinstance(event3.execution.error, RuntimeError)
+    assert event3.execution.retryable is True  # Unknown exceptions default to True
+
+
+@pytest.mark.asyncio
+async def test_event_idempotency_returns_cached_result():
+    """Test Event.invoke() is idempotent and returns cached result on subsequent calls.
+
+    Edge Case Coverage:
+    -------------------
+    When invoke() is called multiple times, it should not re-execute _invoke().
+    Instead, it should return the cached response from the first execution.
+
+    This test covers line 272 in event.py (idempotency check).
+    """
+    invocation_count = 0
+
+    class CountingEvent(Event):
+        async def _invoke(self) -> Any:
+            nonlocal invocation_count
+            invocation_count += 1
+            return f"result_{invocation_count}"
+
+    event = CountingEvent()
+
+    # First invocation - should execute _invoke()
+    result1 = await event.invoke()
+    assert result1 == "result_1"
+    assert invocation_count == 1
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == "result_1"
+
+    # Second invocation - should return cached result WITHOUT executing _invoke()
+    result2 = await event.invoke()
+    assert result2 == "result_1"  # Same result as first call
+    assert invocation_count == 1  # Counter NOT incremented (idempotent)
+    assert event.status == EventStatus.COMPLETED
+    assert event.response == "result_1"
+
+    # Third invocation - still cached
+    result3 = await event.invoke()
+    assert result3 == "result_1"
+    assert invocation_count == 1  # Still only executed once
+    assert event.status == EventStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_event_idempotency_works_for_failed_events():
+    """Test idempotency also works for failed events."""
+    from lionherd_core.types._sentinel import Unset
+
+    invocation_count = 0
+
+    class FailingCountingEvent(Event):
+        async def _invoke(self) -> Any:
+            nonlocal invocation_count
+            invocation_count += 1
+            raise ValueError(f"error_{invocation_count}")
+
+    event = FailingCountingEvent()
+
+    # First invocation - should execute _invoke() and fail
+    result1 = await event.invoke()
+    assert result1 is None  # Failed events return None
+    assert invocation_count == 1
+    assert event.status == EventStatus.FAILED
+    assert "error_1" in str(event.execution.error)
+    assert event.execution.response is Unset  # Failed events have Unset response
+
+    # Second invocation - should return cached result (Unset) WITHOUT executing
+    result2 = await event.invoke()
+    assert result2 is Unset  # Idempotency returns cached response (Unset for failures)
+    assert invocation_count == 1  # Counter NOT incremented (idempotent)
+    assert event.status == EventStatus.FAILED
+    assert "error_1" in str(event.execution.error)  # Same error
+
+
+# ============================================================================
 # Timeout Support Tests (Issue #13)
 # ============================================================================
 

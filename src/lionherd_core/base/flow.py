@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
 
 from ..protocols import Serializable, implements
-from ._utils import extract_types
+from ._utils import extract_types, synchronized
 from .element import Element
 from .pile import Pile
 from .progression import Progression
@@ -46,6 +47,7 @@ class Flow(Element, Generic[E, P]):
         description="Items that progressions reference",
     )
     _progression_names: dict[str, UUID] = PrivateAttr(default_factory=dict)
+    _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
     @field_validator("items", "progressions", mode="wrap")
     @classmethod
@@ -101,6 +103,7 @@ class Flow(Element, Generic[E, P]):
 
     # ==================== Progression Management ====================
 
+    @synchronized
     def add_progression(self, progression: P) -> None:
         """Add progression with name registration. Raises ValueError if UUID or name exists."""
         # Check name uniqueness
@@ -116,6 +119,7 @@ class Flow(Element, Generic[E, P]):
         if progression.name:
             self._progression_names[progression.name] = progression.id
 
+    @synchronized
     def remove_progression(self, progression_id: UUID | str | P) -> P:
         """Remove progression by UUID or name. Raises ValueError if not found."""
         # Resolve name to UUID if needed
@@ -134,6 +138,7 @@ class Flow(Element, Generic[E, P]):
             del self._progression_names[prog.name]
         return self.progressions.remove(uid)
 
+    @synchronized
     def get_progression(self, key: UUID | str | P) -> P:
         """Get progression by UUID or name. Raises KeyError if not found."""
         if isinstance(key, str):
