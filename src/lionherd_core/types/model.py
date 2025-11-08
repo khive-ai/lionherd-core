@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Any, Callable, Literal, Self
+from typing import Any, Literal, Self
 
 import orjson
 from pydantic import BaseModel, ConfigDict
