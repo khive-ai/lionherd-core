@@ -1251,15 +1251,13 @@ class DeeplyNestedExceptionGroupEvent(Event):
 
         def create_nested_group(current_depth: int) -> ExceptionGroup:
             if current_depth == 0:
-                return ExceptionGroup("leaf", [ValueError(f"leaf error")])
+                return ExceptionGroup("leaf", [ValueError("leaf error")])
             return ExceptionGroup(
                 f"level {current_depth}",
                 [create_nested_group(current_depth - 1)],
             )
 
         raise create_nested_group(self.depth)
-
-
 
 
 @pytest.mark.asyncio
@@ -1348,7 +1346,9 @@ async def test_exception_group_depth_limit_exceeded():
             return
 
     # If we get here, truncation didn't occur as expected
-    pytest.fail(f"Expected depth limit truncation but navigated {depth_count} levels without finding it")
+    pytest.fail(
+        f"Expected depth limit truncation but navigated {depth_count} levels without finding it"
+    )
 
 
 @pytest.mark.asyncio
@@ -1377,7 +1377,7 @@ async def test_exception_group_depth_limit_preserves_error_info():
             assert current["nested_count"] >= 0  # Should report how many nested exceptions exist
             found_truncation = True
             break
-        if "exceptions" in current and current["exceptions"]:
+        if current.get("exceptions"):
             current = current["exceptions"][0]
         else:
             break
@@ -1439,11 +1439,16 @@ async def test_exception_group_cycle_detection_dag_allowed():
         if error_dict.get("message") == "Circular reference detected":
             return True
         if "exceptions" in error_dict:
-            return any(has_circular_message(exc) for exc in error_dict["exceptions"] if isinstance(exc, dict))
+            return any(
+                has_circular_message(exc)
+                for exc in error_dict["exceptions"]
+                if isinstance(exc, dict)
+            )
         return False
 
-    assert not has_circular_message(serialized["error"]), \
+    assert not has_circular_message(serialized["error"]), (
         "DAG structure should not trigger circular reference detection"
+    )
 
 
 @pytest.mark.asyncio
@@ -1458,7 +1463,7 @@ async def test_exception_group_with_lionherd_error():
 
     This test covers line 152 in event.py.
     """
-    from lionherd_core.errors import ValidationError, ConnectionError
+    from lionherd_core.errors import ConnectionError, ValidationError
 
     class LionherdErrorGroupEvent(Event):
         async def _invoke(self) -> Any:
@@ -1517,7 +1522,7 @@ async def test_lionherd_error_retryable_flag_respected():
 
     This test covers line 320 in event.py.
     """
-    from lionherd_core.errors import ValidationError, ConnectionError
+    from lionherd_core.errors import ConnectionError, ValidationError
 
     # Test 1: LionherdError with retryable=False
     class NonRetryableErrorEvent(Event):
