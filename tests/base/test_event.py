@@ -1237,6 +1237,216 @@ async def test_exception_group_backward_compatibility():
 
 
 # ============================================================================
+# ExceptionGroup Defensive Hardening Tests (Depth Limit + Cycle Detection)
+# ============================================================================
+
+
+class DeeplyNestedExceptionGroupEvent(Event):
+    """Event that raises ExceptionGroup nested to specified depth."""
+
+    depth: int = 10
+
+    async def _invoke(self) -> Any:
+        """Create ExceptionGroup nested to self.depth levels."""
+
+        def create_nested_group(current_depth: int) -> ExceptionGroup:
+            if current_depth == 0:
+                return ExceptionGroup("leaf", [ValueError(f"leaf error")])
+            return ExceptionGroup(
+                f"level {current_depth}",
+                [create_nested_group(current_depth - 1)],
+            )
+
+        raise create_nested_group(self.depth)
+
+
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_under_max():
+    """Test ExceptionGroup serialization works normally under MAX_DEPTH (100)."""
+    # Create moderately nested group (50 levels - well under limit)
+    event = DeeplyNestedExceptionGroupEvent(depth=50)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Should serialize successfully without truncation
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "level 50" in serialized["error"]["message"]
+
+    # Verify nested structure exists (spot check a few levels)
+    current = serialized["error"]
+    for expected_level in [50, 40, 30, 20, 10]:
+        if expected_level <= 50:
+            assert "exceptions" in current
+            assert len(current["exceptions"]) > 0
+            current = current["exceptions"][0]
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_at_max():
+    """Test ExceptionGroup at exactly MAX_DEPTH (100) serializes without truncation."""
+    # Create ExceptionGroup at exactly the depth limit
+    event = DeeplyNestedExceptionGroupEvent(depth=100)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Should serialize successfully - exactly at limit
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "level 100" in serialized["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_exceeded():
+    """Test ExceptionGroup exceeding MAX_DEPTH (100) is gracefully truncated.
+
+    Defense Against Stack Overflow:
+    --------------------------------
+    Adversarial input: 1000+ levels of nested ExceptionGroups
+    Without depth limit: Stack overflow during serialization (recursive _serialize_exception_group)
+    With depth limit: Graceful degradation with informative error message
+
+    This test validates the fix from PR #35 preventing crash vectors.
+    """
+    # Create adversarially deep ExceptionGroup (150 levels)
+    event = DeeplyNestedExceptionGroupEvent(depth=150)
+    await event.invoke()
+
+    # Event should fail normally
+    assert event.status == EventStatus.FAILED
+    assert isinstance(event.execution.error, ExceptionGroup)
+
+    # Serialization should gracefully handle depth limit
+    serialized = event.execution.to_dict()
+
+    # Should complete without stack overflow
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+
+    # Navigate down to verify truncation occurs
+    current = serialized["error"]
+    depth_count = 0
+    max_iterations = 200  # Safety limit to prevent infinite loop in test
+
+    while depth_count < max_iterations:
+        if "exceptions" not in current or not current["exceptions"]:
+            break
+
+        current = current["exceptions"][0]
+        depth_count += 1
+
+        # Check if we hit the depth limit message
+        if current.get("message") == "Max nesting depth (100) exceeded":
+            assert current["error"] == "ExceptionGroup"
+            assert "nested_count" in current
+            # Verify truncation happened around depth 100
+            assert 95 <= depth_count <= 105
+            return
+
+    # If we get here, truncation didn't occur as expected
+    pytest.fail(f"Expected depth limit truncation but navigated {depth_count} levels without finding it")
+
+
+@pytest.mark.asyncio
+async def test_exception_group_depth_limit_preserves_error_info():
+    """Test depth limit truncation preserves error type and nested count."""
+    # Create deep ExceptionGroup that will be truncated
+    event = DeeplyNestedExceptionGroupEvent(depth=120)
+    await event.invoke()
+
+    serialized = event.execution.to_dict()
+
+    # Navigate to depth limit
+    current = serialized["error"]
+    for _ in range(100):  # Navigate down 100 levels
+        if "exceptions" not in current or not current["exceptions"]:
+            break
+        current = current["exceptions"][0]
+
+    # Should find truncation message with metadata
+    # (May be at slightly different depth due to implementation details)
+    found_truncation = False
+    for _ in range(10):  # Check a few more levels
+        if current.get("message") == "Max nesting depth (100) exceeded":
+            assert current["error"] == "ExceptionGroup"
+            assert "nested_count" in current
+            assert current["nested_count"] >= 0  # Should report how many nested exceptions exist
+            found_truncation = True
+            break
+        if "exceptions" in current and current["exceptions"]:
+            current = current["exceptions"][0]
+        else:
+            break
+
+    assert found_truncation, "Expected to find depth limit truncation with metadata"
+
+
+@pytest.mark.asyncio
+async def test_exception_group_cycle_detection_dag_allowed():
+    """Test cycle detection allows DAG (directed acyclic graph) with shared nodes.
+
+    Critical Distinction:
+    ---------------------
+    CYCLE (forbidden): A → B → A (infinite loop)
+    DAG (allowed): A → C ← B (shared node C, no loop)
+
+    The _seen set is discarded after each subtree (try-finally cleanup),
+    allowing the same exception to appear in multiple branches (DAG pattern)
+    while still preventing true cycles.
+    """
+
+    class DAGExceptionGroupEvent(Event):
+        async def _invoke(self) -> Any:
+            """Create DAG: shared leaf exception in multiple branches."""
+            # Shared leaf exception (will appear in multiple branches)
+            shared_leaf = ValueError("shared error")
+
+            # Two branches both referencing the same leaf
+            branch1 = ExceptionGroup("branch1", [shared_leaf, TypeError("branch1 error")])
+            branch2 = ExceptionGroup("branch2", [shared_leaf, KeyError("branch2 error")])
+
+            # Root group with both branches (DAG structure)
+            raise ExceptionGroup("root", [branch1, branch2])
+
+    event = DAGExceptionGroupEvent()
+    await event.invoke()
+
+    # Should serialize successfully (DAG is allowed)
+    serialized = event.execution.to_dict()
+
+    assert serialized["status"] == "failed"
+    assert serialized["error"]["error"] == "ExceptionGroup"
+    assert "root" in serialized["error"]["message"]
+
+    # Verify both branches are present
+    exceptions = serialized["error"]["exceptions"]
+    assert len(exceptions) == 2
+
+    # Both branches should have the shared error serialized
+    branch1_exceptions = exceptions[0]["exceptions"]
+    branch2_exceptions = exceptions[1]["exceptions"]
+
+    # Shared error should appear in both (not marked as circular)
+    assert any("shared error" in str(exc.get("message", "")) for exc in branch1_exceptions)
+    assert any("shared error" in str(exc.get("message", "")) for exc in branch2_exceptions)
+
+    # No circular reference messages should be present
+    def has_circular_message(error_dict: dict) -> bool:
+        if error_dict.get("message") == "Circular reference detected":
+            return True
+        if "exceptions" in error_dict:
+            return any(has_circular_message(exc) for exc in error_dict["exceptions"] if isinstance(exc, dict))
+        return False
+
+    assert not has_circular_message(serialized["error"]), \
+        "DAG structure should not trigger circular reference detection"
+
+
+# ============================================================================
 # Timeout Support Tests (Issue #13)
 # ============================================================================
 
