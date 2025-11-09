@@ -262,6 +262,7 @@ class TestEventLoopRegressions:
 
         class InstrumentedCondition(EdgeCondition):
             """Condition that verifies async execution."""
+
             executed = False
 
             async def apply(self, *args, **kwargs) -> bool:
