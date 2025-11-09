@@ -111,7 +111,7 @@ Transformed list according to specified parameters. The list contains processed 
 
 ## Raises
 
-**ValueError**
+### ValueError
 
 If `unique=True` but `flatten=False`:
 

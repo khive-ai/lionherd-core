@@ -172,12 +172,12 @@ New dictionary with corrected keys based on validation rules.
 
 ## Raises
 
-**TypeError**
+### TypeError
 
 - If `d_` is not a dict
 - If `keys` is None
 
-**ValueError**
+### ValueError
 
 - If `similarity_threshold` not in range [0.0, 1.0]
 - If `similarity_algo` string not recognized

@@ -159,11 +159,11 @@ Dictionary representation of input:
 
 ### Raises
 
-**ValueError**
+### ValueError
 
 - `max_recursive_depth < 0` or `max_recursive_depth > 10`
 
-**Exception**
+### Exception
 
 - Any conversion error if `suppress=False` (type depends on input)
 - JSON parsing errors (orjson, custom parser)

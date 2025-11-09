@@ -115,7 +115,7 @@ Parameters for fuzzy key matching (only used if `fuzzy_match=True`).
 
 ### Returns
 
-**BaseModel**
+### BaseModel
 
 Validated Pydantic model instance of type `model_type`.
 
@@ -125,13 +125,13 @@ Validated Pydantic model instance of type `model_type`.
 
 ### Raises
 
-**ValidationError**
+### ValidationError
 
 - If JSON extraction fails (`fuzzy_parse=True` and invalid JSON string)
 - If Pydantic validation fails (invalid field types, missing required fields, etc.)
 - Error message includes detailed context about extraction or validation failure
 
-**TypeError**
+### TypeError
 
 - If `fuzzy_match_params` is not a dict, FuzzyMatchKeysParams instance, or None
 
@@ -239,11 +239,11 @@ Validated dictionary with corrected keys based on validation rules.
 
 ### Raises
 
-**TypeError**
+### TypeError
 
 - If `d` is None
 
-**ValueError**
+### ValueError
 
 - If conversion to dict fails and `suppress_conversion_errors=False`
 - If `similarity_threshold` not in range [0.0, 1.0]

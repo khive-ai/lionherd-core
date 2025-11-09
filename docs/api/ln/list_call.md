@@ -188,14 +188,14 @@ List of results from applying `func` to each input element, with optional proces
 
 ## Raises
 
-**ValueError**
+### ValueError
 
 Raised when:
 
 - `func` is not callable and not an iterable containing exactly one callable
 - `output_unique=True` without `output_flatten=True` or `output_dropna=True`
 
-**TypeError**
+### TypeError
 
 Raised when:
 
@@ -203,7 +203,7 @@ Raised when:
 - Input processing fails (e.g., non-iterable input with processing flags)
 - Function execution fails with type errors
 
-**Exception**
+### Exception
 
 Propagates any exception raised by `func` during execution (except `InterruptedError`).
 

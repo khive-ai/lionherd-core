@@ -189,7 +189,7 @@ Additional arguments passed to `func(item, **kwargs)` for each call.
 
 **Returns:**
 
-**list of T or BaseException**
+### list of T or BaseException
 
 Results list preserving input order. May include exceptions if `return_exceptions=True`.
 
@@ -198,15 +198,15 @@ Results list preserving input order. May include exceptions if `return_exception
 
 **Raises:**
 
-**ValueError**
+### ValueError
 
 If `func` is not callable or is iterable containing multiple/non-callable items.
 
-**TimeoutError**
+### TimeoutError
 
 If `retry_timeout` exceeded during function call.
 
-**ExceptionGroup**
+### ExceptionGroup
 
 If `return_exceptions=False` and one or more tasks raise exceptions. Contains all task exceptions with preserved tracebacks.
 
@@ -358,7 +358,7 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 
 **Yields:**
 
-**list of T or BaseException**
+### list of T or BaseException
 
 Results for each batch (batch_size items, except possibly last batch).
 
