@@ -427,7 +427,7 @@ Validation failed
 - Validation modes (strict/lenient/fuzzy) not yet exposed in API
 - LNDL (lionagi-native-data-language) support planned for future releases
 
-See [PydanticSpecAdapter](../adapters/pydantic.md) for adapter implementation details.
+Pydantic adapter implementation is available in `src/lionherd_core/types/spec_adapters/pydantic_field.py`.
 
 ## Protocol Implementations
 
@@ -895,14 +895,11 @@ LNDL (lionagi-native-data-language) integration will enable:
 - **Related Classes**:
   - [Spec](spec.md): Individual field specifications
   - [Meta](base.md#meta): Metadata key-value pairs
-  - [BaseModel](model.md): Base class for validated models
+  - [Params](base.md#params): Frozen parameter objects
+  - [DataClass](base.md#dataclass): Mutable validated dataclasses
 - **Related Modules**:
-  - [PydanticSpecAdapter](../adapters/pydantic.md): Pydantic model generation
   - [Sentinel Values](sentinel.md): Unset, Undefined sentinels
-- **Related Guides**:
-  - [Protocols Guide](../../user_guide/protocols.md): Hashable, Allowable protocols
-  - [Validation Guide](../../user_guide/validation.md): Validation strategies
-  - [Schema Composition](../../user_guide/schema_composition.md): Advanced patterns
+  - [Element](../base/element.md): Identity-based base class
 
 ## Examples
 

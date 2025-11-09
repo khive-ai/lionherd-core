@@ -923,13 +923,10 @@ cache[config]  # KeyError! Hash changed
 
 - **Related Types**:
   - [Element](../base/element.md): Identity-based base class with UUID
-  - [HashableModel](model.md): Content-based hashing for value objects
+  - [Spec](spec.md): Individual field specifications
+  - [Operable](operable.md): Validated Spec collections
 - **Related Modules**:
-  - [Sentinel Values](_sentinel.md): `Unset`, `Undefined` sentinel definitions
-  - [Protocols](../../user_guide/protocols.md): Allowable, Serializable, Hashable protocols
-- **Related Guides**:
-  - [Validation Guide](../../user_guide/validation.md): Validation patterns
-  - [Serialization Guide](../../user_guide/serialization.md): Serialization modes
+  - [Sentinel Values](sentinel.md): `Unset`, `Undefined` sentinel definitions
 
 ---
 
