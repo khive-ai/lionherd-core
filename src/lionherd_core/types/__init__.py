@@ -15,13 +15,16 @@ from ._sentinel import (
     not_sentinel,
 )
 from .base import DataClass, Enum, KeysDict, KeysLike, Meta, ModelConfig, Params
+from .model import ConversionMode, HashableModel
 from .operable import Operable
 from .spec import CommonMeta, Spec
 
 __all__ = (
     "CommonMeta",
+    "ConversionMode",
     "DataClass",
     "Enum",
+    "HashableModel",
     "KeysDict",
     "KeysLike",
     "MaybeSentinel",
