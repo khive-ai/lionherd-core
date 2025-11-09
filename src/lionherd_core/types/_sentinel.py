@@ -73,12 +73,14 @@ class UndefinedType(SingletonType):
         return (UndefinedType, ())
 
     def __or__(self, other: type) -> Any:
-        """Enable union syntax: str | Undefined"""
-        return Union[type(self), other]
+        """Enable union syntax: str | Undefined or Undefined | Unset"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[type(self), other_type]
 
     def __ror__(self, other: type) -> Any:
-        """Enable reverse union: Undefined | str"""
-        return Union[other, type(self)]
+        """Enable reverse union: Undefined | str or Unset | Undefined"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[other_type, type(self)]
 
 
 class UnsetType(SingletonType):
@@ -100,12 +102,14 @@ class UnsetType(SingletonType):
         return (UnsetType, ())
 
     def __or__(self, other: type) -> Any:
-        """Enable union syntax: str | Unset"""
-        return Union[type(self), other]
+        """Enable union syntax: str | Unset or Unset | Undefined"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[type(self), other_type]
 
     def __ror__(self, other: type) -> Any:
-        """Enable reverse union: Unset | str"""
-        return Union[other, type(self)]
+        """Enable reverse union: Unset | str or Undefined | Unset"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[other_type, type(self)]
 
 
 Undefined: Final[UndefinedType] = UndefinedType()

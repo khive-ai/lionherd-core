@@ -313,3 +313,23 @@ def test_sentinel_union_syntax():
     # Test singleton identity preserved after union operations
     assert Unset is Unset
     assert Undefined is Undefined
+
+    # Test sentinel-to-sentinel unions (edge cases)
+    # Undefined | Unset should produce Union[UndefinedType, UnsetType] (both types)
+    result6 = Undefined | Unset
+    args6 = get_args(result6)
+    assert args6 == (UndefinedType, UnsetType), f"Expected (UndefinedType, UnsetType), got {args6}"
+    assert UndefinedType in args6
+    assert UnsetType in args6
+    # Ensure no sentinel instances leaked into union args
+    assert Undefined not in args6
+    assert Unset not in args6
+
+    # Unset | Undefined (reverse) should also produce both types
+    result7 = Unset | Undefined
+    args7 = get_args(result7)
+    assert args7 == (UnsetType, UndefinedType), f"Expected (UnsetType, UndefinedType), got {args7}"
+    assert UnsetType in args7
+    assert UndefinedType in args7
+    assert Unset not in args7
+    assert Undefined not in args7
