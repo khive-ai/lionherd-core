@@ -199,7 +199,7 @@ class Flow(Element, Generic[E, P]):
         return self.items.remove(uid)
 
     def __repr__(self) -> str:
-        name_str = f" name='{self.name}'" if self.name else ""
+        name_str = f", name='{self.name}'" if self.name else ""
         return f"Flow(items={len(self.items)}, progressions={len(self.progressions)}{name_str})"
 
     def to_dict(

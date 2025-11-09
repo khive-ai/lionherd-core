@@ -22,9 +22,7 @@ This dual-pile architecture enables M:N relationships where items can exist in m
 **Use Flow when you need:**
 
 - **Multi-stage workflows**: Task pipelines, deployment stages, approval processes
-- **M:N state relationships**: Items in multiple stages (e.g., task in "testing" and "
-
-documentation")
+- **M:N state relationships**: Items in multiple stages (e.g., task in "testing" and "documentation")
 
 - **Named stage access**: Ergonomic `flow.get_progression("pending")` vs UUID lookup
 - **Independent lifecycles**: Items persist when removed from stages
@@ -107,7 +105,7 @@ Pile of Progression instances representing workflow stages. Each progression sho
 
 **Type:** Pile[P] (default: Pile[Progression])
 
-**Access:** Read-only via property (returns MappingProxyType)
+**Access:** Pydantic Field (mutable Pile instance)
 
 #### `items`
 
@@ -119,7 +117,7 @@ Pile of Element instances that progressions reference by UUID. Items are the sin
 
 **Type:** Pile[E]
 
-**Access:** Read-only via property (returns MappingProxyType)
+**Access:** Pydantic Field (mutable Pile instance)
 
 ### Metadata
 
