@@ -485,8 +485,6 @@ True
 False
 ```
 
-See [Protocols Guide](../../user_guide/protocols.md) for detailed protocol documentation.
-
 ## Usage Patterns
 
 ### Basic Schema Definition
