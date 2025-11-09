@@ -75,9 +75,7 @@ Control return type when exactly one JSON object is found. When True, returns th
 
 ## Returns
 
-**Any or list of Any**
-
-Parsed JSON content with type depending on input and parameters:
+`Any` or `list[Any]` - Parsed JSON content with type depending on input and parameters:
 
 - **Empty list** (`[]`): No valid JSON found in input
 - **Single value**: One JSON object found and `return_one_if_single=True`
@@ -149,7 +147,7 @@ result = extract_json(json_primitive)
 
 ### Example 2: Markdown Code Blocks
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 # LLM response with JSON block
@@ -169,13 +167,13 @@ Hope that helps!
 
 result = extract_json(llm_response)
 
-# {'id': '123', 'name': 'Bob', 'active': True}
+# Output: {'id': '123', 'name': 'Bob', 'active': True}
 
-```
+````
 
 ### Example 3: Multiple JSON Blocks
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 # Multiple markdown blocks
@@ -195,7 +193,7 @@ Second user:
 
 result = extract_json(multi_block)
 
-# [
+# Output: [
 
 # {'name': 'Alice', 'role': 'admin'}
 
@@ -208,13 +206,13 @@ result = extract_json(multi_block)
 single_block = '```json\n{"key": "value"}\n```'
 result = extract_json(single_block, return_one_if_single=False)
 
-# [{'key': 'value'}]  (wrapped in list)
+# Output: [{'key': 'value'}]  (wrapped in list)
 
-```
+````
 
 ### Example 4: Fuzzy JSON Parsing
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 # Malformed JSON (trailing commas, single quotes)
@@ -232,11 +230,11 @@ result = extract_json(malformed)
 # Fuzzy parsing succeeds
 result = extract_json(malformed, fuzzy_parse=True)
 # {'name': 'Charlie', 'tags': ['python', 'ai']}
-```
+````
 
 ### Example 5: List Input
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 # List of strings (joined with newlines)
@@ -259,7 +257,7 @@ mixed_lines = [
 
 result = extract_json(mixed_lines)
 # [{'a': 1}, {'b': 2}]
-```
+````
 
 ### Example 6: Empty and Invalid Input
 
@@ -292,7 +290,7 @@ result = extract_json(invalid_block, fuzzy_parse=True)
 
 ### Pattern 1: LLM Response Parsing
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 def parse_llm_response(response: str) -> dict | None:
@@ -320,14 +318,12 @@ I'll provide the user info:
 """
 
 data = parse_llm_response(llm_output)
-
-# {'user_id': 'abc123', 'verified': True}
-
-```
+# Output: {'user_id': 'abc123', 'verified': True}
+````
 
 ### Pattern 2: Multi-Document Extraction
 
-```python
+````python
 from lionherd_core.libs.string_handlers import extract_json
 
 def extract_all_json_objects(text: str) -> list[dict]:
@@ -359,7 +355,7 @@ all_docs = extract_all_json_objects(docs)
 
 # [{'doc': 1}, {'doc': 2}, {'doc': 3}]
 
-```
+````
 
 ### Pattern 3: Graceful Degradation
 

@@ -92,9 +92,7 @@ Number of decimal places for rounding (float only). Ignored when `num_type=int`.
 
 ## Returns
 
-**int or float**
-
-Converted and validated numeric value matching `num_type`.
+`int` or `float` - Converted and validated numeric value matching `num_type`.
 
 - Type guaranteed to match `num_type` parameter
 - Value guaranteed to be within bounds (if specified)
@@ -102,7 +100,7 @@ Converted and validated numeric value matching `num_type`.
 
 ## Raises
 
-**ValueError**
+### ValueError
 
 Raised in the following cases:
 
@@ -112,7 +110,7 @@ Raised in the following cases:
 - Value exceeds `upper_bound`
 - Value below `lower_bound`
 
-**TypeError**
+### TypeError
 
 Raised when input type cannot be converted to number:
 
