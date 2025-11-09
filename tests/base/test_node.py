@@ -1382,3 +1382,59 @@ class TestNodeContentValidationEdgeCases:
         # Content should be deserialized as CustomNode
         assert isinstance(outer.content, CustomNode)
         assert outer.content.custom_field == "value"
+
+    def test_primitive_content_raises_type_error(self):
+        """Test that primitive content types raise TypeError with helpful message.
+
+        Pattern:
+            Strict type enforcement for structured data
+
+        Design Rationale:
+            Node.content constraint forces structured, query-able data.
+            Primitives must be wrapped in dict or stored in Element.metadata.
+
+        Architectural Identity:
+            Node is the composition layer - content must be:
+            - dict: Unstructured but query-able (JSONB one-stop-shop)
+            - Serializable: Rich nested structures (graph-of-graphs)
+            - BaseModel: Pydantic models (typed + validated)
+            - None: Optional content
+
+        Rejected Types:
+            - str, int, float, bool: Not structured or query-able
+            - list, tuple: Not key-value namespaces
+            - Use Element.metadata for simple key-value pairs instead
+
+        Error Message Requirements:
+            - Identifies type constraint
+            - Shows actual type received
+            - Provides actionable guidance (wrap in dict or use Element.metadata)
+
+        Use Case:
+            Migration from unstructured APIs requires explicit structured conversion.
+            Forces pit-of-success: developers must think in structured terms.
+
+        Expected:
+            TypeError with guidance to use dict or Element.metadata
+        """
+        # Test primitive string rejection
+        with pytest.raises(
+            TypeError, match="content must be Serializable, BaseModel, dict, or None"
+        ):
+            Node(content="primitive string")
+
+        # Test primitive int rejection with type in error message
+        with pytest.raises(TypeError, match="Got int"):
+            Node(content=42)
+
+        # Test primitive float rejection
+        with pytest.raises(TypeError, match="Got float"):
+            Node(content=3.14)
+
+        # Test primitive bool rejection
+        with pytest.raises(TypeError, match="Got bool"):
+            Node(content=True)
+
+        # Test list rejection (not a namespace)
+        with pytest.raises(TypeError, match="Got list"):
+            Node(content=[1, 2, 3])
