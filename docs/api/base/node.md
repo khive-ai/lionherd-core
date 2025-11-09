@@ -91,9 +91,9 @@ Optional embedding vector for semantic search and vector databases.
 
 - Type: `list[float]` (validated and normalized)
 - Validation: Must contain only numeric values, cannot be empty list
-- Coercion: Integers auto-convert to floats, JSON strings parse to lists
+- Coercion: Integers auto-convert to floats, JSON strings parse to lists during
+  INPUT validation
 - Default: `None`
-- Note: DB mode serializes embeddings as JSON strings for database compatibility
 
 **id** : UUID or str, optional (inherited from Element)
 
@@ -492,7 +492,7 @@ node2 = Node(content={"key": "value", "nested": [1, 2, 3]})
 node3 = Node(content={"items": ["a", "b", "c"]})
 
 # Nested Elements
-from lionherd_core import Element
+from lionherd_core.base import Element
 inner = Element(metadata={"type": "inner"})
 outer = Node(content=inner)
 
