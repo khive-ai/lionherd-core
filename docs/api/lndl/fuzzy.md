@@ -637,9 +637,10 @@ levenshtein("titel", "tidle")   # 0.833 (1 edit) - but "tidle" is nonsense
 - **Related Errors**:
   - [`MissingFieldError`](errors.md#missingfielderror): No match above threshold
   - [`AmbiguousMatchError`](errors.md#ambiguousmatcherror): Tie detection
-- **Related Guides**:
-  - [LNDL Overview](../../user_guide/lndl.md): LNDL syntax and concepts
-  - [Fuzzy Matching Guide](../../user_guide/fuzzy_matching.md): Best practices
+- **Related Modules**:
+  - [LNDL Resolver](resolver.md): Strict parsing and validation
+  - [LNDL Parser](parser.md): LNDL response parsing
+  - [LNDL Types](types.md): Type definitions
 
 ## Examples
 
