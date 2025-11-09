@@ -141,13 +141,13 @@ async def alcall(
 **Examples:**
 
 ```python
+import asyncio
 from lionherd_core.ln import alcall
 
 # Basic parallel execution
 async def fetch_data(url: str) -> dict:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        return response.json()
+    await asyncio.sleep(0.1)  # Simulate API call
+    return {"url": url, "data": "success"}
 
 urls = ["https://api.example.com/1", "https://api.example.com/2"]
 results = await alcall(urls, fetch_data)
@@ -227,11 +227,12 @@ async def bcall(
 **Examples:**
 
 ```python
+import asyncio
 from lionherd_core.ln import bcall
 
 # Process large dataset in batches
 async def process_item(item: dict) -> dict:
-    # Some processing logic
+    await asyncio.sleep(0.01)  # Simulate processing
     return {"id": item["id"], "processed": True}
 
 large_dataset = [{"id": i} for i in range(10000)]
@@ -244,7 +245,6 @@ async for batch_results in bcall(
 ):
     # Process each batch of 100 results as they complete
     print(f"Processed {len(batch_results)} items")
-    await save_to_database(batch_results)
 ```
 
 **Notes:**
@@ -299,6 +299,7 @@ class AlcallParams(Params):
 **Examples:**
 
 ```python
+import asyncio
 from lionherd_core.ln import AlcallParams
 
 # Create reusable parameter set
@@ -309,9 +310,14 @@ api_params = AlcallParams(
     retry_timeout=10.0,
 )
 
-# Use multiple times
-results1 = await api_params(urls1, fetch_data)
-results2 = await api_params(urls2, fetch_data, retry_attempts=5)  # Override
+# Use multiple times with any async function
+async def fetch_data(url: str) -> dict:
+    await asyncio.sleep(0.05)
+    return {"url": url, "status": "ok"}
+
+urls = ["https://api.example.com/1", "https://api.example.com/2"]
+results1 = await api_params(urls, fetch_data)
+results2 = await api_params(urls, fetch_data, retry_attempts=5)  # Override
 ```
 
 ### `BcallParams`
@@ -336,6 +342,7 @@ class BcallParams(AlcallParams):
 **Examples:**
 
 ```python
+import asyncio
 from lionherd_core.ln import BcallParams
 
 # Create reusable batch processing config
@@ -345,6 +352,11 @@ batch_params = BcallParams(
     retry_attempts=2,
 )
 
+async def process_item(item: dict) -> dict:
+    await asyncio.sleep(0.01)
+    return {"id": item["id"], "processed": True}
+
+large_dataset = [{"id": i} for i in range(1000)]
 async for batch in batch_params(large_dataset, process_item):
     print(f"Batch completed: {len(batch)} items")
 ```
@@ -511,7 +523,6 @@ Here's the task:
   "status": "pending"
 }
 ```
-
 """
 
 # Fuzzy parse and validate
@@ -529,22 +540,9 @@ print(task)  # Task(task_name="Fix bug", priority=1, status="pending")
 existing_task = Task(task_name="test", priority=2, status="done")
 result = fuzzy_validate_pydantic(existing_task, Task)
 assert result is existing_task  # Same object
-
-# Custom fuzzy matching parameters
-
-from lionherd_core.ln import FuzzyMatchKeysParams
-
-task = fuzzy_validate_pydantic(
-    llm_response,
-    Task,
-    fuzzy_match=True,
-    fuzzy_match_params=FuzzyMatchKeysParams(
-        similarity_threshold=0.9,
-        handle_unmatched="remove",
-    ),
-)
-
 ````
+
+See [Tutorials](../../tutorials/) for advanced patterns like custom fuzzy matching parameters and recursive validation.
 
 **Notes:**
 
@@ -601,20 +599,24 @@ def fuzzy_validate_mapping(
 
 ```python
 from lionherd_core.ln import fuzzy_validate_mapping
+from pydantic import BaseModel
+
+class User(BaseModel):
+    user_id: int
+    username: str
+    email: str
 
 # Expected structure
 expected_keys = ["user_id", "username", "email"]
 
 # Various input formats
 json_str = '{"userId": 1, "userName": "alice", "email": "a@b.com"}'
-xml_obj = SomeXMLObject()  # Has to_dict() method
-pydantic_model = SomeModel(user_id=1, username="alice", email="a@b.com")
+pydantic_model = User(user_id=1, username="alice", email="a@b.com")
 
 # All convert and validate consistently
 result1 = fuzzy_validate_mapping(json_str, expected_keys, fuzzy_match=True)
-result2 = fuzzy_validate_mapping(xml_obj, expected_keys, fuzzy_match=True)
-result3 = fuzzy_validate_mapping(pydantic_model, expected_keys, fuzzy_match=True)
-# All produce: {"user_id": 1, "username": "alice", "email": "a@b.com"}
+result2 = fuzzy_validate_mapping(pydantic_model, expected_keys, fuzzy_match=True)
+# Both produce: {"user_id": 1, "username": "alice", "email": "a@b.com"}
 
 # Graceful error handling
 result = fuzzy_validate_mapping(
@@ -707,7 +709,7 @@ assert hash_dict(d1) == hash_dict(d2)  # Same hash
 nested = {"users": [{"id": 1}, {"id": 2}], "count": 2}
 h = hash_dict(nested)
 
-# Pydantic model hashing
+# Pydantic model hashing (content-based)
 from pydantic import BaseModel
 
 class User(BaseModel):
@@ -716,7 +718,7 @@ class User(BaseModel):
 
 user1 = User(name="alice", age=30)
 user2 = User(name="alice", age=30)
-assert hash_dict(user1) == hash_dict(user2)  # Content-based
+assert hash_dict(user1) == hash_dict(user2)
 
 # Set hashing (order-independent)
 s1 = {3, 1, 2}
@@ -830,7 +832,7 @@ json_str = json_dumps(data)
 # Decimal as float (smaller, faster, precision loss)
 json_str = json_dumps(data, decimal_as_float=True)
 
-# Pydantic models (auto-handled)
+# Pydantic models (auto-handled via model_dump)
 from pydantic import BaseModel
 
 class User(BaseModel):
@@ -839,7 +841,7 @@ class User(BaseModel):
 
 user = User(name="alice", email="a@b.com")
 json_str = json_dumps(user)
-# Calls user.model_dump() automatically
+# Result: '{"name":"alice","email":"a@b.com"}'
 
 # Deterministic output (for comparison/hashing)
 json_str = json_dumps(data, sort_keys=True, deterministic_sets=True)
@@ -1058,31 +1060,18 @@ def get_orjson_default(
 ```python
 from lionherd_core.ln import get_orjson_default
 import orjson
-from typing import NamedTuple
 
-# Custom type serializer
-class Point(NamedTuple):
-    x: float
-    y: float
+# Build default serializer with safe fallback
+default_fn = get_orjson_default(safe_fallback=True)
 
-def serialize_point(p: Point) -> dict:
-    return {"x": p.x, "y": p.y}
-
-# Build custom serializer
-default_fn = get_orjson_default(
-    additional={Point: serialize_point},
-)
-
-# Use with orjson
-data = {"location": Point(1.0, 2.0)}
+# Use with orjson for safe logging
+data = {"value": object(), "count": 42}
 json_bytes = orjson.dumps(data, default=default_fn)
-# b'{"location":{"x":1.0,"y":2.0}}'
+# Falls back gracefully for unknown types
 
-# Safe fallback for logging
-log_serializer = get_orjson_default(
-    safe_fallback=True,
-    fallback_clip=500,
-)
+# For custom types, use json_dumps instead
+from lionherd_core.ln import json_dumps
+json_str = json_dumps(data, safe_fallback=True)
 ```
 
 **Notes:**
@@ -1228,25 +1217,10 @@ data = [(1, 2), {3, 4}, [5, 6]]
 result = to_list(data, flatten=True, flatten_tuple_set=True)
 # [1, 2, 3, 4, 5, 6]
 
-# LLM output processing
-from pydantic import BaseModel
-
-class TaskList(BaseModel):
-    tasks: list[str]
-
-llm_output = [
-    TaskList(tasks=["task1", "task2"]),
-    TaskList(tasks=["task3"]),
-    None,  # Invalid output
-]
-
-tasks = to_list(
-    llm_output,
-    use_values=True,  # Extract tasks field
-    flatten=True,     # Flatten nested lists
-    dropna=True,      # Remove None
-)
-# ["task1", "task2", "task3"]
+# Flatten and clean nested lists
+nested = [[1, 2], [3, [4, 5]], 6]
+result = to_list(nested, flatten=True, dropna=True)
+# [1, 2, 3, 4, 5, 6]
 ```
 
 **Notes:**
@@ -1254,7 +1228,7 @@ tasks = to_list(
 - Pydantic Undefined/Unset treated as None for dropna
 - Strings/bytes not flattened (unless use_values=True)
 - Unique uses hash_dict() for unhashable types
-- Mappings converted to [mapping] unless use_values=True
+- See Patterns section for LLM output processing examples
 
 ### `lcall()`
 
@@ -1407,7 +1381,7 @@ def to_dict(
 
 **Examples:**
 
-````python
+```python
 from lionherd_core.ln import to_dict
 from pydantic import BaseModel
 
@@ -1425,79 +1399,16 @@ json_str = '{"key": "value"}'
 result = to_dict(json_str)
 # {"key": "value"}
 
-# Fuzzy JSON parsing (markdown code blocks)
-markdown = """
-Here's the data:
-```json
-{"key": "value"}
-```
-
-"""
-result = to_dict(markdown, fuzzy_parse=True)
-
-# {"key": "value"}
-
-# Dataclass
-
-from dataclasses import dataclass
-
-@dataclass
-class Point:
-    x: float
-    y: float
-
-point = Point(1.0, 2.0)
-result = to_dict(point)
-
-# {"x": 1.0, "y": 2.0}
-
 # Iterable (converted to enumerated dict)
-
 result = to_dict([10, 20, 30])
-
 # {0: 10, 1: 20, 2: 30}
 
-# Set
-
-result = to_dict({1, 2, 3})
-
-# {1: 1, 2: 2, 3: 3}
-
-# Enum class
-
-from enum import Enum
-
-class Status(Enum):
-    PENDING = "pending"
-    DONE = "done"
-
-result = to_dict(Status, use_enum_values=True)
-
-# {"PENDING": "pending", "DONE": "done"}
-
-# Recursive conversion
-
-nested = {
-    "user": '{"name": "alice"}',  # JSON string
-    "items": [(1, 2), (3, 4)],
-}
-result = to_dict(nested, recursive=True, fuzzy_parse=True)
-
-# {
-
-# "user": {"name": "alice"},  # Parsed
-
-# "items": {0: {0: 1, 1: 2}, 1: {0: 3, 1: 4}}  # Enumerated
-
-# }
-
 # Suppress errors
-
 result = to_dict("invalid data", suppress=True)
-
 # {}
+```
 
-````
+See [Patterns](#usage-patterns) section and [Tutorials](../../tutorials/) for advanced conversion strategies (fuzzy JSON parsing, recursive conversion, enum handling).
 
 **Notes:**
 
@@ -1834,48 +1745,50 @@ task = fuzzy_validate_pydantic(
 )
 
 # Process list outputs
-
-tasks_list = [task1, task2, None, task3]
-clean_tasks = to_list(tasks_list, dropna=True, unique=True)
-
-````
+tasks_list = [task, task, None]  # task defined above
+clean_tasks = to_list(tasks_list, dropna=True)
+```
 
 ### Pattern 2: Parallel API Calls with Retry
 
 ```python
+import asyncio
 from lionherd_core.ln import alcall, bcall
 
-# Fetch data from multiple endpoints
-urls = ["https://api.example.com/users/1", ...]
+# Define async worker
+async def fetch_data(url: str) -> dict:
+    await asyncio.sleep(0.1)
+    return {"url": url, "status": "ok"}
 
+# Fetch data from multiple endpoints with retry
+urls = ["https://api.example.com/users/1", "https://api.example.com/users/2"]
 results = await alcall(
     urls,
     fetch_data,
     retry_attempts=3,
     retry_backoff=2.0,
     max_concurrent=10,
-    retry_timeout=30.0,
     return_exceptions=True,  # Don't fail on single error
 )
-
-# Process large dataset in batches
-async for batch in bcall(
-    large_dataset,
-    process_item,
-    batch_size=100,
-    max_concurrent=5,
-):
-    await save_results(batch)
 ```
+
+See [Patterns](../../tutorials/) for large dataset batch processing examples.
 
 ### Pattern 3: High-Performance JSON Serialization
 
 ```python
 from lionherd_core.ln import json_dumps, json_lines_iter
+from pydantic import BaseModel
+from datetime import datetime
+from pathlib import Path
+
+class User(BaseModel):
+    name: str
+    email: str
 
 # Serialize complex data
 data = {
-    "users": [User(name="alice"), User(name="bob")],
+    "users": [User(name="alice", email="a@b.com"), User(name="bob", email="b@c.com")],
     "timestamp": datetime.now(),
     "config": {"path": Path("/tmp/data")},
 }
@@ -1883,7 +1796,8 @@ data = {
 # JSON string (auto-handles Pydantic, Path, datetime)
 json_str = json_dumps(data, pretty=True)
 
-# Stream large dataset to file
+# Stream large dataset to NDJSON file
+users = [User(name="alice", email="a@b.com"), User(name="bob", email="b@c.com")]
 with open("users.jsonl", "wb") as f:
     for line in json_lines_iter(users):
         f.write(line)
@@ -1894,37 +1808,42 @@ with open("users.jsonl", "wb") as f:
 ```python
 from lionherd_core.ln import hash_dict
 
-# Cache LLM responses by input hash
+# Cache responses by input hash
 cache = {}
 
-def get_llm_response(prompt: dict) -> str:
+def get_response(prompt: dict) -> str:
     cache_key = hash_dict(prompt)
     if cache_key in cache:
         return cache[cache_key]
-
-    response = call_llm(prompt)
+    # Call API or LLM here
+    response = f"Response for {prompt}"
     cache[cache_key] = response
     return response
 
-# Deduplicate configs
+# Deduplicate configs (order-independent)
 configs = [{"model": "gpt-4"}, {"model": "gpt-4"}, {"model": "claude"}]
 unique_configs = list({hash_dict(c): c for c in configs}.values())
+# Result: [{"model": "gpt-4"}, {"model": "claude"}]
 ```
 
 ### Pattern 5: Universal Data Conversion
 
 ```python
 from lionherd_core.ln import to_dict, to_list
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
 
 # Convert various formats to dict
 sources = [
     '{"key": "value"}',           # JSON string
     User(name="alice"),           # Pydantic model
     {"nested": [1, 2, 3]},        # Dict
-    Point(x=1, y=2),              # Dataclass
 ]
 
-dicts = [to_dict(s, fuzzy_parse=True, recursive=True) for s in sources]
+dicts = [to_dict(s) for s in sources]
+# All converted to dict format
 
 # Convert to lists with transformations
 nested = [[1, 2], [3, [4, 5]], None]

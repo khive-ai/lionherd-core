@@ -527,7 +527,7 @@ result = lcall(
 ```python
 from lionherd_core.ln import lcall
 
-# Simulate API responses with nested structures
+# Simulate API response data
 api_responses = [
     {"users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]},
     {"users": [{"id": 3, "name": "Charlie"}]},
@@ -535,16 +535,17 @@ api_responses = [
 ]
 
 def extract_names(response):
+    """Extract user names from response."""
     users = response.get("users")
     if users is None:
-        return None
+        return None  # Filtered by output_dropna
     return [u["name"] for u in users]
 
 all_names = lcall(
     api_responses,
     extract_names,
-    output_flatten=True,
-    output_dropna=True
+    output_flatten=True,    # Flatten nested [[...], [...], ...]
+    output_dropna=True      # Remove None from failed responses
 )
 # ['Alice', 'Bob', 'Charlie']
 ```

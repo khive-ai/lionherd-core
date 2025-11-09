@@ -1001,7 +1001,7 @@ from lionherd_core.ln import alcall
 
 async def insert_record(data: dict) -> str:
     """Insert record and return ID."""
-    return await db.insert("users", data)
+    return await db.insert("users", data)  # db.insert: user-defined function
 
 # Nested data with duplicates and None values
 raw_data = [
@@ -1033,7 +1033,7 @@ async def process_file(filepath: str) -> dict:
     """Read and process file."""
     async with aiofiles.open(filepath, 'r') as f:
         content = await f.read()
-    return analyze_text(content)
+    return analyze_text(content)  # analyze_text: user-defined function
 
 # Process all .txt files in directory
 import glob
