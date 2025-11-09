@@ -33,7 +33,7 @@ def test_graph_add_edge_race_condition_forced():
     graph = Graph()
 
     # Add nodes
-    nodes = [Node(content=f"node_{i}") for i in range(5)]
+    nodes = [Node(content={"value": f"node_{i}"}) for i in range(5)]
     for node in nodes:
         graph.add_node(node)
 
@@ -113,7 +113,7 @@ def test_graph_add_edge_race_amplified():
     graph = VulnerableGraph()
 
     # Add nodes
-    nodes = [Node(content=f"node_{i}") for i in range(3)]
+    nodes = [Node(content={"value": f"node_{i}"}) for i in range(3)]
     for node in nodes:
         graph.add_node(node)
 

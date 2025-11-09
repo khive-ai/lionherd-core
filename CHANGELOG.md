@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **BREAKING**: `Element.to_dict()` `created_at_format` now applies to ALL modes
+  (#39). DB mode default changed from `isoformat` (string) to `datetime` (object)
+  for ORM compatibility. Migration: use `to_dict(mode='db',
+  created_at_format='isoformat')` for backward compatibility.
+
+### Added
+
+- Comprehensive Element API documentation and reference notebook (#39)
+
 ## [1.0.0a3](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha3) - 2025-11-06
 
 ### Fixed

@@ -132,7 +132,7 @@ class Element(BaseModel):
             **kwargs: Passed to model_dump()
         """
         if created_at_format is None:
-            created_at_format = "isoformat" if mode in ("json", "db") else "datetime"
+            created_at_format = "isoformat" if mode == "json" else "datetime"
 
         if meta_key is None and mode == "db":
             meta_key = "node_metadata"
@@ -148,12 +148,23 @@ class Element(BaseModel):
         else:
             raise ValueError(f"Invalid mode: {mode}. Must be 'python', 'json', or 'db'")
 
-        if "created_at" in data and mode == "python":
+        if "created_at" in data:
             if created_at_format == "isoformat":
-                data["created_at"] = self.created_at.isoformat()
+                # json/db modes already converted via orjson, python mode needs conversion
+                if mode == "python":
+                    data["created_at"] = self.created_at.isoformat()
             elif created_at_format == "timestamp":
                 data["created_at"] = self.created_at.timestamp()
-            # "datetime" is default for python mode, already in correct format
+            elif created_at_format == "datetime":
+                # Only valid for python/db modes - json mode requires JSON-serializable
+                if mode == "json":
+                    raise ValueError(
+                        "created_at_format='datetime' not valid for mode='json'. "
+                        "Use 'isoformat' or 'timestamp' for JSON serialization."
+                    )
+                # db mode: convert isoformat string back to datetime
+                if mode == "db" and isinstance(data["created_at"], str):
+                    data["created_at"] = self.created_at
 
         # Rename metadata key if specified (works with any mode)
         if meta_key and "metadata" in data:
