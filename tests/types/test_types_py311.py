@@ -333,3 +333,17 @@ def test_sentinel_union_syntax():
     assert UndefinedType in args7
     assert Unset not in args7
     assert Undefined not in args7
+
+    # Test edge case: invalid operands (non-type values) should still work
+    # Python's Union handles these gracefully by accepting the value as-is
+    result8 = Unset | 123
+    args8 = get_args(result8)
+    assert UnsetType in args8
+    assert 123 in args8  # Union accepts literal integers
+
+    # Test edge case: self-union (type | same type)
+    # Python's Union deduplicates these automatically
+    result9 = str | str
+    args9 = get_args(result9)
+    # Union[str, str] collapses to just str, so get_args returns ()
+    assert args9 == () or args9 == (str,)  # Python typing behavior varies by version

@@ -847,11 +847,11 @@ Without `TypeGuard`, type checkers wouldn't narrow the type, requiring manual ty
 - **Related Types**:
   - [Optional](https://docs.python.org/3/library/typing.html#typing.Optional): Standard library optional type (use when `None` suffices)
   - [HashableModel](model.md): Content-based hashing (sentinels are identity-based)
-- **Related Guides**:
-  - [Type Safety Guide](../../user_guide/type_safety.md): Type narrowing and TypeGuards
-  - [API Design Guide](../../user_guide/api_design.md): When to use sentinels vs Optional
-- **Related Patterns**:
-  - [PATCH Endpoints](../../patterns/http.md#patch-semantics): Partial update semantics with `Unset`
+- **Related Guides** (documentation pending):
+  - Type Safety Guide: Type narrowing and TypeGuards
+  - API Design Guide: When to use sentinels vs Optional
+- **Related Patterns** (documentation pending):
+  - PATCH Endpoints: Partial update semantics with `Unset`
 
 ## Examples
 
