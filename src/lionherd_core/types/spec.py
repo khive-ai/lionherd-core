@@ -113,6 +113,13 @@ class Spec:
         """Init with type and metadata. Args: base_type, Meta objects, kw as Meta."""
         metas = CommonMeta.prepare(*args, metadata=metadata, **kw)
 
+        # Validate name is a valid string if provided
+        meta_dict = {m.key: m.value for m in metas}
+        if "name" in meta_dict:
+            name_value = meta_dict["name"]
+            if not isinstance(name_value, str) or not name_value:
+                raise ValueError("Spec name must be a non-empty string")
+
         if not_sentinel(base_type, True):
             import types
 
