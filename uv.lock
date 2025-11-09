@@ -731,6 +731,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "datamodel-code-generator" },
+]
 schema-gen = [
     { name = "datamodel-code-generator" },
 ]
@@ -762,10 +765,11 @@ docs = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.7.0" },
     { name = "datamodel-code-generator", marker = "extra == 'schema-gen'", specifier = ">=0.25.0" },
+    { name = "lionherd-core", extras = ["schema-gen"], marker = "extra == 'all'" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
     { name = "pydapter", specifier = ">=1.2.0" },
 ]
-provides-extras = ["schema-gen"]
+provides-extras = ["schema-gen", "all"]
 
 [package.metadata.requires-dev]
 dev = [
