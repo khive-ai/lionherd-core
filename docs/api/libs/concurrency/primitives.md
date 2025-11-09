@@ -201,16 +201,17 @@ async with sem:
 #### Rate Limiting Concurrent Operations
 
 ```python
-from lionherd_core.libs.concurrency import Semaphore, gather
+from lionherd_core.libs.concurrency import Semaphore, gather, sleep
 
 # Allow max 5 concurrent API calls
 api_limiter = Semaphore(5)
 
 async def fetch_data(url: str):
+    """Simulate API call."""
     async with api_limiter:
         # Only 5 tasks can execute this block concurrently
-        response = await http_client.get(url)
-        return response.json()
+        await sleep(0.1)  # Simulate network delay
+        return {"url": url, "data": f"result_from_{url}"}
 
 # Launch 100 tasks, but only 5 run concurrently
 tasks = [fetch_data(f"https://api.example.com/data/{i}") for i in range(100)]
@@ -376,12 +377,13 @@ async with limiter:
 #### Managing Limited Resources
 
 ```python
-from lionherd_core.libs.concurrency import CapacityLimiter
+from lionherd_core.libs.concurrency import CapacityLimiter, sleep
 
 # Limit total memory usage (100 MB = 100 tokens)
 memory_limiter = CapacityLimiter(100.0)
 
 async def process_batch(data: list):
+    """Process batch with memory-based capacity limiting."""
     # Acquire tokens based on estimated memory usage
     batch_size = len(data)  # 1 token per MB
     for _ in range(batch_size):
@@ -389,7 +391,8 @@ async def process_batch(data: list):
 
     try:
         # Process data
-        result = await compute(data)
+        await sleep(0.2)  # Simulate computation
+        result = {"batch_size": len(data), "processed": True}
         return result
     finally:
         for _ in range(batch_size):
@@ -399,14 +402,19 @@ async def process_batch(data: list):
 #### Dynamic Capacity Adjustment
 
 ```python
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core.libs.concurrency import sleep, CapacityLimiter
+import random
 
 limiter = CapacityLimiter(10.0)
 
 # Monitor and adjust capacity based on system load
 async def adjust_capacity():
+    """Dynamically adjust capacity based on simulated load."""
     while True:
-        system_load = await get_system_load()
+        # Simulate getting system load
+        await sleep(1.0)
+        system_load = random.uniform(0.0, 1.0)
+
         if system_load > 0.8:
             limiter.total_tokens = 5.0  # Reduce capacity
         else:
@@ -577,7 +585,7 @@ async with queue:
 #### Producer-Consumer Pattern
 
 ```python
-from lionherd_core.libs.concurrency import Queue, gather
+from lionherd_core.libs.concurrency import Queue, gather, sleep
 
 queue = Queue.with_maxsize(50)
 
@@ -593,7 +601,8 @@ async def consumer():
         if item is None:
             break
         print(f"Consumed: {item}")
-        await process(item)
+        # Process item
+        await sleep(0.05)  # Simulate processing
 
 async with queue:
     await gather(producer(), consumer())
@@ -602,7 +611,7 @@ async with queue:
 #### Work Distribution
 
 ```python
-from lionherd_core.libs.concurrency import gather
+from lionherd_core.libs.concurrency import gather, sleep, Queue
 
 # Distribute work across multiple workers
 queue = Queue.with_maxsize(100)
@@ -612,7 +621,9 @@ async def worker(worker_id: int):
         task = await queue.get()
         if task is None:
             break
-        result = await process_task(task)
+        # Process task
+        await sleep(0.1)  # Simulate processing
+        result = {"task_id": task, "status": "completed"}
         print(f"Worker {worker_id} processed {task}: {result}")
 
 async def distribute_work(tasks: list):
@@ -731,19 +742,21 @@ def statistics(self) -> anyio.EventStatistics: ...
 #### Coordinating Task Startup
 
 ```python
-from lionherd_core.libs.concurrency import Event, gather
+from lionherd_core.libs.concurrency import Event, gather, sleep
 
 ready = Event()
 
 async def setup():
     # Perform initialization
-    await initialize_resources()
+    await sleep(0.5)  # Simulate resource initialization
+    print("Setup complete")
     ready.set()  # Signal that setup is complete
 
 async def worker():
     await ready.wait()  # Wait for setup to complete
     # Start processing
-    await do_work()
+    await sleep(0.2)  # Simulate work
+    print("Worker processing")
 
 await gather(setup(), worker(), worker(), worker())
 ```
@@ -751,13 +764,15 @@ await gather(setup(), worker(), worker(), worker())
 #### One-Time Notification
 
 ```python
-from lionherd_core.libs.concurrency import sleep, gather
+from lionherd_core.libs.concurrency import sleep, gather, Event
 
 shutdown_event = Event()
 
 async def monitor():
     while not shutdown_event.is_set():
-        await check_health()
+        # Check health
+        await sleep(0.5)  # Simulate health check
+        print("Health check passed")
         await sleep(1)
     print("Shutdown initiated")
 
@@ -964,7 +979,8 @@ async def consumer():
                 await condition.wait()  # Wait for items
             item = buffer.pop(0)
             condition.notify()  # Wake producers
-        await process(item)
+        # Process item
+        await sleep(0.05)  # Simulate processing
         count += 1
 ```
 
@@ -1119,38 +1135,38 @@ sem = Semaphore(5)
 ### Example 1: Rate-Limited Batch Processing
 
 ```python
-from lionherd_core.libs.concurrency import Semaphore, Queue, gather
+from lionherd_core.libs.concurrency import Semaphore, Queue, gather, sleep
 
-# Limit concurrent API calls to 5
-api_limiter = Semaphore(5)
-
-# Queue for results
+# Limit concurrent operations to 5
+rate_limiter = Semaphore(5)
 results_queue = Queue.with_maxsize(100)
 
-async def fetch_and_process(url: str):
-    async with api_limiter:
-        data = await fetch_data(url)
-        result = await process_data(data)
+async def fetch_and_process(item_id: int):
+    async with rate_limiter:
+        # Simulate API call
+        await sleep(0.1)
+        result = {"id": item_id, "data": f"processed_{item_id}"}
         await results_queue.put(result)
 
-async def collect_results():
+async def collect_results(count: int):
     results = []
-    for _ in range(len(urls)):
+    for _ in range(count):
         result = await results_queue.get()
         results.append(result)
     return results
 
-urls = [f"https://api.example.com/item/{i}" for i in range(100)]
+# Process 100 items with max 5 concurrent
+item_ids = range(100)
 
 async with results_queue:
-    fetch_tasks = [fetch_and_process(url) for url in urls]
+    fetch_tasks = [fetch_and_process(i) for i in item_ids]
 
-    # Run fetch tasks and result collection concurrently
-    results = await gather(
+    # Run all tasks and collect results
+    _, results = await gather(
         gather(*fetch_tasks),
-        collect_results()
+        collect_results(len(item_ids))
     )
-    results = results[1]  # Extract collected results
+    print(f"Processed {len(results)} items")
 ```
 
 ### Example 2: Graceful Shutdown Coordination
@@ -1170,20 +1186,19 @@ async def worker(worker_id: int):
 
     try:
         while not shutdown_event.is_set():
-            await do_work()
+            # Simulate work
             await sleep(1)
+            print(f"Worker {worker_id} processing...")
     finally:
         async with active_lock:
             active_tasks -= 1
 
 async def shutdown_handler():
-    # Wait for signal
+    # Wait then initiate shutdown
     await sleep(10)
-
-    # Initiate shutdown
     shutdown_event.set()
 
-    # Wait for workers to finish
+    # Wait for all workers to finish
     while True:
         async with active_lock:
             if active_tasks == 0:
@@ -1192,6 +1207,7 @@ async def shutdown_handler():
 
     print("All workers stopped cleanly")
 
+# Run 5 workers with graceful shutdown
 workers = [worker(i) for i in range(5)]
 await gather(*workers, shutdown_handler())
 ```
@@ -1199,7 +1215,8 @@ await gather(*workers, shutdown_handler())
 ### Example 3: Dynamic Resource Pool
 
 ```python
-from lionherd_core.libs.concurrency import CapacityLimiter, sleep, gather, create_task_group
+from lionherd_core.libs.concurrency import CapacityLimiter, sleep, create_task_group
+import random
 
 # Resource pool with dynamic sizing
 pool = CapacityLimiter(10.0)
@@ -1211,7 +1228,8 @@ class ResourceManager:
 
     async def adjust_capacity(self):
         while self.monitoring:
-            load = await get_system_load()
+            # Simulate system load
+            load = random.uniform(0, 1)
 
             if load > 0.9:
                 # Reduce capacity under heavy load
@@ -1223,29 +1241,29 @@ class ResourceManager:
                 new_capacity = self.pool.total_tokens
 
             self.pool.total_tokens = new_capacity
-            print(f"Adjusted capacity: {new_capacity} (load: {load})")
+            print(f"Capacity: {new_capacity:.1f} (load: {load:.2f})")
 
-            await sleep(30)
+            await sleep(2)
 
     async def use_resource(self, task_id: int):
         async with self.pool:
             print(f"Task {task_id} using resource "
                   f"({self.pool.borrowed_tokens}/{self.pool.total_tokens})")
-            await simulate_work()
+            await sleep(0.5)  # Simulate work
 
 manager = ResourceManager()
 
-# Use task group for structured concurrency
+# Run with structured concurrency
 async with create_task_group() as tg:
     tg.start_soon(manager.adjust_capacity)
-    for i in range(100):
+    for i in range(20):
         tg.start_soon(manager.use_resource, i)
 ```
 
 ### Example 4: Multi-Stage Pipeline
 
 ```python
-from lionherd_core.libs.concurrency import Queue, Event, gather
+from lionherd_core.libs.concurrency import Queue, Event, gather, sleep
 
 stage1_queue = Queue.with_maxsize(10)
 stage2_queue = Queue.with_maxsize(10)
@@ -1253,8 +1271,9 @@ done_event = Event()
 
 async def stage1_worker():
     """Fetch raw data"""
-    for i in range(100):
-        data = await fetch_raw_data(i)
+    for i in range(20):
+        await sleep(0.1)  # Simulate fetch
+        data = {"id": i, "value": f"raw_{i}"}
         await stage1_queue.put(data)
     await stage1_queue.put(None)  # Sentinel
 
@@ -1265,16 +1284,19 @@ async def stage2_worker():
         if data is None:
             await stage2_queue.put(None)
             break
-        processed = await process_data(data)
+        # Transform data
+        processed = {"id": data["id"], "result": data["value"].upper()}
         await stage2_queue.put(processed)
 
 async def stage3_worker():
     """Save results"""
+    results = []
     while True:
         result = await stage2_queue.get()
         if result is None:
             break
-        await save_result(result)
+        results.append(result)
+    print(f"Pipeline complete: {len(results)} items processed")
     done_event.set()
 
 async with stage1_queue, stage2_queue:
@@ -1284,5 +1306,4 @@ async with stage1_queue, stage2_queue:
         stage3_worker(),
     )
     await done_event.wait()
-    print("Pipeline complete")
 ```
