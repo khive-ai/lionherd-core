@@ -29,11 +29,10 @@ The `errors` module provides **backend-agnostic utilities** for handling cancell
 ## Module Exports
 
 ```python
-from lionherd_core.libs.concurrency._errors import (
+from lionherd_core.libs.concurrency import (
     get_cancelled_exc_class,
     is_cancelled,
     shield,
-    split_cancellation,
     non_cancel_subgroup,
 )
 ```
@@ -59,7 +58,7 @@ def get_cancelled_exc_class() -> type[BaseException]: ...
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import get_cancelled_exc_class
+>>> from lionherd_core.libs.concurrency import get_cancelled_exc_class
 
 # Get the cancellation exception class for current backend
 >>> cancel_exc = get_cancelled_exc_class()
@@ -67,8 +66,9 @@ def get_cancelled_exc_class() -> type[BaseException]: ...
 'CancelledError'  # asyncio backend
 
 # Use in exception handling
+>>> from lionherd_core.libs.concurrency import sleep
 >>> try:
-...     await some_async_operation()
+...     await sleep(1.0)  # Some async operation
 ... except get_cancelled_exc_class():
 ...     print("Operation was cancelled")
 ```
@@ -104,7 +104,7 @@ def is_cancelled(exc: BaseException) -> bool: ...
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import is_cancelled, get_cancelled_exc_class
+>>> from lionherd_core.libs.concurrency import is_cancelled, get_cancelled_exc_class
 
 # Test cancellation exception
 >>> cancel_exc = get_cancelled_exc_class()()
@@ -117,8 +117,9 @@ True
 False
 
 # Use in multi-exception handling
+>>> from lionherd_core.libs.concurrency import sleep
 >>> try:
-...     await some_operation()
+...     await sleep(1.0)  # Some operation
 ... except Exception as e:
 ...     if is_cancelled(e):
 ...         print("Cancelled - cleanup and exit")
@@ -134,7 +135,7 @@ Uses `isinstance()` check against `anyio.get_cancelled_exc_class()`, ensuring co
 **See Also:**
 
 - `get_cancelled_exc_class()`: Get the cancellation exception class
-- `split_cancellation()`: Split ExceptionGroups by cancellation status
+- `non_cancel_subgroup()`: Extract non-cancellation exceptions from ExceptionGroups
 
 ---
 
@@ -170,29 +171,36 @@ async def shield(
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import shield, get_cancelled_exc_class
+>>> from lionherd_core.libs.concurrency import shield, get_cancelled_exc_class
+>>> from lionherd_core.libs.concurrency import sleep
 >>> import anyio
 
-# Shield critical database commit
->>> async def save_critical_data(data):
-...     async with database.transaction():
-...         await database.insert(data)
-...         await database.commit()  # Must complete even if parent cancelled
+# Shield critical cleanup operation
+>>> async def critical_cleanup():
+...     """Critical cleanup that must complete."""
+...     await sleep(0.1)
+...     print("Critical cleanup done")
 
 >>> async def workflow():
 ...     try:
 ...         async with anyio.create_task_group() as tg:
-...             # This commit won't be interrupted by task group cancellation
-...             await shield(save_critical_data, {"key": "value"})
-...             tg.start_soon(other_task)
+...             # This cleanup won't be interrupted by task group cancellation
+...             await shield(critical_cleanup)
 ...     except get_cancelled_exc_class():
-...         print("Workflow cancelled, but data was saved")
+...         print("Workflow cancelled, but cleanup completed")
 
-# Shield cleanup operations
+# Shield multiple cleanup operations
 >>> async def cleanup_resources():
+...     async def close_connections():
+...         await sleep(0.05)
+...         print("Connections closed")
+...
+...     async def flush_logs():
+...         await sleep(0.05)
+...         print("Logs flushed")
+...
 ...     await shield(close_connections)
 ...     await shield(flush_logs)
-...     await shield(send_shutdown_signal)
 ```
 
 **Notes:**
@@ -206,82 +214,6 @@ Overuse of shielding can prevent graceful shutdown. Only shield **critical opera
 **See Also:**
 
 - `anyio.CancelScope`: Underlying cancellation scope primitive
-
----
-
-### `split_cancellation()`
-
-Split an ExceptionGroup into cancellation and non-cancellation subgroups.
-
-**Signature:**
-
-```python
-def split_cancellation(
-    eg: BaseExceptionGroup,
-) -> tuple[BaseExceptionGroup | None, BaseExceptionGroup | None]: ...
-```
-
-**Parameters:**
-
-- **eg** (BaseExceptionGroup): Exception group to split (Python 3.11+ ExceptionGroup)
-
-**Returns:**
-
-- **tuple[BaseExceptionGroup | None, BaseExceptionGroup | None]**:
-  - First element: Subgroup containing **only cancellation exceptions** (or None if empty)
-  - Second element: Subgroup containing **only non-cancellation exceptions** (or None if empty)
-
-**Examples:**
-
-```python
->>> from lionherd_core.libs.concurrency._errors import split_cancellation
->>> import anyio
-
-# Split mixed exception group
->>> async def main():
-...     try:
-...         async with anyio.create_task_group() as tg:
-...             tg.start_soon(task_that_gets_cancelled)
-...             tg.start_soon(task_that_raises_value_error)
-...             tg.start_soon(task_that_raises_type_error)
-...     except BaseExceptionGroup as eg:
-...         cancels, errors = split_cancellation(eg)
-...
-...         if cancels:
-...             print(f"Cancelled tasks: {len(cancels.exceptions)}")
-...
-...         if errors:
-...             print(f"Failed tasks: {len(errors.exceptions)}")
-...             for exc in errors.exceptions:
-...                 print(f"  - {type(exc).__name__}: {exc}")
-...             raise errors  # Re-raise only non-cancellation errors
-
-# Filter for error reporting
->>> async def run_workflow():
-...     try:
-...         await run_task_group()
-...     except BaseExceptionGroup as eg:
-...         _, errors = split_cancellation(eg)
-...         if errors:
-...             await log_errors(errors)
-...             raise errors
-```
-
-**Notes:**
-
-Uses Python 3.11+ `ExceptionGroup.split()` to preserve exception structure, tracebacks, `__cause__`, `__context__`, and `__notes__`. The split is based on `anyio.get_cancelled_exc_class()`, ensuring backend compatibility.
-
-**Behavior:**
-
-- Nested exception groups are preserved (split recurses)
-- Original exception metadata is maintained
-- Either return value may be None if that category is empty
-- Both may be None if input exception group is empty
-
-**See Also:**
-
-- `non_cancel_subgroup()`: Convenience function to get only non-cancellation errors
-- `is_cancelled()`: Check individual exceptions
 
 ---
 
@@ -306,7 +238,7 @@ def non_cancel_subgroup(eg: BaseExceptionGroup) -> BaseExceptionGroup | None: ..
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import non_cancel_subgroup
+>>> from lionherd_core.libs.concurrency import non_cancel_subgroup
 >>> import anyio
 
 # Simplify error reporting - ignore cancellations
@@ -339,20 +271,11 @@ def non_cancel_subgroup(eg: BaseExceptionGroup) -> BaseExceptionGroup | None: ..
 
 **Notes:**
 
-Convenience wrapper around `split_cancellation()` that returns only the non-cancellation subgroup (second element of tuple). Equivalent to:
-
-```python
-_, errors = split_cancellation(eg)
-return errors
-```
+Uses `BaseExceptionGroup.split()` internally to filter out cancellation exceptions, returning only the subgroup with actionable errors. Returns `None` if all exceptions were cancellations.
 
 **Use Case:**
 
 Simplifies error handling when you only care about actionable errors and want to ignore cancellations. Common pattern: graceful shutdown on cancellation, log/retry on errors.
-
-**See Also:**
-
-- `split_cancellation()`: Get both cancellation and non-cancellation subgroups
 
 ---
 
@@ -361,7 +284,7 @@ Simplifies error handling when you only care about actionable errors and want to
 ### Pattern 1: Graceful Shutdown with Error Reporting
 
 ```python
-from lionherd_core.libs.concurrency._errors import non_cancel_subgroup
+from lionherd_core.libs.concurrency import non_cancel_subgroup
 import anyio
 
 async def run_services():
@@ -386,7 +309,7 @@ async def run_services():
 ### Pattern 2: Critical Section Shielding
 
 ```python
-from lionherd_core.libs.concurrency._errors import shield
+from lionherd_core.libs.concurrency import shield
 import anyio
 
 async def process_transaction(data):
@@ -414,7 +337,7 @@ async def cleanup_on_shutdown():
 ### Pattern 3: Distinguish Cancellation from Errors
 
 ```python
-from lionherd_core.libs.concurrency._errors import is_cancelled, get_cancelled_exc_class
+from lionherd_core.libs.concurrency import is_cancelled, get_cancelled_exc_class
 from lionherd_core.libs.concurrency import sleep
 
 async def retry_on_error(operation, max_retries=3):
@@ -449,8 +372,11 @@ async def log_non_cancellation_errors(operation):
 ### Pattern 4: Parallel Task Error Aggregation
 
 ```python
-from lionherd_core.libs.concurrency._errors import split_cancellation
+from lionherd_core.libs.concurrency import non_cancel_subgroup
 import anyio
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def run_parallel_with_partial_failure(tasks):
     """Run tasks in parallel, report failures, succeed on partial completion."""
@@ -461,11 +387,8 @@ async def run_parallel_with_partial_failure(tasks):
             for task_id, task in tasks.items():
                 tg.start_soon(task, results, task_id)
     except BaseExceptionGroup as eg:
-        cancels, errors = split_cancellation(eg)
-
-        # Log cancellations (informational)
-        if cancels:
-            logger.info(f"{len(cancels.exceptions)} tasks cancelled")
+        # Extract actionable errors (filter out cancellations)
+        errors = non_cancel_subgroup(eg)
 
         # Handle errors (actionable)
         if errors:
@@ -480,6 +403,9 @@ async def run_parallel_with_partial_failure(tasks):
             else:
                 # Partial failure acceptable
                 logger.warning("Continuing with partial results")
+        else:
+            # All exceptions were cancellations - graceful shutdown
+            logger.info("All tasks cancelled gracefully")
 
     return results
 ```
@@ -579,7 +505,7 @@ except asyncio.CancelledError:  # Fails on trio!
 
 ```python
 # ✅ GOOD: Backend-agnostic
-from lionherd_core.libs.concurrency._errors import get_cancelled_exc_class, is_cancelled
+from lionherd_core.libs.concurrency import get_cancelled_exc_class, is_cancelled
 
 # Option 1: Exception class
 try:
@@ -652,82 +578,9 @@ Using `ExceptionGroup.split()` preserves all metadata, unlike manual filtering w
 
 ## Examples
 
-### Example 1: Graceful Service Shutdown
+> **Note:** For API reference, see function documentation above. For complex production patterns, see the concurrency tutorials.
 
-```python
-from lionherd_core.libs.concurrency._errors import non_cancel_subgroup, shield
-from lionherd_core.libs.concurrency import sleep
-import anyio
-import signal
-
-class ServiceManager:
-    def __init__(self):
-        self.running = True
-
-    async def run(self):
-        """Run services with graceful shutdown."""
-        # Set up signal handler for graceful shutdown
-        def handle_signal(signum, frame):
-            self.running = False
-
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
-
-        try:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(self.api_server)
-                tg.start_soon(self.worker_pool)
-                tg.start_soon(self.metrics_exporter)
-
-                # Wait for shutdown signal
-                while self.running:
-                    await sleep(1)
-
-                # Cancel all tasks
-                tg.cancel_scope.cancel()
-
-        except BaseExceptionGroup as eg:
-            # Filter out expected cancellations
-            errors = non_cancel_subgroup(eg)
-            if errors:
-                # Unexpected failures - log and alert
-                print(f"Services failed with errors: {errors}")
-                raise errors
-            else:
-                # Clean shutdown - all cancellations expected
-                print("Services stopped gracefully")
-
-        finally:
-            # Shield cleanup - must complete
-            await shield(self.cleanup_connections)
-            await shield(self.flush_logs)
-            print("Cleanup complete")
-
-    async def api_server(self):
-        # API server implementation
-        pass
-
-    async def worker_pool(self):
-        # Worker pool implementation
-        pass
-
-    async def metrics_exporter(self):
-        # Metrics implementation
-        pass
-
-    async def cleanup_connections(self):
-        # Close database, redis, etc.
-        pass
-
-    async def flush_logs(self):
-        # Ensure logs are written
-        pass
-
-# Run services
-anyio.run(ServiceManager().run)
-```
-
-### Example 2: Retry with Cancellation Awareness
+### Example: Retry with Cancellation Awareness
 
 ```python
 from lionherd_core.libs.concurrency import is_cancelled, sleep
@@ -776,150 +629,4 @@ async def main():
 anyio.run(main)
 ```
 
-### Example 3: Parallel Processing with Error Aggregation
-
-```python
-from lionherd_core.libs.concurrency import non_cancel_subgroup, sleep
-import anyio
-
-async def process_batch_with_partial_failure(items, min_success_rate=0.8):
-    """Process items in parallel, tolerate partial failures."""
-    results = {}
-    errors = {}
-
-    async def process_item(item_id, item):
-        try:
-            result = await process_single_item(item)
-            results[item_id] = result
-        except Exception as e:
-            errors[item_id] = e
-            raise
-
-    try:
-        async with anyio.create_task_group() as tg:
-            for item_id, item in items.items():
-                tg.start_soon(process_item, item_id, item)
-
-    except BaseExceptionGroup as eg:
-        # Extract non-cancellation errors
-        failures = non_cancel_subgroup(eg)
-
-        # Analyze failures
-        if failures:
-            failure_count = len(failures.exceptions)
-            total_count = len(items)
-            success_count = total_count - failure_count
-            success_rate = success_count / total_count
-
-            print(f"Batch processing: {success_count}/{total_count} succeeded")
-
-            # Log each failure
-            for exc in failures.exceptions:
-                print(f"  Error: {exc}")
-
-            # Check if success rate acceptable
-            if success_rate < min_success_rate:
-                print(f"Success rate {success_rate:.1%} below threshold {min_success_rate:.1%}")
-                raise failures
-            else:
-                print(f"Partial failure acceptable ({success_rate:.1%} success)")
-        else:
-            # All exceptions were cancellations
-            print("Processing cancelled - all tasks stopped gracefully")
-
-    return results
-
-async def process_single_item(item):
-    """Process a single item (implementation)."""
-    await sleep(0.1)  # Simulate work
-    if item.get("should_fail"):
-        raise ValueError(f"Item processing failed: {item}")
-    return {"processed": item}
-
-# Usage
-async def main():
-    items = {
-        "item1": {"data": "value1"},
-        "item2": {"data": "value2", "should_fail": True},
-        "item3": {"data": "value3"},
-        "item4": {"data": "value4"},
-    }
-
-    results = await process_batch_with_partial_failure(items, min_success_rate=0.5)
-    print(f"Final results: {results}")
-
-anyio.run(main)
-```
-
-### Example 4: Database Transaction with Guaranteed Commit
-
-```python
-from lionherd_core.libs.concurrency._errors import shield
-from lionherd_core.libs.concurrency import sleep
-
-class Database:
-    """Simplified database with async transactions."""
-
-    async def transaction(self):
-        return DatabaseTransaction()
-
-class DatabaseTransaction:
-    def __init__(self):
-        self.operations = []
-        self.committed = False
-
-    async def insert(self, data):
-        self.operations.append(("insert", data))
-        await sleep(0.01)  # Simulate I/O
-
-    async def commit(self):
-        print(f"Committing {len(self.operations)} operations...")
-        await sleep(0.1)  # Simulate commit I/O
-        self.committed = True
-        print("Transaction committed successfully")
-
-    async def rollback(self):
-        print("Rolling back transaction...")
-        await sleep(0.05)  # Simulate rollback I/O
-        self.operations.clear()
-        print("Transaction rolled back")
-
-async def save_user_data(db, user_data):
-    """Save user data with guaranteed commit/rollback."""
-    txn = await db.transaction()
-
-    try:
-        # Regular operations - cancellable
-        await txn.insert({"type": "user", "data": user_data})
-        await txn.insert({"type": "audit", "action": "user_created"})
-
-        # Shield commit - must complete atomically
-        await shield(txn.commit)
-        print("User data saved successfully")
-
-    except Exception as e:
-        # Shield rollback - must complete to maintain consistency
-        await shield(txn.rollback)
-        print(f"Transaction failed: {e}")
-        raise
-
-    finally:
-        # Verify transaction completed one way or another
-        if not txn.committed and txn.operations:
-            print("WARNING: Transaction neither committed nor rolled back!")
-
-# Usage with cancellation
-async def main():
-    db = Database()
-
-    async def run_with_timeout():
-        async with anyio.fail_after(5.0):  # 5 second timeout
-            await save_user_data(db, {"name": "Alice", "email": "alice@example.com"})
-
-    try:
-        await run_with_timeout()
-    except TimeoutError:
-        print("Operation timed out, but transaction was handled safely")
-
-anyio.run(main)
-```
+> **Note:** For complex patterns like graceful service shutdown, batch processing with partial failures, and database transactions with shielding, see the concurrency tutorials (issues [#67](https://github.com/khive-ai/lionherd-core/issues/67), [#68](https://github.com/khive-ai/lionherd-core/issues/68), [#69](https://github.com/khive-ai/lionherd-core/issues/69)).
