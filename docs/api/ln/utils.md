@@ -909,18 +909,18 @@ async def send_batched_messages(
         batch_size = sum(len(msg) for msg in batch)
         print(f"Sending batch: {len(batch)} messages, {batch_size} chars")
 
-        # Send batch
-        response = await api_client.send_batch(batch)
-        results.append(response)
+        # Process batch (example: could send to API, write to file, etc.)
+        result = {"batch_size": batch_size, "messages": len(batch), "data": batch}
+        results.append(result)
 
     return results
 
 # Usage
 messages = ["short", "medium length message", "x", "another message"]
 responses = await send_batched_messages(messages, max_batch_size=30)
-# Sending batch: 2 messages, 23 chars (indices [0, 2])
-# Sending batch: 1 messages, 21 chars (indices [1])
-# Sending batch: 1 messages, 15 chars (indices [3])
+# Sending batch: 2 messages, 23 chars
+# Sending batch: 1 messages, 21 chars
+# Sending batch: 1 messages, 15 chars
 ```
 
 ### Example 4: Plugin System with Validation

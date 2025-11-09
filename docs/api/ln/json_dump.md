@@ -866,19 +866,20 @@ log_json({"event": "error", "exception": Exception("Failed")})
 ```python
 from lionherd_core.ln._json_dump import json_lines_iter
 
-async def stream_database_results(query_results):
-    """Stream large query results as NDJSON."""
-    for json_line in json_lines_iter(query_results):
-        yield json_line
+# Stream iterable as NDJSON
+data = [{"id": 1}, {"id": 2}, {"id": 3}]
 
-# Usage with Starlette/FastAPI
+for json_line in json_lines_iter(data):
+    print(json_line)  # b'{"id":1}\n', b'{"id":2}\n', ...
+
+# Usage with FastAPI
 from starlette.responses import StreamingResponse
 
 @app.get("/export")
 async def export_data():
-    results = db.query("SELECT * FROM large_table")
+    results = db.execute("SELECT * FROM large_table")
     return StreamingResponse(
-        stream_database_results(results),
+        json_lines_iter(results),
         media_type="application/x-ndjson"
     )
 ```
@@ -887,26 +888,23 @@ async def export_data():
 
 ```python
 from lionherd_core.ln._json_dump import json_dumpb
-from functools import lru_cache
 
-@lru_cache(maxsize=128)
-def cached_serialize(obj_hash: int, obj: tuple) -> bytes:
-    """Cache serialization with content-based key."""
-    # Convert tuple back to dict for serialization
-    data = dict(obj)
-    return json_dumpb(
-        data,
-        sort_keys=True,           # Deterministic key order
-        deterministic_sets=True,  # Deterministic set order
-        decimal_as_float=False,   # Precise decimals
-    )
-
-# Usage
+# Ensure consistent output regardless of input order
 data = {"tags": {3, 1, 2}, "name": "test"}
-# Convert to hashable tuple for cache key
-key = hash(tuple(sorted(data.items())))
-result = cached_serialize(key, tuple(sorted(data.items())))
+
+json_output = json_dumpb(
+    data,
+    sort_keys=True,           # Alphabetical key order
+    deterministic_sets=True,  # Sorted set elements
+)
+
+# Same data, different order → identical output
+data2 = {"name": "test", "tags": {1, 2, 3}}
+json_output2 = json_dumpb(data2, sort_keys=True, deterministic_sets=True)
+assert json_output == json_output2  # ✓ Deterministic
 ```
+
+**Note**: For caching strategies, see [Tutorial: Content-Based Caching](../../tutorials/content_caching.md)
 
 ### Custom Type Handlers
 
@@ -914,26 +912,20 @@ result = cached_serialize(key, tuple(sorted(data.items())))
 from lionherd_core.ln._json_dump import get_orjson_default, json_dumpb
 from datetime import datetime
 
-# Define custom types
-class Timestamp:
-    def __init__(self, dt: datetime):
-        self.dt = dt
-
-    def to_unix(self) -> float:
-        return self.dt.timestamp()
-
-# Build custom default handler
+# Map custom types to serialization functions
 custom_default = get_orjson_default(
     additional={
-        Timestamp: lambda ts: ts.to_unix()
-    },
-    enum_as_name=True,
+        datetime: lambda dt: dt.timestamp(),  # datetime → Unix timestamp
+    }
 )
 
-# Use in serialization
-data = {"created": Timestamp(datetime.now())}
-json_dumpb(data, default=custom_default)
+# Use custom serializer
+data = {"created": datetime.now()}
+result = json_dumpb(data, default=custom_default)
+# datetime objects converted via custom handler
 ```
+
+**Note**: For domain-specific types, see [Tutorial: Advanced Type Serialization](../../tutorials/advanced_types.md)
 
 ## Design Rationale
 
@@ -1012,6 +1004,43 @@ from lionherd_core.ln import (
 )
 ```
 
+### Helper Functions for Examples
+
+```python
+# Mock database interface (simplified for demonstration)
+class MockDB:
+    """Mock database for example code."""
+    def execute(self, query: str):
+        """Mock query execution - yields sample records."""
+        for i in range(10):
+            yield {
+                "id": i,
+                "data": f"record_{i}",
+                "created_at": "2025-11-09T14:30:00Z",
+            }
+
+    def query(self, query: str):
+        """Alias for execute."""
+        return self.execute(query)
+
+# Helper functions used in examples
+def parse_line(line: str) -> dict:
+    """Parse a line of input data (mock implementation)."""
+    import json
+    return json.loads(line)
+
+def process_record(record: dict) -> dict:
+    """Transform database record for export."""
+    return {
+        "id": record["id"],
+        "data": record["data"],
+        "created": record["created_at"],
+    }
+
+# Create mock database instance for examples
+db = MockDB()
+```
+
 ### Example 1: Production API Serialization
 
 ```python
@@ -1049,51 +1078,39 @@ json_bytes = serialize_response(response)
 ### Example 2: Structured Logging
 
 ```python
-from lionherd_core.ln._json_dump import json_dumps, get_orjson_default
 import logging
-import sys
+from lionherd_core.ln._json_dump import json_dumps, get_orjson_default
 
-# Configure safe logging serializer
+# Configure safe logging serializer (never crashes on unknown types)
 log_default = get_orjson_default(
-    safe_fallback=True,   # Never crash
-    fallback_clip=500,    # Short clips
-    enum_as_name=True,    # Readable enums
+    safe_fallback=True,   # Never raise TypeError
+    fallback_clip=500,    # Keep log lines manageable
 )
 
-class JSONFormatter(logging.Formatter):
-    """Log formatter that outputs JSON."""
+def setup_json_logging(logger_name: str):
+    """Simple JSON logger setup."""
+    logger = logging.getLogger(logger_name)
 
-    def format(self, record: logging.LogRecord) -> str:
-        log_data = {
-            "timestamp": record.created,
+    def json_format(record: logging.LogRecord) -> str:
+        data = {
             "level": record.levelname,
-            "logger": record.name,
             "message": record.getMessage(),
+            "timestamp": record.created,
         }
-        # Add exception info if present
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
+        return json_dumps(data, default=log_default, sort_keys=True)
 
-        return json_dumps(
-            log_data,
-            default=log_default,
-            sort_keys=True,
-        )
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
-# Setup logging
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(JSONFormatter())
-logger = logging.getLogger("myapp")
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-# Log events (safe even with non-serializable objects)
-logger.info("User login", extra={"user_id": 123})
-try:
-    raise ValueError("Invalid input")
-except Exception:
-    logger.exception("Operation failed")
+# Usage
+logger = setup_json_logging("myapp")
+logger.info("User action")  # Safely logs even with non-serializable objects
 ```
+
+**Note**: For full logging formatter customization, see [Tutorial: JSON Logging Integration](../../tutorials/json_logging.md) (custom exception formatting, context propagation, etc.)
 
 ### Example 3: Large Dataset Streaming
 
@@ -1101,53 +1118,33 @@ except Exception:
 from lionherd_core.ln._json_dump import json_lines_iter
 from pathlib import Path
 
-def export_database_to_ndjson(
-    query_results,
-    output_path: Path,
-    batch_size: int = 1000
-):
-    """Export large query results to NDJSON file."""
-
-    def process_batch(batch):
-        """Process batch of records."""
-        for record in batch:
-            # Transform record (example)
-            yield {
-                "id": record.id,
-                "data": record.data,
-                "created": record.created_at,
-            }
+# Stream large dataset to NDJSON file
+def export_results(output_path: Path):
+    """Stream database results to NDJSON file."""
+    results = db.execute("SELECT * FROM large_table")
 
     with output_path.open("wb") as f:
-        # Process in batches to limit memory
-        batch = []
-        for record in query_results:
-            batch.append(record)
-            if len(batch) >= batch_size:
-                for json_line in json_lines_iter(process_batch(batch)):
-                    f.write(json_line)
-                batch = []
-
-        # Final batch
-        if batch:
-            for json_line in json_lines_iter(process_batch(batch)):
-                f.write(json_line)
+        for json_line in json_lines_iter(
+            (process_record(r) for r in results),
+            safe_fallback=True  # Tolerant of data anomalies
+        ):
+            f.write(json_line)
 
 # Usage
-results = db.execute("SELECT * FROM large_table")
-export_database_to_ndjson(results, Path("export.ndjson"))
+export_results(Path("export.ndjson"))
 ```
 
-### Example 4: Content-Based Caching
+**Note**: For advanced patterns (batching, parallel processing, error handling), see [Tutorial: Large-Scale Data Export](../../tutorials/large_scale_export.md)
+
+### Example 4: Deterministic Hashing
 
 ```python
 from lionherd_core.ln._json_dump import json_dumpb
-from functools import lru_cache
 import hashlib
 
-def cache_key_from_dict(data: dict) -> str:
-    """Generate cache key from dictionary content."""
-    # Deterministic serialization for consistent keys
+# Generate content-based hash (deterministic across runs)
+def hash_dict(data: dict) -> str:
+    """Hash dict content regardless of key order or set order."""
     json_bytes = json_dumpb(
         data,
         sort_keys=True,
@@ -1155,70 +1152,43 @@ def cache_key_from_dict(data: dict) -> str:
     )
     return hashlib.sha256(json_bytes).hexdigest()
 
-@lru_cache(maxsize=128)
-def cached_computation(cache_key: str) -> dict:
-    """Expensive computation with content-based caching."""
-    # Actual implementation would parse cache_key back to params
-    # This is simplified example
-    return {"result": "computed"}
-
-# Usage
-params = {"model": "gpt-4", "temperature": 0.7, "tags": {1, 2, 3}}
-key = cache_key_from_dict(params)
-result = cached_computation(key)
-
-# Same params, same key (even with different set order)
-params2 = {"temperature": 0.7, "model": "gpt-4", "tags": {3, 1, 2}}
-key2 = cache_key_from_dict(params2)
-assert key == key2  # Deterministic
+# Usage - same content = same hash
+params1 = {"model": "gpt-4", "tags": {1, 2, 3}}
+params2 = {"tags": {3, 1, 2}, "model": "gpt-4"}  # Different order
+hash1 = hash_dict(params1)
+hash2 = hash_dict(params2)
+assert hash1 == hash2  # ✓ Content-based, order-independent
 ```
+
+**Note**: For caching patterns, see [Tutorial: Content-Based Caching](../../tutorials/content_caching.md)
 
 ### Example 5: Custom Type Integration
 
 ```python
 from lionherd_core.ln._json_dump import get_orjson_default, json_dumpb
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
-# Custom types
-@dataclass
-class Coordinate:
-    lat: float
-    lon: float
-
-    def to_geojson(self) -> dict:
-        return {
-            "type": "Point",
-            "coordinates": [self.lon, self.lat]
-        }
-
-@dataclass
-class Event:
-    name: str
-    location: Coordinate
-    timestamp: datetime
-
-# Configure serializers
+# Define custom serializers for domain types
 custom_default = get_orjson_default(
     additional={
-        Coordinate: lambda c: c.to_geojson(),
-        Event: lambda e: {
-            "name": e.name,
-            "location": e.location,  # Will use Coordinate serializer
-            "timestamp": e.timestamp,  # orjson handles datetime
+        # Custom type → serialization function
+        dict: lambda obj: {
+            "id": obj.get("id"),
+            "data": obj.get("data"),
         }
     },
-    utc_z=True,
+    enum_as_name=True,  # Enums serialize as names, not values
+    utc_z=True,         # UTC datetimes use "Z" suffix
 )
 
 # Usage
-event = Event(
-    name="Conference",
-    location=Coordinate(lat=40.7128, lon=-74.0060),
-    timestamp=datetime(2025, 11, 9, 14, 30),
-)
+event = {
+    "id": 123,
+    "data": {"name": "Conference", "timestamp": datetime.now()},
+}
 
 json_output = json_dumpb(event, default=custom_default)
-# b'{"name":"Conference","location":{"type":"Point","coordinates":[-74.006,40.7128]},"timestamp":"2025-11-09T14:30:00Z"}'
+# Handles custom types via additional serializers
 ```
+
+**Note**: For complex type hierarchies, see [Tutorial: Advanced Type Serialization](../../tutorials/advanced_types.md)
