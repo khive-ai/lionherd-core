@@ -357,3 +357,74 @@ def test_fix_json_string_escape_outside_preserves_brackets():
     # Missing } should be added
     assert result.count("{") == 1
     assert result.count("}") == 1
+
+
+# ============================================================================
+# Type Validation Tests - PR #58 Fix
+# ============================================================================
+
+
+def test_fuzzy_json_rejects_primitive_int():
+    """Test fuzzy_json rejects primitive int"""
+    with pytest.raises(TypeError, match="got primitive type: int"):
+        fuzzy_json("42")
+
+
+def test_fuzzy_json_rejects_primitive_string():
+    """Test fuzzy_json rejects primitive string"""
+    with pytest.raises(TypeError, match="got primitive type: str"):
+        fuzzy_json('"hello"')
+
+
+def test_fuzzy_json_rejects_primitive_bool():
+    """Test fuzzy_json rejects primitive bool"""
+    with pytest.raises(TypeError, match="got primitive type: bool"):
+        fuzzy_json("true")
+
+
+def test_fuzzy_json_rejects_primitive_null():
+    """Test fuzzy_json rejects primitive null"""
+    with pytest.raises(TypeError, match="got primitive type: NoneType"):
+        fuzzy_json("null")
+
+
+def test_fuzzy_json_rejects_primitive_float():
+    """Test fuzzy_json rejects primitive float"""
+    with pytest.raises(TypeError, match="got primitive type: float"):
+        fuzzy_json("3.14")
+
+
+def test_fuzzy_json_rejects_list_of_primitives():
+    """Test fuzzy_json rejects list of primitive values"""
+    with pytest.raises(TypeError, match="list with non-dict element at index 0"):
+        fuzzy_json("[1, 2, 3]")
+
+
+def test_fuzzy_json_rejects_list_of_strings():
+    """Test fuzzy_json rejects list of strings"""
+    with pytest.raises(TypeError, match="list with non-dict element at index 0: str"):
+        fuzzy_json('["a", "b", "c"]')
+
+
+def test_fuzzy_json_rejects_mixed_list():
+    """Test fuzzy_json rejects list with mix of dicts and primitives"""
+    with pytest.raises(TypeError, match="list with non-dict element at index 1: int"):
+        fuzzy_json('[{"key": "value"}, 42, {"other": "data"}]')
+
+
+def test_fuzzy_json_accepts_empty_list():
+    """Test fuzzy_json accepts empty list (vacuously list[dict])"""
+    result = fuzzy_json("[]")
+    assert result == []
+
+
+def test_fuzzy_json_accepts_list_of_dicts():
+    """Test fuzzy_json accepts list of dicts"""
+    result = fuzzy_json('[{"a": 1}, {"b": 2}]')
+    assert result == [{"a": 1}, {"b": 2}]
+
+
+def test_fuzzy_json_accepts_dict():
+    """Test fuzzy_json accepts dict"""
+    result = fuzzy_json('{"key": "value"}')
+    assert result == {"key": "value"}

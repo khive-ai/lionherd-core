@@ -296,7 +296,7 @@ def jaro_winkler_similarity(s: str, t: str, scaling: float = 0.1) -> float: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.string_handlers._string_similarity import jaro_winkler_similarity
+from lionherd_core.libs.string_handlers import jaro_winkler_similarity
 
 # Similar strings with common prefix
 score = jaro_winkler_similarity("martha", "marhta")
@@ -372,7 +372,7 @@ def levenshtein_similarity(s1: str, s2: str) -> float: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.string_handlers._string_similarity import levenshtein_similarity
+from lionherd_core.libs.string_handlers import levenshtein_similarity
 
 # Single character difference
 score = levenshtein_similarity("kitten", "sitting")
@@ -444,7 +444,7 @@ def hamming_similarity(s1: str, s2: str) -> float: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.string_handlers._string_similarity import hamming_similarity
+from lionherd_core.libs.string_handlers import hamming_similarity
 
 # Same length, some differences
 score = hamming_similarity("karolin", "kathrin")
@@ -495,7 +495,7 @@ def cosine_similarity(s1: str, s2: str) -> float: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.string_handlers._string_similarity import cosine_similarity
+from lionherd_core.libs.string_handlers import cosine_similarity
 
 # Similar character sets
 score = cosine_similarity("abc", "bca")
@@ -551,7 +551,7 @@ def sequence_matcher_similarity(s1: str, s2: str) -> float: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.string_handlers._string_similarity import sequence_matcher_similarity
+from lionherd_core.libs.string_handlers import sequence_matcher_similarity
 
 # Similar sequences
 score = sequence_matcher_similarity("abcdef", "abxdef")
@@ -960,8 +960,9 @@ Both patterns common enough to warrant first-class support.
 ## See Also
 
 - **Related Modules**:
-  - [String Handlers](../string_handlers.md): Parent module overview
-  - [String Utils](string_utils.md): String manipulation utilities
+  - [extract_json](extract_json.md): Extract JSON from mixed text
+  - [fuzzy_json](fuzzy_json.md): Fault-tolerant JSON parsing
+  - [to_num](to_num.md): String to number conversion
 - **Related Use Cases**:
   - CLI Argument Validation: Use for command/option suggestions
   - Data Cleaning: Deduplication and normalization
@@ -969,155 +970,21 @@ Both patterns common enough to warrant first-class support.
 
 ## Examples
 
-### Example 1: CLI Command Suggestion System
+> **Note**: For production-level examples demonstrating advanced integration patterns, see the tutorials linked below.
 
-```python
-from lionherd_core.libs.string_handlers import string_similarity, SimilarityAlgo
+### Tutorial: CLI Command Suggestion System
 
-class CommandParser:
-    """CLI parser with intelligent command suggestions."""
+**See [Tutorial #90](https://github.com/khive-ai/lionherd-core/issues/90)** for a complete production example of building a CLI command parser with intelligent fuzzy matching, auto-correction, and multi-suggestion UX (~55 lines).
 
-    def __init__(self, commands: dict[str, callable]):
-        self.commands = commands
+### Tutorial: Fuzzy Data Deduplication
 
-    def parse(self, user_input: str) -> None:
-        """Parse command with fuzzy matching fallback."""
-        cmd = user_input.strip().lower()
+**See [Tutorial #91](https://github.com/khive-ai/lionherd-core/issues/91)** for a production-grade data deduplication system using fuzzy matching with Levenshtein algorithm for CRM/data cleaning use cases (~80 lines).
 
-        # Try exact match
-        if cmd in self.commands:
-            self.commands[cmd]()
-            return
+### Tutorial: Multi-Algorithm Consensus Matching
 
-        # Try fuzzy match with Jaro-Winkler (good for short commands)
-        suggestions = string_similarity(
-            cmd,
-            list(self.commands.keys()),
-            algorithm=SimilarityAlgo.JARO_WINKLER,
-            threshold=0.6,
-            case_sensitive=False
-        )
+**See [Tutorial #92](https://github.com/khive-ai/lionherd-core/issues/92)** for an advanced matching pattern using multiple similarity algorithms with voting/consensus for high-confidence results (~45 lines).
 
-        if not suggestions:
-            print(f"Unknown command: {cmd}")
-            print(f"Available: {', '.join(self.commands.keys())}")
-            return
-
-        if len(suggestions) == 1:
-            # High confidence auto-correction
-            suggestion = suggestions[0]
-            print(f"Auto-correcting '{cmd}' -> '{suggestion}'")
-            self.commands[suggestion]()
-        else:
-            # Multiple matches, ask user
-            print(f"Did you mean one of these?")
-            for i, suggestion in enumerate(suggestions, 1):
-                print(f"  {i}. {suggestion}")
-
-# Usage
-parser = CommandParser({
-    "start": lambda: print("Starting..."),
-    "stop": lambda: print("Stopping..."),
-    "restart": lambda: print("Restarting..."),
-    "status": lambda: print("Status check..."),
-})
-
-parser.parse("stat")     # Auto-corrects to "status"
-parser.parse("stp")      # Suggests "stop"
-parser.parse("restart")  # Exact match
-```
-
-### Example 2: Intelligent Data Deduplication
-
-```python
-from lionherd_core.libs.string_handlers import string_similarity, SimilarityAlgo
-
-def deduplicate_records(
-    records: list[dict],
-    key_field: str,
-    threshold: float = 0.9
-) -> list[dict]:
-    """Deduplicate records by fuzzy matching on key field."""
-    unique_records = []
-    seen_values = []
-
-    for record in records:
-        value = record[key_field]
-
-        # Check if similar to any seen value
-        match = string_similarity(
-            value,
-            seen_values,
-            algorithm=SimilarityAlgo.LEVENSHTEIN,
-            threshold=threshold,
-            return_most_similar=True
-        )
-
-        if not match:
-            # New unique value
-            unique_records.append(record)
-            seen_values.append(value)
-
-    return unique_records
-
-# Usage
-contacts = [
-    {"name": "John Smith", "email": "john@example.com"},
-    {"name": "Jon Smith", "email": "jon@example.com"},     # Duplicate (typo)
-    {"name": "Jane Doe", "email": "jane@example.com"},
-    {"name": "John Smyth", "email": "jsmith@example.com"}, # Duplicate (spelling)
-]
-
-unique = deduplicate_records(contacts, key_field="name", threshold=0.85)
-# Returns: [
-#   {"name": "John Smith", ...},
-#   {"name": "Jane Doe", ...}
-# ]
-```
-
-### Example 3: Multi-Algorithm Voting System
-
-```python
-from lionherd_core.libs.string_handlers import string_similarity, SimilarityAlgo
-
-def robust_match(word: str, candidates: list[str], threshold: float = 0.7) -> str | None:
-    """Find best match using multiple algorithm consensus."""
-    algorithms = [
-        SimilarityAlgo.JARO_WINKLER,
-        SimilarityAlgo.LEVENSHTEIN,
-        SimilarityAlgo.SEQUENCE_MATCHER,
-    ]
-
-    # Collect votes from each algorithm
-    votes = {}
-    for algo in algorithms:
-        match = string_similarity(
-            word,
-            candidates,
-            algorithm=algo,
-            threshold=threshold,
-            return_most_similar=True
-        )
-        if match:
-            votes[match] = votes.get(match, 0) + 1
-
-    if not votes:
-        return None
-
-    # Return candidate with most votes
-    best_match = max(votes.items(), key=lambda x: x[1])
-    min_votes = len(algorithms) // 2 + 1  # Majority required
-
-    return best_match[0] if best_match[1] >= min_votes else None
-
-# Usage
-word = "colour"
-candidates = ["color", "collar", "cool", "court"]
-match = robust_match(word, candidates, threshold=0.6)
-print(match)  # "color" (consensus across algorithms)
-```
-
-### Example 4: Progressive Threshold Search
+### Example 1: Progressive Threshold Search
 
 ```python
 from lionherd_core.libs.string_handlers import string_similarity
@@ -1155,56 +1022,6 @@ print(f"Matches at {confidence:.0%} confidence: {matches}")
 # Output: Matches at 60% confidence: ['world']
 ```
 
-### Example 5: Custom Phonetic Similarity
+### Tutorial: Custom Similarity Algorithms (Phonetic Matching)
 
-```python
-from lionherd_core.libs.string_handlers import string_similarity
-
-def soundex(s: str) -> str:
-    """Simple Soundex algorithm for phonetic encoding."""
-    if not s:
-        return ""
-
-    # Soundex encoding map
-    codes = {
-        'b': '1', 'f': '1', 'p': '1', 'v': '1',
-        'c': '2', 'g': '2', 'j': '2', 'k': '2', 'q': '2', 's': '2', 'x': '2', 'z': '2',
-        'd': '3', 't': '3',
-        'l': '4',
-        'm': '5', 'n': '5',
-        'r': '6',
-    }
-
-    s = s.lower()
-    soundex_code = s[0].upper()
-
-    for char in s[1:]:
-        code = codes.get(char, '0')
-        if code != '0' and code != soundex_code[-1]:
-            soundex_code += code
-
-    return (soundex_code + '000')[:4]
-
-def phonetic_similarity(s1: str, s2: str) -> float:
-    """Custom similarity based on phonetic encoding."""
-    code1 = soundex(s1)
-    code2 = soundex(s2)
-
-    # Exact soundex match
-    if code1 == code2:
-        return 1.0
-
-    # Partial match (first letter + some codes)
-    matches = sum(c1 == c2 for c1, c2 in zip(code1, code2))
-    return matches / len(code1)
-
-# Usage with custom algorithm
-names = ["Smith", "Smythe", "Schmidt", "Jones"]
-matches = string_similarity(
-    "Smyth",
-    names,
-    algorithm=phonetic_similarity,
-    threshold=0.75
-)
-print(matches)  # ['Smith', 'Smythe'] (phonetically similar)
-```
+**See [Tutorial #93](https://github.com/khive-ai/lionherd-core/issues/93)** for a complete example implementing custom similarity algorithms with string_similarity(), demonstrating Soundex phonetic matching for name variations (~55 lines).

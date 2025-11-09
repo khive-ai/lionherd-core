@@ -115,6 +115,8 @@ Uses `orjson` for high-performance JSON parsing once the string is corrected. Th
 
 #### `fix_json_string()`
 
+> **⚠️ Internal API**: This function is an internal helper and not part of the public API. Use `fuzzy_json()` for general JSON parsing. Direct use of this function is not recommended unless you specifically need bracket balancing in isolation.
+
 Fix JSON string by balancing unmatched brackets.
 
 **Signature:**
@@ -138,7 +140,7 @@ def fix_json_string(str_to_parse: str, /) -> str: ...
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string
+>>> from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string  # Internal API
 
 # Missing closing brackets (added)
 >>> fix_json_string('{"a": [1, 2, 3')
@@ -319,8 +321,10 @@ valid_results = [r for r in results if r is not None]
 
 ### Standalone Bracket Fixing
 
+> **⚠️ Advanced Usage**: Shows internal API usage for bracket fixing only. Prefer `fuzzy_json()` for general use.
+
 ```python
-from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string
+from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string  # Internal API
 import orjson
 
 # Use bracket fixing separately (when you know other formatting is correct)
@@ -460,9 +464,8 @@ This improves:
   - `orjson`: High-performance JSON serialization library
 - **Related Functions**:
   - `pydapter.to_dict()`: Convert objects to dicts before JSON serialization
-- **Related Guides**:
-  - [LLM Output Parsing](../../user_guide/llm_parsing.md): Best practices for LLM response handling
-  - [Error Handling](../../user_guide/error_handling.md): Robust error handling patterns
+  - [extract_json](extract_json.md): Extract JSON from text with surrounding content
+  - [string_similarity](string_similarity.md): Fuzzy string matching algorithms
 
 ## Examples
 
@@ -582,8 +585,10 @@ print(parser.stats())  # "Fast: 2 (66.7%), Fuzzy: 1"
 
 ### Example 4: Bracket Fixing with Validation
 
+> **⚠️ Advanced Usage**: Shows internal API usage. Prefer `fuzzy_json()` for general use.
+
 ```python
-from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string
+from lionherd_core.libs.string_handlers._fuzzy_json import fix_json_string  # Internal API
 import orjson
 
 def safe_fix_and_parse(partial_json: str) -> dict:

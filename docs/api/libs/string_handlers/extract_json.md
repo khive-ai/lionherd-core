@@ -614,10 +614,9 @@ result = extract_json(chunks)  # Automatic join
 
 - **Related Functions**:
   - [fuzzy_json](fuzzy_json.md): Lenient JSON parsing for malformed input
+  - [string_similarity](string_similarity.md): Fuzzy string matching algorithms
+  - [to_num](to_num.md): String to number conversion
   - `orjson.loads()`: High-performance strict JSON parsing
-- **Related Guides**:
-  - [String Handlers Overview](overview.md): String processing utilities
-  - [LLM Response Parsing](../../user_guide/llm_responses.md): Patterns for LLM output processing
 
 ## Performance Considerations
 
