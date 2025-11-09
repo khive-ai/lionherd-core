@@ -5,16 +5,16 @@
 ## Overview
 
 `Node` is the polymorphic container in lionherd-core, extending Element with
-arbitrary content storage, embedding support, and automatic subclass
-registration. It enables graph-of-graphs patterns through flexible content
-composition and type-safe polymorphic deserialization.
+structured content storage, embedding support, and automatic subclass
+registration. It enables graph-of-graphs patterns through type-safe content
+composition and polymorphic deserialization.
 
 **Key Capabilities:**
 
 - **Element Inheritance**: Auto-generated UUID, timestamps, metadata (from
   Element base class)
-- **Content Polymorphism**: `content: Any` accepts primitives, collections,
-  nested Elements
+- **Structured Content**: `content: dict | Serializable | BaseModel | None`
+  enforces query-able, composable data
 - **Embedding Support**: Optional `embedding: list[float]` for vector search
   with DB JSON string coercion
 - **Auto-Registry**: Subclasses automatically register in `NODE_REGISTRY` for
@@ -55,7 +55,7 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     def __init__(
         self,
         *,
-        content: Any = None,
+        content: dict[str, Any] | Serializable | BaseModel | None = None,
         embedding: list[float] | None = None,
         # Inherited from Element:
         id: UUID | str | None = None,
@@ -69,15 +69,20 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
 ### Constructor Parameters
 
-**content** : Any, optional
+**content** : dict | Serializable | BaseModel | None, optional
 
-Arbitrary data payload. Accepts primitives, collections, or nested Elements.
+Structured data payload. Enforces query-able, composable types for PostgreSQL
+JSONB and graph-of-graphs patterns.
 
-- Type: Any Python value (primitives, lists, dicts, Element instances)
+- **Accepted**: `dict`, `Serializable` protocol, Pydantic `BaseModel`, `None`
+- **Rejected**: Primitives (str, int, float, bool), collections (list, tuple,
+  set)
 - Auto-serialization: Nested Elements automatically serialize via
   `_serialize_content`
 - Auto-deserialization: Dicts with `lion_class` metadata auto-deserialize to
   correct type
+- **Migration**: Wrap primitives in dict: `content={"value": "text"}` or use
+  `Element.metadata`
 - Default: `None`
 
 **embedding** : list of float, optional
@@ -157,7 +162,7 @@ class PersonNode(Node):
     age: int
 
 # Serialize
-person = PersonNode(name="Alice", age=30, content="bio text")
+person = PersonNode(name="Alice", age=30, content={"bio": "text"})
 data = person.to_dict()
 # {'id': '...', 'name': 'Alice', 'age': 30, 'content': 'bio text',
 #  'metadata': {'lion_class': '...PersonNode'}}
@@ -236,7 +241,7 @@ def adapt_to(
 from lionherd_core.base import Node
 
 # Base Node has TOML/YAML built-in
-node = Node(content="test data")
+node = Node(content={"value": "test data"})
 toml_str = node.adapt_to("toml")
 # 'content = "test data"\n...'
 
@@ -247,7 +252,7 @@ class CustomNode(Node):
 from pydapter.adapters import TomlAdapter
 CustomNode.register_adapter(TomlAdapter)
 
-custom = CustomNode(content="data", custom_field="value")
+custom = CustomNode(content={"value": "data"}, custom_field="value")
 custom_toml = custom.adapt_to("toml")
 ```
 
@@ -266,17 +271,17 @@ keeping base Node convenient.
 
 ```python
 # Base Node works
-Node(content="test").adapt_to("toml")  # ✓ Works
+Node(content={"value": "test"}).adapt_to("toml")  # ✓ Works
 
 # Subclass isolated
 class MyNode(Node):
     pass
 
-MyNode(content="test").adapt_to("toml")  # ✗ Fails (no adapter)
+MyNode(content={"value": "test"}).adapt_to("toml")  # ✗ Fails (no adapter)
 
 # Must explicitly register
 MyNode.register_adapter(TomlAdapter)
-MyNode(content="test").adapt_to("toml")  # ✓ Now works
+MyNode(content={"value": "test"}).adapt_to("toml")  # ✓ Now works
 ```
 
 #### `adapt_from()`
@@ -464,13 +469,13 @@ assert NODE_REGISTRY["PersonNode"] is PersonNode
 from lionherd_core.base import Node
 
 # Create node with content
-node = Node(content="Hello World")
+node = Node(content={"text": "Hello World"})
 print(node.id)          # UUID('...')
 print(node.content)     # "Hello World"
 
 # Create with embedding
 node = Node(
-    content="semantic text",
+    content={"text": "semantic"},
     embedding=[0.1, 0.2, 0.3, 0.4, 0.5]
 )
 print(len(node.embedding))  # 5
@@ -482,9 +487,9 @@ print(len(node.embedding))  # 5
 from lionherd_core.base import Node
 
 # Content can be anything
-node1 = Node(content="string")
+node1 = Node(content={"value": "string"})
 node2 = Node(content={"key": "value", "nested": [1, 2, 3]})
-node3 = Node(content=["a", "b", "c"])
+node3 = Node(content={"items": ["a", "b", "c"]})
 
 # Nested Elements
 from lionherd_core import Element
@@ -517,7 +522,7 @@ class DocumentNode(Node):
     tags: list[str] = []
 
 # Auto-registration enables polymorphic workflows
-person = PersonNode(name="Alice", age=30, content="bio")
+person = PersonNode(name="Alice", age=30, content={"bio": "text"})
 doc = DocumentNode(title="Spec", body="Requirements", tags=["v1", "draft"])
 
 # Serialize and deserialize
@@ -577,15 +582,15 @@ from lionherd_core.base import Node
 import orjson
 
 # Standard usage
-node = Node(content="semantic text", embedding=[0.1, 0.2, 0.3])
+node = Node(content={"text": "semantic"}, embedding=[0.1, 0.2, 0.3])
 
 # JSON string coercion (database compatibility)
 json_str = orjson.dumps([0.4, 0.5, 0.6]).decode()
-node_from_db = Node(content="text", embedding=json_str)
+node_from_db = Node(content={"value": "text"}, embedding=json_str)
 node_from_db.embedding  # [0.4, 0.5, 0.6] (parsed)
 
 # Integer coercion to float
-node_ints = Node(content="text", embedding=[1, 2, 3])
+node_ints = Node(content={"value": "text"}, embedding=[1, 2, 3])
 node_ints.embedding  # [1.0, 2.0, 3.0] (floats)
 all(isinstance(x, float) for x in node_ints.embedding)  # True
 ```
@@ -597,7 +602,7 @@ from lionherd_core.base import Node
 from pydapter.adapters import TomlAdapter
 
 # Base Node has TOML/YAML built-in
-node = Node(content="test data")
+node = Node(content={"value": "test data"})
 toml_str = node.adapt_to("toml")
 
 # Roundtrip
@@ -610,7 +615,7 @@ class CustomNode(Node):
 
 # Must register adapter explicitly
 CustomNode.register_adapter(TomlAdapter)
-custom = CustomNode(content="data", custom_field="value")
+custom = CustomNode(content={"value": "data"}, custom_field="value")
 custom_toml = custom.adapt_to("toml")
 ```
 
@@ -619,7 +624,7 @@ custom_toml = custom.adapt_to("toml")
 ```python
 from lionherd_core.base import Node
 
-node = Node(content="test")
+node = Node(content={"value": "test"})
 
 # Python mode - native types
 python_dict = node.to_dict(mode="python")
@@ -648,7 +653,7 @@ class MyNode(Node):
     pass
 
 # This fails - subclass has isolated registry
-MyNode(content="test").adapt_to("toml")  # ✗ Adapter not found
+MyNode(content={"value": "test"}).adapt_to("toml")  # ✗ Adapter not found
 ```
 
 **Solution**: Explicitly register adapters on subclass.
@@ -657,7 +662,7 @@ MyNode(content="test").adapt_to("toml")  # ✗ Adapter not found
 from pydapter.adapters import TomlAdapter
 
 MyNode.register_adapter(TomlAdapter)
-MyNode(content="test").adapt_to("toml")  # ✓ Works
+MyNode(content={"value": "test"}).adapt_to("toml")  # ✓ Works
 ```
 
 #### Pitfall 2: Empty Embedding List
@@ -665,14 +670,14 @@ MyNode(content="test").adapt_to("toml")  # ✓ Works
 **Issue**: Providing empty list for embedding raises ValueError.
 
 ```python
-Node(content="text", embedding=[])  # ✗ ValueError: cannot be empty
+Node(content={"value": "text"}, embedding=[])  # ✗ ValueError: cannot be empty
 ```
 
 **Solution**: Use `None` for no embedding or provide at least one value.
 
 ```python
-Node(content="text", embedding=None)  # ✓ Works
-Node(content="text", embedding=[0.0])  # ✓ Works
+Node(content={"value": "text"}, embedding=None)  # ✓ Works
+Node(content={"value": "text"}, embedding=[0.0])  # ✓ Works
 ```
 
 #### Pitfall 3: Assuming Content Auto-Deserializes Without lion_class
@@ -835,15 +840,15 @@ from lionherd_core.base import Node
 import orjson
 
 # Standard embedding
-node1 = Node(content="semantic text", embedding=[0.1, 0.2, 0.3])
+node1 = Node(content={"text": "semantic"}, embedding=[0.1, 0.2, 0.3])
 
 # From JSON string (database compatibility)
 json_str = orjson.dumps([0.4, 0.5, 0.6]).decode()
-node2 = Node(content="text", embedding=json_str)
+node2 = Node(content={"value": "text"}, embedding=json_str)
 node2.embedding  # [0.4, 0.5, 0.6]
 
 # Integer coercion
-node3 = Node(content="text", embedding=[1, 2, 3])
+node3 = Node(content={"value": "text"}, embedding=[1, 2, 3])
 all(isinstance(x, float) for x in node3.embedding)  # True
 ```
 
@@ -854,7 +859,7 @@ from lionherd_core.base import Node
 from pydapter.adapters import TomlAdapter
 
 # Serialize to TOML
-node = Node(content="test data", metadata={"env": "prod"})
+node = Node(content={"value": "test data"}, metadata={"env": "prod"})
 toml_str = node.adapt_to("toml")
 
 # Deserialize from TOML with polymorphism
@@ -868,7 +873,7 @@ class CustomNode(Node):
     custom_field: str = "value"
 
 CustomNode.register_adapter(TomlAdapter)
-custom = CustomNode(content="data")
+custom = CustomNode(content={"value": "data"})
 custom_toml = custom.adapt_to("toml")
 ```
 
