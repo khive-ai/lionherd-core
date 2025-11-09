@@ -93,23 +93,23 @@ class TestNodeMetaKey:
 
     def test_node_to_dict_db_mode_custom_meta_key(self):
         """Test Node.to_dict with mode='db' and custom meta_key."""
-        node = Node(content="test node", metadata={"node_data": "value"})
+        node = Node(content={"value": "test node"}, metadata={"node_data": "value"})
 
         data = node.to_dict(mode="db", meta_key="custom_node_meta")
 
         assert "custom_node_meta" in data
         assert "metadata" not in data
         assert data["custom_node_meta"]["node_data"] == "value"
-        assert data["content"] == "test node"
+        assert data["content"] == {"value": "test node"}
 
     def test_node_from_dict_custom_meta_key(self):
         """Test Node.from_dict with custom meta_key."""
-        node = Node(content="original", metadata={"info": "test"})
+        node = Node(content={"value": "original"}, metadata={"info": "test"})
         data = node.to_dict(mode="db", meta_key="my_meta")
 
         restored = Node.from_dict(data, meta_key="my_meta")
 
-        assert restored.content == "original"
+        assert restored.content == {"value": "original"}
         assert restored.metadata["info"] == "test"
 
     def test_node_from_dict_backward_compatibility(self):
@@ -118,13 +118,13 @@ class TestNodeMetaKey:
         data = {
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "created_at": "2025-01-01T00:00:00Z",
-            "content": "legacy node",
+            "content": {"value": "legacy node"},
             "node_metadata": {"legacy": "node_data"},
         }
 
         restored = Node.from_dict(data)
 
-        assert restored.content == "legacy node"
+        assert restored.content == {"value": "legacy node"}
         assert restored.metadata["legacy"] == "node_data"
 
 
@@ -198,7 +198,7 @@ class TestGraphMetaKey:
     def test_graph_to_dict_db_mode_custom_meta_key(self):
         """Test Graph.to_dict with mode='db' and custom meta_key."""
         graph = Graph(metadata={"graph_data": "test"})
-        n1 = Node(content="A")
+        n1 = Node(content={"value": "A"})
         graph.add_node(n1)
 
         data = graph.to_dict(mode="db", meta_key="graph_meta")
@@ -210,7 +210,7 @@ class TestGraphMetaKey:
     def test_graph_from_dict_custom_meta_key(self):
         """Test Graph.from_dict with custom meta_key."""
         graph = Graph(metadata={"info": "graph"})
-        n1 = Node(content="Node1")
+        n1 = Node(content={"value": "Node1"})
         graph.add_node(n1)
 
         data = graph.to_dict(mode="db", meta_key="my_graph_meta")
@@ -223,8 +223,8 @@ class TestGraphMetaKey:
     def test_graph_from_dict_with_item_meta_key_for_nodes(self):
         """Test Graph.from_dict with item_meta_key restores node metadata correctly."""
         graph = Graph()
-        n1 = Node(content="A", metadata={"node": "one"})
-        n2 = Node(content="B", metadata={"node": "two"})
+        n1 = Node(content={"value": "A"}, metadata={"node": "one"})
+        n2 = Node(content={"value": "B"}, metadata={"node": "two"})
         graph.add_node(n1)
         graph.add_node(n2)
 
@@ -240,8 +240,8 @@ class TestGraphMetaKey:
     def test_graph_roundtrip_with_edges_and_custom_meta_keys(self):
         """Test full graph roundtrip with nodes and edges using custom meta_keys."""
         graph = Graph(metadata={"graph": "roundtrip"})
-        n1 = Node(content="Source", metadata={"role": "source"})
-        n2 = Node(content="Target", metadata={"role": "target"})
+        n1 = Node(content={"value": "Source"}, metadata={"role": "source"})
+        n2 = Node(content={"value": "Target"}, metadata={"role": "target"})
         graph.add_node(n1)
         graph.add_node(n2)
         edge = Edge(head=n1.id, tail=n2.id)
@@ -286,7 +286,7 @@ class TestItemMetaKeyInToDict:
     def test_graph_to_dict_with_item_meta_key_for_nodes(self):
         """Test Graph.to_dict passes item_meta_key to node items."""
         graph = Graph()
-        n1 = Node(content="Test", metadata={"node": "data"})
+        n1 = Node(content={"value": "Test"}, metadata={"node": "data"})
         graph.add_node(n1)
 
         # Serialize with item_meta_key
@@ -299,8 +299,8 @@ class TestItemMetaKeyInToDict:
     def test_graph_to_dict_with_item_created_at_format_for_edges(self):
         """Test Graph.to_dict passes item_created_at_format to edge items."""
         graph = Graph()
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         graph.add_node(n1)
         graph.add_node(n2)
         edge = Edge(head=n1.id, tail=n2.id)

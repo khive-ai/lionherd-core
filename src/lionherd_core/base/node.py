@@ -5,13 +5,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import field_serializer, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 from pydapter import (
     Adaptable as PydapterAdaptable,
     AsyncAdaptable as PydapterAsyncAdaptable,
 )
 
-from ..protocols import Adaptable, AsyncAdaptable, Deserializable, implements
+from ..protocols import (
+    Adaptable,
+    AsyncAdaptable,
+    Deserializable,
+    Serializable,
+    implements,
+)
 from .element import Element
 
 NODE_REGISTRY: dict[str, type[Node]] = {}
@@ -19,11 +25,17 @@ NODE_REGISTRY: dict[str, type[Node]] = {}
 
 @implements(Deserializable, Adaptable, AsyncAdaptable)
 class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
-    """Polymorphic node with arbitrary content, embeddings, pydapter integration.
+    """Polymorphic node with structured content, embeddings, pydapter integration.
+
+    Node is the canonical container for structured, composable data in lionherd.
+    By constraining content to Serializable/BaseModel/dict, Node enables:
+    - Graph-of-graphs patterns (Nodes contain Nodes/Elements)
+    - JSONB query-ability (one-stop-shop SQL ↔ Python roundtrip)
+    - Type-safe composition (Pydantic validation)
 
     Attributes:
-        content: Arbitrary data (auto-serializes nested Elements)
-        embedding: Optional float vector
+        content: Structured data (Serializable, BaseModel, dict, or None)
+        embedding: Optional float vector for semantic search
 
     Auto-registers subclasses in NODE_REGISTRY for polymorphic deserialization.
 
@@ -34,7 +46,7 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         from pydapter.adapters import TomlAdapter, YamlAdapter
 
         # Base Node has toml/yaml
-        Node(content="test").adapt_to("toml")  # ✓ Works
+        Node(content={"text": "test"}).adapt_to("toml")  # ✓ Works
 
 
         # Subclasses do NOT inherit adapters
@@ -42,17 +54,17 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             pass
 
 
-        MyNode(content="test").adapt_to("toml")  # ✗ Fails (isolated registry)
+        MyNode(content={"text": "test"}).adapt_to("toml")  # ✗ Fails (isolated registry)
 
         # Must explicitly register on subclass
         MyNode.register_adapter(TomlAdapter)
-        MyNode(content="test").adapt_to("toml")  # ✓ Now works
+        MyNode(content={"text": "test"}).adapt_to("toml")  # ✓ Now works
         ```
 
         This prevents adapter pollution while keeping base Node convenient.
     """
 
-    content: Any = None
+    content: dict[str, Any] | Serializable | BaseModel | None = None
     embedding: list[float] | None = None
 
     @classmethod
@@ -75,6 +87,21 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     @field_validator("content", mode="before")
     @classmethod
     def _validate_content(cls, value: Any) -> Any:
+        """Validate content type and handle polymorphic deserialization.
+
+        Enforces: content must be Serializable, BaseModel, dict, or None.
+        Primitives rejected to ensure structured, query-able, composable data.
+        """
+        # Strict type enforcement
+        if value is not None and not isinstance(value, (Serializable, BaseModel, dict)):
+            raise TypeError(
+                f"content must be Serializable, BaseModel, dict, or None. "
+                f"Got {type(value).__name__}. "
+                f"Use dict for unstructured data: content={{'value': {value!r}}} "
+                f"or Element.metadata for simple key-value pairs."
+            )
+
+        # Polymorphic deserialization for dicts with lion_class metadata
         if isinstance(value, dict) and "metadata" in value:
             metadata = value.get("metadata", {})
             lion_class = metadata.get("lion_class")
