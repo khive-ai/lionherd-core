@@ -311,6 +311,145 @@ class TestElementSerialization:
         assert "created_at" in data
         assert "metadata" not in data
 
+    def test_created_at_format_python_mode_defaults(self):
+        """Python mode defaults to datetime object for created_at."""
+        elem = Element()
+        data = elem.to_dict(mode="python")
+        assert isinstance(data["created_at"], dt.datetime)
+
+    def test_created_at_format_python_mode_isoformat(self):
+        """Python mode with created_at_format='isoformat' returns ISO string."""
+        elem = Element()
+        data = elem.to_dict(mode="python", created_at_format="isoformat")
+        assert isinstance(data["created_at"], str)
+        # Verify it's valid ISO format
+        dt.datetime.fromisoformat(data["created_at"])
+
+    def test_created_at_format_python_mode_timestamp(self):
+        """Python mode with created_at_format='timestamp' returns float."""
+        elem = Element()
+        data = elem.to_dict(mode="python", created_at_format="timestamp")
+        assert isinstance(data["created_at"], float)
+        # Verify it's a valid timestamp
+        assert data["created_at"] > 0
+
+    def test_created_at_format_json_mode_defaults(self):
+        """JSON mode defaults to isoformat string for created_at."""
+        elem = Element()
+        data = elem.to_dict(mode="json")
+        assert isinstance(data["created_at"], str)
+        # Verify it's valid ISO format
+        dt.datetime.fromisoformat(data["created_at"])
+
+    def test_created_at_format_json_mode_timestamp(self):
+        """JSON mode with created_at_format='timestamp' returns float."""
+        elem = Element()
+        data = elem.to_dict(mode="json", created_at_format="timestamp")
+        assert isinstance(data["created_at"], float)
+        assert data["created_at"] > 0
+
+    def test_created_at_format_json_mode_datetime_raises(self):
+        """JSON mode with created_at_format='datetime' should raise (not JSON-serializable)."""
+        elem = Element()
+        with pytest.raises(
+            ValueError, match="created_at_format='datetime' not valid for mode='json'"
+        ):
+            elem.to_dict(mode="json", created_at_format="datetime")
+
+    def test_created_at_format_db_mode_defaults(self):
+        """DB mode defaults to datetime object for created_at."""
+        elem = Element()
+        data = elem.to_dict(mode="db")
+        assert isinstance(data["created_at"], dt.datetime)
+        # Verify metadata renamed to node_metadata in db mode
+        assert "node_metadata" in data
+        assert "metadata" not in data
+
+    def test_created_at_format_db_mode_isoformat(self):
+        """DB mode with created_at_format='isoformat' returns ISO string."""
+        elem = Element()
+        data = elem.to_dict(mode="db", created_at_format="isoformat")
+        assert isinstance(data["created_at"], str)
+        dt.datetime.fromisoformat(data["created_at"])
+
+    def test_created_at_format_db_mode_timestamp(self):
+        """DB mode with created_at_format='timestamp' returns float."""
+        elem = Element()
+        data = elem.to_dict(mode="db", created_at_format="timestamp")
+        assert isinstance(data["created_at"], float)
+        assert data["created_at"] > 0
+
+    def test_regression_json_mode_respects_timestamp_format(self):
+        """Regression: json mode must apply created_at_format='timestamp' transformation.
+
+        Original bug: created_at_format only applied to python mode, json mode ignored it.
+        This test verifies json mode converts to timestamp when requested.
+        """
+        elem = Element()
+
+        # json mode with timestamp format should return float, not ISO string
+        data_timestamp = elem.to_dict(mode="json", created_at_format="timestamp")
+        assert isinstance(data_timestamp["created_at"], float), (
+            "json mode must apply timestamp format transformation"
+        )
+
+        # Compare to default (isoformat) - should be different types
+        data_default = elem.to_dict(mode="json")
+        assert isinstance(data_default["created_at"], str), (
+            "json mode default should be isoformat string"
+        )
+
+        # Verify timestamp is actually the datetime as float
+        expected_timestamp = elem.created_at.timestamp()
+        assert abs(data_timestamp["created_at"] - expected_timestamp) < 0.001
+
+    def test_regression_db_mode_respects_format_parameter(self):
+        """Regression: db mode must apply created_at_format transformations.
+
+        Original bug: db mode defaulted to isoformat and ignored format parameter.
+        This test verifies db mode correctly applies all format options.
+        """
+        elem = Element()
+
+        # db mode default should be datetime (not isoformat)
+        data_default = elem.to_dict(mode="db")
+        assert isinstance(data_default["created_at"], dt.datetime), (
+            "db mode default must be datetime object"
+        )
+
+        # db mode with isoformat should convert to string
+        data_iso = elem.to_dict(mode="db", created_at_format="isoformat")
+        assert isinstance(data_iso["created_at"], str), (
+            "db mode must apply isoformat transformation"
+        )
+
+        # db mode with timestamp should convert to float
+        data_ts = elem.to_dict(mode="db", created_at_format="timestamp")
+        assert isinstance(data_ts["created_at"], float), (
+            "db mode must apply timestamp transformation"
+        )
+
+    def test_regression_all_modes_apply_format_consistently(self):
+        """Regression: all modes must consistently apply created_at_format parameter.
+
+        Original bug: only python mode applied format transformation, json/db ignored it.
+        This test verifies format parameter works across all modes.
+        """
+        elem = Element()
+
+        # timestamp format should return float for ALL modes (except json with datetime)
+        python_ts = elem.to_dict(mode="python", created_at_format="timestamp")
+        json_ts = elem.to_dict(mode="json", created_at_format="timestamp")
+        db_ts = elem.to_dict(mode="db", created_at_format="timestamp")
+
+        assert isinstance(python_ts["created_at"], float)
+        assert isinstance(json_ts["created_at"], float)
+        assert isinstance(db_ts["created_at"], float)
+
+        # All should be approximately equal
+        assert abs(python_ts["created_at"] - json_ts["created_at"]) < 0.001
+        assert abs(python_ts["created_at"] - db_ts["created_at"]) < 0.001
+
 
 class TestElementDeserialization:
     """Element deserialization: type coercion, roundtrip fidelity, partial data handling.
@@ -1195,9 +1334,9 @@ def test_class_name_serialization_across_subclasses():
     assert len(pile2) == 1
 
     # Test Node
-    node = Node(content="test content")
+    node = Node(content={"value": "test content"})
     node_data = to_dict(node)
     assert node_data["metadata"]["lion_class"] == "lionherd_core.base.node.Node"
     node2 = Node.from_dict(node_data)
     assert isinstance(node2, Node)
-    assert node2.content == "test content"
+    assert node2.content == {"value": "test content"}

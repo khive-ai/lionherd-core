@@ -244,7 +244,7 @@ class TestNodeAdapterDefaults:
         Node.register_async_adapter(AsyncCaptureAdapter)
 
         # Create node
-        node = Node(content="test node")
+        node = Node(content={"value": "test node"})
 
         # Call adapt_to_async without custom kwargs
         result = await node.adapt_to_async("test_async_capture")
@@ -263,7 +263,7 @@ class TestNodeAdapterDefaults:
         Node.register_async_adapter(AsyncCaptureAdapter)
 
         # Create serialized data (use mode="python" for clean dict)
-        node = Node(content="test")
+        node = Node(content={"value": "test"})
         data = node.to_dict(mode="python")
 
         # Call adapt_from_async without custom kwargs
@@ -275,7 +275,7 @@ class TestNodeAdapterDefaults:
 
         # Verify result
         assert isinstance(restored, Node)
-        assert restored.content == "test"
+        assert restored.content == {"value": "test"}
 
 
 # ==================== Graph Tests ====================
@@ -291,8 +291,8 @@ class TestGraphAdapterDefaults:
 
         # Create graph with nodes
         graph = Graph()
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         graph.add_node(n1)
         graph.add_node(n2)
 
@@ -312,7 +312,7 @@ class TestGraphAdapterDefaults:
 
         # Create serialized data (use mode="python" for clean dict)
         graph = Graph()
-        graph.add_node(Node(content="A"))
+        graph.add_node(Node(content={"value": "A"}))
         data = graph.to_dict(mode="python")
 
         # Call adapt_from without custom kwargs
@@ -333,7 +333,7 @@ class TestGraphAdapterDefaults:
 
         # Create graph
         graph = Graph()
-        graph.add_node(Node(content="A"))
+        graph.add_node(Node(content={"value": "A"}))
 
         # Call adapt_to_async without custom kwargs
         result = await graph.adapt_to_async("test_async_capture")
@@ -352,7 +352,7 @@ class TestGraphAdapterDefaults:
 
         # Create serialized data (use mode="python" for clean dict)
         graph = Graph()
-        graph.add_node(Node(content="A"))
+        graph.add_node(Node(content={"value": "A"}))
         data = graph.to_dict(mode="python")
 
         # Call adapt_from_async without custom kwargs
