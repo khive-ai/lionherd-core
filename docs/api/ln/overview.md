@@ -1936,9 +1936,9 @@ flat_unique = to_list(nested, flatten=True, dropna=True, unique=True)
 
 - **Related Modules**:
   - [base](../base/element.md): Element class with serialization
-  - [types](../types/model.md): Type definitions and utilities
-  - [libs](../libs/overview.md): Low-level library functions
+  - types: Type definitions and utilities (documentation pending)
+  - libs: Low-level library functions (documentation pending)
 - **Related Guides**:
-  - [Async Operations](../../user_guide/async.md): Async execution patterns
-  - [Data Processing](../../user_guide/data_processing.md): Data transformation workflows
-  - [Serialization](../../user_guide/serialization.md): JSON serialization guide
+  - Async Operations: Async execution patterns (documentation pending)
+  - Data Processing: Data transformation workflows (documentation pending)
+  - Serialization: JSON serialization guide (documentation pending)

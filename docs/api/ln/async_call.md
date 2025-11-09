@@ -210,6 +210,7 @@ If `return_exceptions=False` and one or more tasks raise exceptions. Contains al
 **Examples:**
 
 ```python
+import httpx
 from lionherd_core.ln import alcall
 
 # Basic usage - parallel API calls
@@ -957,22 +958,23 @@ async for batch_results in bcall(
     retry_backoff=2,
 ):
     # Save batch immediately
-    await db.save_completions(batch_results)
+    await db.save_completions(batch_results)  # db.save_completions: user-defined function
     print(f"Saved {len(batch_results)} completions")
 ```
 
 ### Example 2: API Scraping with Error Recovery
 
 ```python
+import httpx
 from lionherd_core.ln import alcall
 
 async def scrape_page(url: str) -> dict:
     """Scrape page with timeout."""
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
-        return parse_html(response.text)
+        return parse_html(response.text)  # parse_html: user-defined function
 
-urls = load_urls_from_file("urls.txt")
+urls = load_urls_from_file("urls.txt")  # load_urls_from_file: user-defined function
 
 # Scrape with error recovery
 results = await alcall(
