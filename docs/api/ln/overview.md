@@ -492,7 +492,7 @@ def fuzzy_validate_pydantic(
 
 **Examples:**
 
-```python
+````python
 from lionherd_core.ln import fuzzy_validate_pydantic
 from pydantic import BaseModel
 
@@ -544,7 +544,7 @@ task = fuzzy_validate_pydantic(
     ),
 )
 
-```
+````
 
 **Notes:**
 
@@ -1407,7 +1407,7 @@ def to_dict(
 
 **Examples:**
 
-```python
+````python
 from lionherd_core.ln import to_dict
 from pydantic import BaseModel
 
@@ -1497,11 +1497,11 @@ result = to_dict("invalid data", suppress=True)
 
 # {}
 
-```
+````
 
 **Notes:**
 
-- Tries multiple conversion strategies (model_dump, to_dict, dict, __dict__)
+- Tries multiple conversion strategies (model_dump, to_dict, dict, **dict**)
 - JSON strings automatically parsed (via orjson)
 - None/Undefined converted to {}
 - Recursive mode processes nested JSON strings and objects
@@ -1802,7 +1802,7 @@ if not HAS_TORCH:
 
 ### Pattern 1: LLM Output Processing
 
-```python
+````python
 from lionherd_core.ln import fuzzy_validate_pydantic, to_list
 from pydantic import BaseModel
 
@@ -1838,7 +1838,7 @@ task = fuzzy_validate_pydantic(
 tasks_list = [task1, task2, None, task3]
 clean_tasks = to_list(tasks_list, dropna=True, unique=True)
 
-```
+````
 
 ### Pattern 2: Parallel API Calls with Retry
 

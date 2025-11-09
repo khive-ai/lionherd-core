@@ -255,7 +255,7 @@ Validated dictionary with corrected keys based on validation rules.
 
 ### Basic Pydantic Validation
 
-```python
+````python
 from lionherd_core.ln import fuzzy_validate_pydantic
 from pydantic import BaseModel
 
@@ -283,7 +283,7 @@ user = fuzzy_validate_pydantic(llm_output, model_type=User)
 
 # User(username='alice', email='<alice@example.com>', age=30)
 
-```
+````
 
 ### Pydantic Validation with Fuzzy Keys
 
@@ -618,7 +618,7 @@ from pydantic import BaseModel
 
 ### Example 1: LLM JSON Parsing Pipeline
 
-```python
+````python
 
 class AgentTask(BaseModel):
     task_name: str
@@ -666,7 +666,7 @@ print(task)
 
 # )
 
-```
+````
 
 ### Example 2: API Response Normalization
 

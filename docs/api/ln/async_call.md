@@ -189,12 +189,9 @@ Additional arguments passed to `func(item, **kwargs)` for each call.
 
 **Returns:**
 
-### list of T or BaseException
-
-Results list preserving input order. May include exceptions if `return_exceptions=True`.
-
-- Order: Results at index `i` correspond to `input_[i]`
-- Exceptions: Included if `return_exceptions=True`, otherwise raised as `ExceptionGroup`
+- **list[T | BaseException]**: Results list preserving input order. May include exceptions if `return_exceptions=True`.
+  - Order: Results at index `i` correspond to `input_[i]`
+  - Exceptions: Included if `return_exceptions=True`, otherwise raised as `ExceptionGroup`
 
 **Raises:**
 
@@ -358,9 +355,7 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 
 **Yields:**
 
-### list of T or BaseException
-
-Results for each batch (batch_size items, except possibly last batch).
+- **list[T | BaseException]**: Results for each batch (batch_size items, except possibly last batch).
 
 **Examples:**
 
