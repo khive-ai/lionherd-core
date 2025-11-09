@@ -389,13 +389,15 @@ class TestElementSerialization:
 
         # json mode with timestamp format should return float, not ISO string
         data_timestamp = elem.to_dict(mode="json", created_at_format="timestamp")
-        assert isinstance(data_timestamp["created_at"], float), \
+        assert isinstance(data_timestamp["created_at"], float), (
             "json mode must apply timestamp format transformation"
+        )
 
         # Compare to default (isoformat) - should be different types
         data_default = elem.to_dict(mode="json")
-        assert isinstance(data_default["created_at"], str), \
+        assert isinstance(data_default["created_at"], str), (
             "json mode default should be isoformat string"
+        )
 
         # Verify timestamp is actually the datetime as float
         expected_timestamp = elem.created_at.timestamp()
@@ -411,18 +413,21 @@ class TestElementSerialization:
 
         # db mode default should be datetime (not isoformat)
         data_default = elem.to_dict(mode="db")
-        assert isinstance(data_default["created_at"], dt.datetime), \
+        assert isinstance(data_default["created_at"], dt.datetime), (
             "db mode default must be datetime object"
+        )
 
         # db mode with isoformat should convert to string
         data_iso = elem.to_dict(mode="db", created_at_format="isoformat")
-        assert isinstance(data_iso["created_at"], str), \
+        assert isinstance(data_iso["created_at"], str), (
             "db mode must apply isoformat transformation"
+        )
 
         # db mode with timestamp should convert to float
         data_ts = elem.to_dict(mode="db", created_at_format="timestamp")
-        assert isinstance(data_ts["created_at"], float), \
+        assert isinstance(data_ts["created_at"], float), (
             "db mode must apply timestamp transformation"
+        )
 
     def test_regression_all_modes_apply_format_consistently(self):
         """Regression: all modes must consistently apply created_at_format parameter.
