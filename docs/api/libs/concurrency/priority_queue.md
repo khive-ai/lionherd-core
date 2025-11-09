@@ -518,8 +518,12 @@ except QueueFull:
 ### Basic Producer-Consumer
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
-import anyio
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    create_task_group,
+    sleep,
+    run,
+)
 
 queue = PriorityQueue[tuple[int, str]](maxsize=10)
 
@@ -535,14 +539,14 @@ async def consumer():
     while True:
         priority, task = await queue.get()
         print(f"Processing {task} (priority={priority})")
-        await anyio.sleep(0.1)  # Simulate work
+        await sleep(0.1)  # Simulate work
 
 async def main():
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(producer)
         tg.start_soon(consumer)
 
-anyio.run(main)
+run(main)
 # Output (priority order):
 # Processing critical_task (priority=1)
 # Processing normal_task (priority=5)
@@ -584,9 +588,13 @@ await try_operations()
 ### Priority-Based Task Scheduling
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    create_task_group,
+    sleep,
+    run,
+)
 from enum import IntEnum
-import anyio
 
 class Priority(IntEnum):
     """Task priority levels (lower = higher priority)."""
@@ -610,16 +618,16 @@ async def worker():
 
 async def main():
     # Schedule tasks (out of order)
-    await schedule_task(Priority.NORMAL, "backup", lambda: anyio.sleep(0.1))
-    await schedule_task(Priority.CRITICAL, "health_check", lambda: anyio.sleep(0.05))
-    await schedule_task(Priority.LOW, "cleanup", lambda: anyio.sleep(0.2))
-    await schedule_task(Priority.HIGH, "sync", lambda: anyio.sleep(0.1))
+    await schedule_task(Priority.NORMAL, "backup", lambda: sleep(0.1))
+    await schedule_task(Priority.CRITICAL, "health_check", lambda: sleep(0.05))
+    await schedule_task(Priority.LOW, "cleanup", lambda: sleep(0.2))
+    await schedule_task(Priority.HIGH, "sync", lambda: sleep(0.1))
 
     # Worker processes in priority order
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(worker)
 
-anyio.run(main)
+run(main)
 # Output (priority order):
 # [P1] Executing: health_check
 # [P2] Executing: sync
@@ -630,8 +638,12 @@ anyio.run(main)
 ### Bounded Queue with Backpressure
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
-import anyio
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    create_task_group,
+    sleep,
+    run,
+)
 
 queue = PriorityQueue[tuple[int, str]](maxsize=3)
 
@@ -647,15 +659,15 @@ async def slow_consumer():
     while True:
         priority, task = await queue.get()
         print(f"  Consuming {task}...")
-        await anyio.sleep(0.5)  # Slow processing
+        await sleep(0.5)  # Slow processing
         print(f"  Finished {task}")
 
 async def main():
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(fast_producer)
         tg.start_soon(slow_consumer)
 
-anyio.run(main)
+run(main)
 # Output shows producer blocking when queue fills:
 # Producing task 0...
 # Task 0 queued
@@ -923,9 +935,13 @@ for i in range(1_000_000):
 ### Example 1: Event Processing by Severity
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    create_task_group,
+    sleep,
+    run,
+)
 from enum import IntEnum
-import anyio
 
 class Severity(IntEnum):
     CRITICAL = 1
@@ -944,7 +960,7 @@ async def process_logs():
     while True:
         severity, message = await queue.get()
         print(f"[{severity.name}] {message}")
-        await anyio.sleep(0.1)
+        await sleep(0.1)
 
 async def main():
     # Log events out of order
@@ -954,10 +970,10 @@ async def main():
     await log_event(Severity.ERROR, "Failed to process request")
 
     # Process in severity order
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(process_logs)
 
-anyio.run(main)
+run(main)
 # Output (by severity):
 # [CRITICAL] Database connection lost
 # [ERROR] Failed to process request
@@ -968,8 +984,13 @@ anyio.run(main)
 ### Example 2: Rate-Limited API with Priority
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue, QueueFull
-import anyio
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    QueueFull,
+    create_task_group,
+    sleep,
+    run,
+)
 
 class RequestPriority(IntEnum):
     VIP = 1      # Premium users
@@ -991,7 +1012,7 @@ async def api_worker():
     while True:
         priority, user_id = await queue.get()
         print(f"Processing: {user_id} (P{priority})")
-        await anyio.sleep(0.1)  # 10 requests/sec
+        await sleep(0.1)  # 10 requests/sec
 
 async def main():
     # Submit mixed priority requests
@@ -1000,10 +1021,10 @@ async def main():
     await submit_request(RequestPriority.THROTTLED, "slow_user")
     await submit_request(RequestPriority.NORMAL, "user_2")
 
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(api_worker)
 
-anyio.run(main)
+run(main)
 # Output (VIP processed first):
 # Queued: user_1 (P5)
 # Queued: vip_user (P1)
@@ -1018,8 +1039,12 @@ anyio.run(main)
 ### Example 3: Deadline-Based Scheduling
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
-import anyio
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    create_task_group,
+    sleep,
+    run,
+)
 import time
 
 queue = PriorityQueue[tuple[float, str, callable]]()
@@ -1038,7 +1063,7 @@ async def scheduler():
         delay = deadline - now
         if delay > 0:
             print(f"Waiting {delay:.2f}s for {name}...")
-            await anyio.sleep(delay)
+            await sleep(delay)
 
         print(f"Executing {name}")
         await func()
@@ -1047,14 +1072,14 @@ async def main():
     now = time.time()
 
     # Schedule tasks with deadlines
-    await schedule_task(now + 3.0, "task_3s", lambda: anyio.sleep(0.1))
-    await schedule_task(now + 1.0, "task_1s", lambda: anyio.sleep(0.1))
-    await schedule_task(now + 2.0, "task_2s", lambda: anyio.sleep(0.1))
+    await schedule_task(now + 3.0, "task_3s", lambda: sleep(0.1))
+    await schedule_task(now + 1.0, "task_1s", lambda: sleep(0.1))
+    await schedule_task(now + 2.0, "task_2s", lambda: sleep(0.1))
 
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(scheduler)
 
-anyio.run(main)
+run(main)
 # Output (by deadline):
 # Waiting 1.00s for task_1s...
 # Executing task_1s
@@ -1067,8 +1092,13 @@ anyio.run(main)
 ### Example 4: Graceful Degradation with Priorities
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
-import anyio
+from lionherd_core.libs.concurrency import (
+    PriorityQueue,
+    QueueFull,
+    create_task_group,
+    sleep,
+    run,
+)
 
 class TaskPriority(IntEnum):
     ESSENTIAL = 1   # Must complete
@@ -1105,14 +1135,14 @@ async def worker():
     while True:
         priority, task = await queue.get()
         print(f"Processing: {task} (P{priority})")
-        await anyio.sleep(0.2)
+        await sleep(0.2)
 
 async def main():
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         tg.start_soon(worker)
         tg.start_soon(submit_tasks)
 
-anyio.run(main)
+run(main)
 # Output (essential tasks prioritized):
 # Queued: cache_warmup
 # Queued: process_payment

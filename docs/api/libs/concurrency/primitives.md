@@ -109,7 +109,7 @@ async with lock:
 #### Basic Mutual Exclusion
 
 ```python
-from lionherd_core.libs.concurrency import Lock
+from lionherd_core.libs.concurrency import Lock, sleep
 
 lock = Lock()
 shared_resource = []
@@ -118,7 +118,7 @@ async def worker(task_id: int):
     async with lock:
         # Only one task can execute this block at a time
         shared_resource.append(task_id)
-        await asyncio.sleep(0.1)
+        await sleep(0.1)
         print(f"Task {task_id}: {shared_resource}")
 ```
 
@@ -201,7 +201,7 @@ async with sem:
 #### Rate Limiting Concurrent Operations
 
 ```python
-from lionherd_core.libs.concurrency import Semaphore
+from lionherd_core.libs.concurrency import Semaphore, gather
 
 # Allow max 5 concurrent API calls
 api_limiter = Semaphore(5)
@@ -214,7 +214,7 @@ async def fetch_data(url: str):
 
 # Launch 100 tasks, but only 5 run concurrently
 tasks = [fetch_data(f"https://api.example.com/data/{i}") for i in range(100)]
-results = await asyncio.gather(*tasks)
+results = await gather(*tasks)
 ```
 
 ---
@@ -399,6 +399,8 @@ async def process_batch(data: list):
 #### Dynamic Capacity Adjustment
 
 ```python
+from lionherd_core.libs.concurrency import sleep
+
 limiter = CapacityLimiter(10.0)
 
 # Monitor and adjust capacity based on system load
@@ -409,7 +411,7 @@ async def adjust_capacity():
             limiter.total_tokens = 5.0  # Reduce capacity
         else:
             limiter.total_tokens = 20.0  # Increase capacity
-        await asyncio.sleep(60)
+        await sleep(60)
 ```
 
 ---
@@ -575,7 +577,7 @@ async with queue:
 #### Producer-Consumer Pattern
 
 ```python
-from lionherd_core.libs.concurrency import Queue
+from lionherd_core.libs.concurrency import Queue, gather
 
 queue = Queue.with_maxsize(50)
 
@@ -594,12 +596,14 @@ async def consumer():
         await process(item)
 
 async with queue:
-    await asyncio.gather(producer(), consumer())
+    await gather(producer(), consumer())
 ```
 
 #### Work Distribution
 
 ```python
+from lionherd_core.libs.concurrency import gather
+
 # Distribute work across multiple workers
 queue = Queue.with_maxsize(100)
 
@@ -623,7 +627,7 @@ async def distribute_work(tasks: list):
 
         # Launch workers
         workers = [worker(i) for i in range(5)]
-        await asyncio.gather(*workers)
+        await gather(*workers)
 ```
 
 ---
@@ -727,7 +731,7 @@ def statistics(self) -> anyio.EventStatistics: ...
 #### Coordinating Task Startup
 
 ```python
-from lionherd_core.libs.concurrency import Event
+from lionherd_core.libs.concurrency import Event, gather
 
 ready = Event()
 
@@ -741,25 +745,27 @@ async def worker():
     # Start processing
     await do_work()
 
-await asyncio.gather(setup(), worker(), worker(), worker())
+await gather(setup(), worker(), worker(), worker())
 ```
 
 #### One-Time Notification
 
 ```python
+from lionherd_core.libs.concurrency import sleep, gather
+
 shutdown_event = Event()
 
 async def monitor():
     while not shutdown_event.is_set():
         await check_health()
-        await asyncio.sleep(1)
+        await sleep(1)
     print("Shutdown initiated")
 
 async def shutdown_handler():
-    await asyncio.sleep(10)
+    await sleep(10)
     shutdown_event.set()  # Trigger shutdown
 
-await asyncio.gather(monitor(), shutdown_handler())
+await gather(monitor(), shutdown_handler())
 ```
 
 ---
@@ -906,7 +912,7 @@ async with condition:
 #### Producer-Consumer with Condition
 
 ```python
-from lionherd_core.libs.concurrency import Condition
+from lionherd_core.libs.concurrency import Condition, sleep, gather
 
 condition = Condition()
 queue = []
@@ -916,7 +922,7 @@ async def producer():
         async with condition:
             queue.append(i)
             condition.notify()  # Wake one consumer
-        await asyncio.sleep(0.5)
+        await sleep(0.5)
 
 async def consumer(consumer_id: int):
     while True:
@@ -928,7 +934,7 @@ async def consumer(consumer_id: int):
         if item == 9:
             break
 
-await asyncio.gather(
+await gather(
     producer(),
     consumer(1),
     consumer(2),
@@ -1113,7 +1119,7 @@ sem = Semaphore(5)
 ### Example 1: Rate-Limited Batch Processing
 
 ```python
-from lionherd_core.libs.concurrency import Semaphore, Queue
+from lionherd_core.libs.concurrency import Semaphore, Queue, gather
 
 # Limit concurrent API calls to 5
 api_limiter = Semaphore(5)
@@ -1138,16 +1144,19 @@ urls = [f"https://api.example.com/item/{i}" for i in range(100)]
 
 async with results_queue:
     fetch_tasks = [fetch_and_process(url) for url in urls]
-    results_task = asyncio.create_task(collect_results())
 
-    await asyncio.gather(*fetch_tasks)
-    results = await results_task
+    # Run fetch tasks and result collection concurrently
+    results = await gather(
+        gather(*fetch_tasks),
+        collect_results()
+    )
+    results = results[1]  # Extract collected results
 ```
 
 ### Example 2: Graceful Shutdown Coordination
 
 ```python
-from lionherd_core.libs.concurrency import Event, Lock
+from lionherd_core.libs.concurrency import Event, Lock, sleep, gather
 
 shutdown_event = Event()
 active_tasks = 0
@@ -1162,14 +1171,14 @@ async def worker(worker_id: int):
     try:
         while not shutdown_event.is_set():
             await do_work()
-            await asyncio.sleep(1)
+            await sleep(1)
     finally:
         async with active_lock:
             active_tasks -= 1
 
 async def shutdown_handler():
     # Wait for signal
-    await asyncio.sleep(10)
+    await sleep(10)
 
     # Initiate shutdown
     shutdown_event.set()
@@ -1179,18 +1188,18 @@ async def shutdown_handler():
         async with active_lock:
             if active_tasks == 0:
                 break
-        await asyncio.sleep(0.1)
+        await sleep(0.1)
 
     print("All workers stopped cleanly")
 
 workers = [worker(i) for i in range(5)]
-await asyncio.gather(*workers, shutdown_handler())
+await gather(*workers, shutdown_handler())
 ```
 
 ### Example 3: Dynamic Resource Pool
 
 ```python
-from lionherd_core.libs.concurrency import CapacityLimiter
+from lionherd_core.libs.concurrency import CapacityLimiter, sleep, gather, create_task_group
 
 # Resource pool with dynamic sizing
 pool = CapacityLimiter(10.0)
@@ -1216,7 +1225,7 @@ class ResourceManager:
             self.pool.total_tokens = new_capacity
             print(f"Adjusted capacity: {new_capacity} (load: {load})")
 
-            await asyncio.sleep(30)
+            await sleep(30)
 
     async def use_resource(self, task_id: int):
         async with self.pool:
@@ -1225,16 +1234,18 @@ class ResourceManager:
             await simulate_work()
 
 manager = ResourceManager()
-asyncio.create_task(manager.adjust_capacity())
 
-tasks = [manager.use_resource(i) for i in range(100)]
-await asyncio.gather(*tasks)
+# Use task group for structured concurrency
+async with create_task_group() as tg:
+    tg.start_soon(manager.adjust_capacity)
+    for i in range(100):
+        tg.start_soon(manager.use_resource, i)
 ```
 
 ### Example 4: Multi-Stage Pipeline
 
 ```python
-from lionherd_core.libs.concurrency import Queue, Event
+from lionherd_core.libs.concurrency import Queue, Event, gather
 
 stage1_queue = Queue.with_maxsize(10)
 stage2_queue = Queue.with_maxsize(10)
@@ -1267,7 +1278,7 @@ async def stage3_worker():
     done_event.set()
 
 async with stage1_queue, stage2_queue:
-    await asyncio.gather(
+    await gather(
         stage1_worker(),
         stage2_worker(),
         stage3_worker(),

@@ -121,14 +121,13 @@ async def race(*aws: Awaitable[T]) -> T: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import race
-import anyio
+from lionherd_core.libs.concurrency import race, sleep
 
 # Timeout pattern
 async def fetch_with_timeout(url):
     return await race(
         http_client.get(url),
-        anyio.sleep(5.0),  # 5-second timeout
+        sleep(5.0),  # 5-second timeout
     )
 
 # Redundant requests (fastest server wins)
@@ -675,20 +674,19 @@ async def process_documents(docs):
 ### Example 3: Timeout with Race
 
 ```python
-from lionherd_core.libs.concurrency import race
-import anyio
+from lionherd_core.libs.concurrency import race, sleep
 
 async def fetch_with_fallback(primary_url, fallback_url):
     async def fetch_primary():
-        await anyio.sleep(0.5)  # Delay to simulate slow primary
+        await sleep(0.5)  # Delay to simulate slow primary
         return await http_client.get(primary_url)
 
     async def fetch_fallback():
-        await anyio.sleep(2.0)  # Only if primary times out
+        await sleep(2.0)  # Only if primary times out
         return await http_client.get(fallback_url)
 
     async def timeout():
-        await anyio.sleep(1.0)
+        await sleep(1.0)
         raise TimeoutError("Request timed out")
 
     # Race primary vs timeout, fallback to secondary
@@ -760,7 +758,6 @@ async def fetch_important_data():
 
 ```python
 from lionherd_core.libs.concurrency import gather, race
-import anyio
 
 async def fetch_from_multiple_sources():
     # Race to get data from fastest source

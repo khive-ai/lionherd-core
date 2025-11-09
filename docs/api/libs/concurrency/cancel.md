@@ -93,10 +93,10 @@ def fail_after(seconds: float | None) -> Iterator[CancelScope]: ...
 
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_after
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 async def fetch_data():
-    await anyio.sleep(2.0)
+    await sleep(2.0)
     return "data"
 
 async def example():
@@ -114,7 +114,7 @@ async def example():
     # Check if cancelled
     async with fail_after(0.5) as scope:
         try:
-            await anyio.sleep(1.0)
+            await sleep(1.0)
         except TimeoutError:
             print(f"Cancelled: {scope.cancel_called}")  # True
 ```
@@ -156,10 +156,10 @@ def move_on_after(seconds: float | None) -> Iterator[CancelScope]: ...
 
 ```python
 from lionherd_core.libs.concurrency.cancel import move_on_after
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 async def fetch_optional_data():
-    await anyio.sleep(2.0)
+    await sleep(2.0)
     return "optional_data"
 
 async def example():
@@ -222,7 +222,6 @@ def fail_at(deadline: float | None) -> Iterator[CancelScope]: ...
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_at
 from lionherd_core.libs.concurrency import current_time
-import anyio
 
 async def batch_process(items):
     # Process items until deadline
@@ -290,7 +289,6 @@ def move_on_at(deadline: float | None) -> Iterator[CancelScope]: ...
 ```python
 from lionherd_core.libs.concurrency.cancel import move_on_at
 from lionherd_core.libs.concurrency import current_time
-import anyio
 
 async def gather_metrics():
     metrics = []
@@ -349,7 +347,7 @@ from lionherd_core.libs.concurrency.cancel import (
     move_on_after,
     effective_deadline,
 )
-import anyio
+from lionherd_core.libs.concurrency import current_time
 
 async def adaptive_operation():
     deadline = effective_deadline()
@@ -597,13 +595,15 @@ async with fail_after(1.0):
 **Solution:** Use async equivalents or run sync code in thread executor.
 
 ```python
+from lionherd_core.libs.concurrency import sleep, run_sync
+
 # ✅ CORRECT: Async sleep
 async with fail_after(1.0):
-    await anyio.sleep(10.0)  # Properly cancelled
+    await sleep(10.0)  # Properly cancelled
 
 # ✅ CORRECT: Sync code in thread with timeout
 async with fail_after(1.0):
-    await anyio.to_thread.run_sync(blocking_function)
+    await run_sync(blocking_function)
 ```
 
 ### Pitfall 2: Silencing Critical Errors
@@ -704,7 +704,7 @@ deadline = current_time() + 5.0
 
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_after
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 async def retry_with_timeout(
     operation,
@@ -721,7 +721,7 @@ async def retry_with_timeout(
             if attempt == max_attempts:
                 raise
             print(f"Attempt {attempt} timed out, retrying...")
-            await anyio.sleep(retry_delay)
+            await sleep(retry_delay)
 
 # Usage
 async def flaky_api_call():
@@ -736,7 +736,7 @@ result = await retry_with_timeout(flaky_api_call, max_attempts=3, timeout=2.0)
 
 ```python
 from lionherd_core.libs.concurrency.cancel import move_on_after
-import anyio
+from lionherd_core.libs.concurrency import create_task_group
 
 async def fetch_all_sources(sources: list[str], timeout: float = 2.0):
     """Fetch from multiple sources with individual timeouts."""
@@ -749,7 +749,7 @@ async def fetch_all_sources(sources: list[str], timeout: float = 2.0):
             return None
         return data
 
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         results = []
         for source in sources:
             results.append(await tg.start(fetch_with_timeout, source))
@@ -769,7 +769,6 @@ data = await fetch_all_sources(
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_at, effective_deadline
 from lionherd_core.libs.concurrency import current_time
-import anyio
 
 async def process_queue(tasks, total_timeout: float = 30.0):
     """Process tasks until queue empty or deadline reached."""
@@ -827,7 +826,7 @@ result = await environment_aware_operation()
 
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_after
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 class CircuitBreaker:
     """Circuit breaker with timeout enforcement."""
@@ -875,5 +874,5 @@ for i in range(10):
     except Exception as e:
         print(f"Request {i}: failed - {e}")
 
-    await anyio.sleep(1.0)
+    await sleep(1.0)
 ```

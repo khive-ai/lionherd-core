@@ -26,6 +26,8 @@ The `lionherd_core.libs.concurrency._task` module provides **structured concurre
 from lionherd_core.libs.concurrency import (
     TaskGroup,
     create_task_group,
+    sleep,
+    current_time,
 )
 ```
 
@@ -88,7 +90,7 @@ Get cancel scope for controlling task group lifetime.
 ```python
 async with create_task_group() as tg:
     # Set timeout for all tasks in group
-    tg.cancel_scope.deadline = anyio.current_time() + 30.0
+    tg.cancel_scope.deadline = current_time() + 30.0
 
     tg.start_soon(long_running_task)
     tg.start_soon(another_task)
@@ -133,7 +135,7 @@ def start_soon(
 ```python
 async def worker(task_id: int):
     print(f"Worker {task_id} starting")
-    await asyncio.sleep(1)
+    await sleep(1)
     print(f"Worker {task_id} done")
 
 async with create_task_group() as tg:
@@ -268,11 +270,11 @@ async with create_task_group() as tg:
 
 ```python
 async def failing_task():
-    await asyncio.sleep(1)
+    await sleep(1)
     raise ValueError("Task failed!")
 
 async def normal_task():
-    await asyncio.sleep(2)
+    await sleep(2)
     print("Normal task complete")
 
 try:
@@ -288,17 +290,16 @@ except ValueError as e:
 #### Timeout with Cancel Scope
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group
-import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def slow_task():
-    await asyncio.sleep(100)
+    await sleep(100)
     return "Done"
 
 try:
     async with create_task_group() as tg:
         # Set 5 second timeout for all tasks
-        tg.cancel_scope.deadline = anyio.current_time() + 5.0
+        tg.cancel_scope.deadline = current_time() + 5.0
 
         tg.start_soon(slow_task)
         tg.start_soon(slow_task)
@@ -400,7 +401,7 @@ async with create_task_group() as tg:
 # ❌ WRONG: Cannot do this
 async def background_loop():
     while True:
-        await asyncio.sleep(1)
+        await sleep(1)
         print("Still running...")
 
 async with create_task_group() as tg:
@@ -416,18 +417,18 @@ shutdown = Event()
 
 async def background_loop():
     while not shutdown.is_set():
-        await asyncio.sleep(1)
+        await sleep(1)
         print("Still running...")
 
 async with create_task_group() as tg:
     tg.start_soon(background_loop)
-    await asyncio.sleep(5)
+    await sleep(5)
     shutdown.set()  # Signal termination
 # Context exits cleanly
 
 # ✅ Correct: Use timeout
 async with create_task_group() as tg:
-    tg.cancel_scope.deadline = anyio.current_time() + 10.0
+    tg.cancel_scope.deadline = current_time() + 10.0
     tg.start_soon(background_loop)
 # Tasks cancelled after 10 seconds
 ```
@@ -439,12 +440,12 @@ async with create_task_group() as tg:
 ```python
 # ❌ WRONG: Unhandled exception crashes all tasks
 async def risky_task():
-    await asyncio.sleep(1)
+    await sleep(1)
     raise ValueError("Oops!")
 
 async def important_task():
     # This gets cancelled when risky_task fails
-    await asyncio.sleep(10)
+    await sleep(10)
     await save_critical_data()
 
 async with create_task_group() as tg:
@@ -459,7 +460,7 @@ async with create_task_group() as tg:
 # ✅ Correct: Handle within task
 async def risky_task():
     try:
-        await asyncio.sleep(1)
+        await sleep(1)
         raise ValueError("Oops!")
     except ValueError as e:
         logging.error(f"Task failed: {e}")
@@ -595,7 +596,7 @@ results = await parallel_process(data, chunk_size=100)
 ### Example 2: Service Lifecycle Management
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group, Event
+from lionherd_core.libs.concurrency import create_task_group, Event, sleep
 from anyio.abc import TaskStatus
 import anyio
 
@@ -621,7 +622,7 @@ class Service:
         # Run until shutdown
         while not self.shutdown.is_set():
             await handle_requests(server)
-            await asyncio.sleep(0.1)
+            await sleep(0.1)
 
         await server.close()
 
@@ -632,7 +633,7 @@ class Service:
 
         while not self.shutdown.is_set():
             await process_background_jobs()
-            await asyncio.sleep(1)
+            await sleep(1)
 
     async def run_health_monitor(self):
         """Health check component."""
@@ -640,7 +641,7 @@ class Service:
 
         while not self.shutdown.is_set():
             await check_health()
-            await asyncio.sleep(5)
+            await sleep(5)
 
     async def start(self):
         """Start all service components."""
@@ -665,11 +666,12 @@ class Service:
 service = Service()
 
 async def main():
-    # Start service
+    # Start service (note: outside task group for demo purposes)
+    import asyncio
     service_task = asyncio.create_task(service.start())
 
     # Run for a while
-    await asyncio.sleep(60)
+    await sleep(60)
 
     # Trigger shutdown
     service.shutdown.set()
@@ -737,7 +739,7 @@ async def fan_out_fan_in(
 
 # Usage
 async def expensive_operation(x: int) -> int:
-    await asyncio.sleep(1)
+    await sleep(1)
     return x * 2
 
 inputs = list(range(20))
@@ -752,8 +754,7 @@ print(f"Processed {len(results)} items")
 ### Example 4: Timeout and Retry Pattern
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group
-import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def with_timeout_and_retry(
     func: Callable,
@@ -768,7 +769,7 @@ async def with_timeout_and_retry(
         try:
             async with create_task_group() as tg:
                 # Set timeout for this attempt
-                tg.cancel_scope.deadline = anyio.current_time() + timeout
+                tg.cancel_scope.deadline = current_time() + timeout
 
                 # Create result container
                 result_container = []
@@ -786,13 +787,13 @@ async def with_timeout_and_retry(
         except TimeoutError:
             if attempt < max_retries - 1:
                 print(f"Attempt {attempt + 1} timed out, retrying...")
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await sleep(2 ** attempt)  # Exponential backoff
             else:
                 raise TimeoutError(f"Failed after {max_retries} attempts")
         except Exception as e:
             if attempt < max_retries - 1:
                 print(f"Attempt {attempt + 1} failed: {e}, retrying...")
-                await asyncio.sleep(2 ** attempt)
+                await sleep(2 ** attempt)
             else:
                 raise
 

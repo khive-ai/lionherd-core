@@ -64,7 +64,7 @@ deadline = current_time() + 30.0  # 30 second timeout
 while current_time() < deadline:
     if await check_condition():
         break
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
 ```
 
 ### Notes
@@ -246,7 +246,7 @@ print(result)  # 30
 #### Integrating Sync Libraries
 
 ```python
-from lionherd_core.libs.concurrency import run_sync
+from lionherd_core.libs.concurrency import run_sync, gather
 import requests
 
 async def fetch_sync_api(url: str) -> dict:
@@ -255,7 +255,7 @@ async def fetch_sync_api(url: str) -> dict:
     return response.json()
 
 # Multiple concurrent requests (event loop not blocked)
-results = await asyncio.gather(
+results = await gather(
     fetch_sync_api("https://api.example.com/1"),
     fetch_sync_api("https://api.example.com/2"),
     fetch_sync_api("https://api.example.com/3"),
@@ -287,7 +287,7 @@ async def write_file_async(path: str, content: str) -> None:
 #### CPU-Bound Operations
 
 ```python
-from lionherd_core.libs.concurrency import run_sync
+from lionherd_core.libs.concurrency import run_sync, gather
 import hashlib
 
 async def compute_hash(data: bytes) -> str:
@@ -298,7 +298,7 @@ async def compute_hash(data: bytes) -> str:
     return await run_sync(hash_data)
 
 # Process multiple hashes concurrently
-hashes = await asyncio.gather(
+hashes = await gather(
     compute_hash(b"data1"),
     compute_hash(b"data2"),
     compute_hash(b"data3"),
@@ -393,7 +393,7 @@ await sleep(0.1)
 while not condition_met():
     await sleep(0.5)  # Check every 500ms
 
-# Timeout pattern
+# Timeout pattern (using anyio directly - advanced feature)
 async def with_timeout(coro, timeout_sec: float):
     import anyio
     with anyio.fail_after(timeout_sec):
@@ -453,7 +453,7 @@ async def wait_for_condition(check_func, timeout: float = 30.0):
 #### Simulated Work in Tests
 
 ```python
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core.libs.concurrency import sleep, gather
 
 async def test_concurrent_operations():
     """Test multiple operations running concurrently."""
@@ -461,7 +461,7 @@ async def test_concurrent_operations():
         await sleep(0.1)  # Simulate work
         return f"Worker {worker_id} done"
 
-    results = await asyncio.gather(
+    results = await gather(
         worker(1), worker(2), worker(3)
     )
     # All workers run concurrently, total time ~100ms (not 300ms)
@@ -580,12 +580,14 @@ This enables IDE autocomplete and static type checking for `run_sync()` calls.
 
 ```python
 # ❌ Blocks event loop (200ms total - sequential)
+from lionherd_core.libs.concurrency import gather
+
 async def bad_concurrent_sleep():
     async def worker():
         time.sleep(0.1)  # BLOCKS everything
         return "done"
 
-    results = await asyncio.gather(worker(), worker())
+    results = await gather(worker(), worker())
     # Takes 200ms (workers run sequentially due to blocking)
 ```
 
@@ -593,12 +595,14 @@ async def bad_concurrent_sleep():
 
 ```python
 # ✅ Yields to event loop (100ms total - concurrent)
+from lionherd_core.libs.concurrency import sleep, gather
+
 async def good_concurrent_sleep():
     async def worker():
         await sleep(0.1)  # Yields control
         return "done"
 
-    results = await asyncio.gather(worker(), worker())
+    results = await gather(worker(), worker())
     # Takes 100ms (workers run concurrently)
 ```
 
@@ -634,11 +638,13 @@ else:
 **Issue**: Expecting CPU-bound Python code to parallelize in thread pool.
 
 ```python
+from lionherd_core.libs.concurrency import run_sync, gather
+
 def cpu_intensive():
     return sum(i*i for i in range(10_000_000))
 
 # ❌ Runs in thread, but GIL prevents parallelization
-results = await asyncio.gather(
+results = await gather(
     run_sync(cpu_intensive),
     run_sync(cpu_intensive),
     run_sync(cpu_intensive),
@@ -650,13 +656,14 @@ results = await asyncio.gather(
 
 ```python
 from concurrent.futures import ProcessPoolExecutor
+from lionherd_core.libs.concurrency import gather
 import asyncio
 
 executor = ProcessPoolExecutor()
 
 # ✅ Runs in separate processes (true parallelism)
 loop = asyncio.get_event_loop()
-results = await asyncio.gather(
+results = await gather(
     loop.run_in_executor(executor, cpu_intensive),
     loop.run_in_executor(executor, cpu_intensive),
     loop.run_in_executor(executor, cpu_intensive),
@@ -870,7 +877,7 @@ results = await process_batch_rate_limited(items, rate=10.0)
 ### Example 5: Deadline-Aware Worker Pool
 
 ```python
-from lionherd_core.libs.concurrency import sleep, current_time, run_sync
+from lionherd_core.libs.concurrency import sleep, current_time, run_sync, gather
 from lionherd_core.libs.concurrency import Queue
 
 async def worker_pool_with_deadline(
@@ -916,7 +923,7 @@ async def worker_pool_with_deadline(
 
         # Run workers
         workers = [worker() for _ in range(num_workers)]
-        await asyncio.gather(*workers)
+        await gather(*workers)
 
     return results
 

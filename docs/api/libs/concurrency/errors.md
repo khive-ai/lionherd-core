@@ -60,7 +60,6 @@ def get_cancelled_exc_class() -> type[BaseException]: ...
 
 ```python
 >>> from lionherd_core.libs.concurrency._errors import get_cancelled_exc_class
->>> import asyncio
 
 # Get the cancellation exception class for current backend
 >>> cancel_exc = get_cancelled_exc_class()
@@ -105,11 +104,10 @@ def is_cancelled(exc: BaseException) -> bool: ...
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import is_cancelled
->>> import asyncio
+>>> from lionherd_core.libs.concurrency._errors import is_cancelled, get_cancelled_exc_class
 
 # Test cancellation exception
->>> cancel_exc = asyncio.CancelledError()
+>>> cancel_exc = get_cancelled_exc_class()()
 >>> is_cancelled(cancel_exc)
 True
 
@@ -172,7 +170,7 @@ async def shield(
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.concurrency._errors import shield
+>>> from lionherd_core.libs.concurrency._errors import shield, get_cancelled_exc_class
 >>> import anyio
 
 # Shield critical database commit
@@ -187,7 +185,7 @@ async def shield(
 ...             # This commit won't be interrupted by task group cancellation
 ...             await shield(save_critical_data, {"key": "value"})
 ...             tg.start_soon(other_task)
-...     except anyio.get_cancelled_exc_class():
+...     except get_cancelled_exc_class():
 ...         print("Workflow cancelled, but data was saved")
 
 # Shield cleanup operations
@@ -417,7 +415,7 @@ async def cleanup_on_shutdown():
 
 ```python
 from lionherd_core.libs.concurrency._errors import is_cancelled, get_cancelled_exc_class
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 async def retry_on_error(operation, max_retries=3):
     """Retry on errors, but propagate cancellations immediately."""
@@ -430,7 +428,7 @@ async def retry_on_error(operation, max_retries=3):
                 raise
             elif attempt < max_retries - 1:
                 # Error - retry with backoff
-                await anyio.sleep(2 ** attempt)
+                await sleep(2 ** attempt)
             else:
                 # Max retries exceeded
                 raise
@@ -567,11 +565,10 @@ except BaseExceptionGroup as eg:
 
 ### Pitfall 4: Forgetting Backend Differences
 
-**Issue**: Hardcoding `asyncio.CancelledError` breaks on trio backend.
+**Issue**: Hardcoding backend-specific cancellation exceptions breaks on other backends.
 
 ```python
-# ❌ BAD: Backend-specific
-import asyncio
+# ❌ BAD: Backend-specific (hardcoding asyncio)
 try:
     await operation()
 except asyncio.CancelledError:  # Fails on trio!
@@ -659,6 +656,7 @@ Using `ExceptionGroup.split()` preserves all metadata, unlike manual filtering w
 
 ```python
 from lionherd_core.libs.concurrency._errors import non_cancel_subgroup, shield
+from lionherd_core.libs.concurrency import sleep
 import anyio
 import signal
 
@@ -683,7 +681,7 @@ class ServiceManager:
 
                 # Wait for shutdown signal
                 while self.running:
-                    await anyio.sleep(1)
+                    await sleep(1)
 
                 # Cancel all tasks
                 tg.cancel_scope.cancel()
@@ -733,7 +731,7 @@ anyio.run(ServiceManager().run)
 
 ```python
 from lionherd_core.libs.concurrency._errors import is_cancelled
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 async def retry_with_backoff(
     operation,
@@ -756,7 +754,7 @@ async def retry_with_backoff(
             if attempt < max_retries - 1:
                 delay = min(base_delay * (2 ** attempt), max_delay)
                 print(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
-                await anyio.sleep(delay)
+                await sleep(delay)
             else:
                 print(f"All {max_retries} attempts failed")
                 raise
@@ -783,6 +781,7 @@ anyio.run(main)
 
 ```python
 from lionherd_core.libs.concurrency._errors import split_cancellation
+from lionherd_core.libs.concurrency import sleep
 import anyio
 
 async def process_batch_with_partial_failure(items, min_success_rate=0.8):
@@ -834,7 +833,7 @@ async def process_batch_with_partial_failure(items, min_success_rate=0.8):
 
 async def process_single_item(item):
     """Process a single item (implementation)."""
-    await anyio.sleep(0.1)  # Simulate work
+    await sleep(0.1)  # Simulate work
     if item.get("should_fail"):
         raise ValueError(f"Item processing failed: {item}")
     return {"processed": item}
@@ -858,7 +857,7 @@ anyio.run(main)
 
 ```python
 from lionherd_core.libs.concurrency._errors import shield
-import anyio
+from lionherd_core.libs.concurrency import sleep
 
 class Database:
     """Simplified database with async transactions."""
@@ -873,17 +872,17 @@ class DatabaseTransaction:
 
     async def insert(self, data):
         self.operations.append(("insert", data))
-        await anyio.sleep(0.01)  # Simulate I/O
+        await sleep(0.01)  # Simulate I/O
 
     async def commit(self):
         print(f"Committing {len(self.operations)} operations...")
-        await anyio.sleep(0.1)  # Simulate commit I/O
+        await sleep(0.1)  # Simulate commit I/O
         self.committed = True
         print("Transaction committed successfully")
 
     async def rollback(self):
         print("Rolling back transaction...")
-        await anyio.sleep(0.05)  # Simulate rollback I/O
+        await sleep(0.05)  # Simulate rollback I/O
         self.operations.clear()
         print("Transaction rolled back")
 
