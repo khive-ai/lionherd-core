@@ -14,9 +14,9 @@ Core Patterns Validated
 ========================
 
 1. **Content Polymorphism**
-   - Any Python value: primitives, collections, Element instances
+   - Structured data only: Serializable, BaseModel, dict, or None
    - Automatic nested Element serialization via field_serializer
-   - Lenient validation with type coercion (list→content, dict→content)
+   - Strict validation enforces composable, query-able content
    - Enables graph-of-graphs patterns (Node contains Graph contains Nodes)
 
 2. **Registry Metaclass Pattern**
@@ -203,11 +203,11 @@ def test_node_subclass_creation():
     Registry pattern: PersonNode automatically registered in NODE_REGISTRY
     via __pydantic_init_subclass__ hook (tested separately in registration section).
     """
-    person = PersonNode(name="Alice", age=30, content="bio")
+    person = PersonNode(name="Alice", age=30, content={"value": "bio"})
 
     assert person.name == "Alice"
     assert person.age == 30
-    assert person.content == "bio"
+    assert person.content == {"value": "bio"}
 
 
 # ============================================================================
@@ -274,12 +274,12 @@ def test_dynamic_subclass_registration():
 
 def test_from_dict_base_node():
     """Test from_dict creates Node when no lion_class specified."""
-    data = {"content": "test content", "metadata": {}}
+    data = {"content": {"value": "test content"}, "metadata": {}}
 
     node = Node.from_dict(data)
 
     assert isinstance(node, Node)
-    assert node.content == "test content"
+    assert node.content == {"value": "test content"}
 
 
 def test_from_dict_polymorphic_person():
@@ -305,7 +305,7 @@ def test_from_dict_polymorphic_person():
     data = {
         "name": "Bob",
         "age": 25,
-        "content": "engineer",
+        "content": {"value": "engineer"},
         "metadata": {"lion_class": "PersonNode"},
     }
 
@@ -315,7 +315,7 @@ def test_from_dict_polymorphic_person():
     assert isinstance(node, PersonNode)
     assert node.name == "Bob"
     assert node.age == 25
-    assert node.content == "engineer"
+    assert node.content == {"value": "engineer"}
 
 
 def test_from_dict_polymorphic_document():
@@ -346,7 +346,7 @@ def test_from_dict_with_full_qualified_name():
 
 def test_from_dict_unknown_class_fallback():
     """Test from_dict falls back to base Node when lion_class unknown."""
-    data = {"content": "test", "metadata": {"lion_class": "NonExistentNode"}}
+    data = {"content": {"value": "test"}, "metadata": {"lion_class": "NonExistentNode"}}
 
     # Should not raise, just create base Node
     node = Node.from_dict(data)
@@ -358,7 +358,7 @@ def test_from_dict_unknown_class_fallback():
 def test_from_dict_preserves_metadata():
     """Test from_dict preserves custom metadata but removes lion_class."""
     data = {
-        "content": "test",
+        "content": {"value": "test"},
         "metadata": {"lion_class": "Node", "custom_key": "custom_value"},
     }
 
@@ -382,7 +382,7 @@ def test_from_dict_preserves_metadata():
 
 def test_to_dict_db_mode_renames_metadata():
     """Test to_dict with mode='db' creates node_metadata field."""
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
 
     db_dict = node.to_dict(mode="db")
 
@@ -473,12 +473,12 @@ def test_content_with_nested_element():
     Trade-off: No compile-time type safety (content: Any), but maximum flexibility
     for dynamic data structures. Follows Ocean's "composition over hierarchy" philosophy.
     """
-    inner_node = Node(content="inner")
+    inner_node = Node(content={"value": "inner"})
     outer = Node(content=inner_node)
 
     # Content should be the nested Node
     assert isinstance(outer.content, Node)
-    assert outer.content.content == "inner"
+    assert outer.content.content == {"value": "inner"}
 
 
 def test_content_element_serialization():
@@ -550,7 +550,7 @@ def test_mixed_type_collection_deserialization():
             "node_metadata": {"lion_class": "DocumentNode"},
         },
         {"name": "Bob", "age": 25, "node_metadata": {"lion_class": "PersonNode"}},
-        {"content": "generic", "node_metadata": {"lion_class": "Node"}},
+        {"content": {"value": "generic"}, "node_metadata": {"lion_class": "Node"}},
     ]
 
     nodes = [Node.from_dict(record) for record in db_records]
@@ -572,7 +572,7 @@ def test_mixed_type_collection_serialization():
     nodes = [
         PersonNode(name="X"),
         DocumentNode(title="Y"),
-        Node(content="Z"),
+        Node(content={"value": "Z"}),
     ]
 
     serialized = [node.to_dict(mode="db") for node in nodes]
@@ -652,7 +652,7 @@ def test_to_dict_modes_consistency():
 
 def test_from_dict_empty_metadata():
     """Test from_dict with empty metadata dict."""
-    data = {"content": "test", "metadata": {}}
+    data = {"content": {"value": "test"}, "metadata": {}}
 
     node = Node.from_dict(data)
 
@@ -661,12 +661,12 @@ def test_from_dict_empty_metadata():
 
 def test_from_dict_no_metadata_field():
     """Test from_dict without metadata field."""
-    data = {"content": "test"}
+    data = {"content": {"value": "test"}}
 
     node = Node.from_dict(data)
 
     assert isinstance(node, Node)
-    assert node.content == "test"
+    assert node.content == {"value": "test"}
 
 
 def test_subclass_from_dict_direct_call():
@@ -682,7 +682,7 @@ def test_subclass_from_dict_direct_call():
 
 def test_node_equality_by_id():
     """Test Node instances with same ID have same ID (not pydantic equality)."""
-    node1 = Node(content="a")
+    node1 = Node(content={"value": "a"})
     node2 = Node.from_dict(node1.to_dict())
 
     # Pydantic equality compares all fields, but ID should match
@@ -763,7 +763,7 @@ def test_node_adapt_to_toml():
 
     PersonNode.register_adapter(TomlAdapter)
 
-    person = PersonNode(name="Alice", age=30, content="engineer")
+    person = PersonNode(name="Alice", age=30, content={"value": "engineer"})
 
     toml_str = person.adapt_to("toml")
 
@@ -778,7 +778,9 @@ def test_node_adapt_from_toml():
     toml_str = """
 name = "Bob"
 age = 25
-content = "developer"
+
+[content]
+value = "developer"
 
 [node_metadata]
 lion_class = "PersonNode"
@@ -828,7 +830,7 @@ node_metadata:
 
 def test_node_adapt_roundtrip_toml():
     """Test Node survives TOML roundtrip with correct type."""
-    original = PersonNode(name="Charlie", age=35, content="manager")
+    original = PersonNode(name="Charlie", age=35, content={"value": "manager"})
 
     # Adapt to TOML and back
     toml_str = original.adapt_to("toml")
@@ -878,21 +880,21 @@ def test_node_uses_builtin_json_not_adapter():
 
 def test_node_embedding_none():
     """Test Node with no embedding (default None)."""
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
     assert node.embedding is None
 
 
 def test_node_embedding_list():
     """Test Node with embedding as list of floats."""
     embedding = [0.1, 0.2, 0.3, 0.4]
-    node = Node(content="test", embedding=embedding)
+    node = Node(content={"value": "test"}, embedding=embedding)
     assert node.embedding == embedding
     assert all(isinstance(x, float) for x in node.embedding)
 
 
 def test_node_embedding_coerce_ints():
     """Test Node embedding coerces ints to floats."""
-    node = Node(content="test", embedding=[1, 2, 3])
+    node = Node(content={"value": "test"}, embedding=[1, 2, 3])
     assert node.embedding == [1.0, 2.0, 3.0]
     assert all(isinstance(x, float) for x in node.embedding)
 
@@ -920,7 +922,7 @@ def test_node_embedding_from_json_string():
     embedding = [0.1, 0.2, 0.3]
     json_str = orjson.dumps(embedding).decode()
 
-    node = Node(content="test", embedding=json_str)
+    node = Node(content={"value": "test"}, embedding=json_str)
     assert node.embedding == embedding
 
 
@@ -929,7 +931,7 @@ def test_node_embedding_rejects_empty_list():
     import pytest
 
     with pytest.raises(ValueError, match="embedding list cannot be empty"):
-        Node(content="test", embedding=[])
+        Node(content={"value": "test"}, embedding=[])
 
 
 def test_node_embedding_rejects_non_numeric():
@@ -937,7 +939,7 @@ def test_node_embedding_rejects_non_numeric():
     import pytest
 
     with pytest.raises(ValueError, match="embedding must contain only numeric values"):
-        Node(content="test", embedding=[0.1, "invalid", 0.3])
+        Node(content={"value": "test"}, embedding=[0.1, "invalid", 0.3])
 
 
 def test_node_embedding_rejects_invalid_type():
@@ -945,12 +947,12 @@ def test_node_embedding_rejects_invalid_type():
     import pytest
 
     with pytest.raises(ValueError, match="embedding must be a list"):
-        Node(content="test", embedding={"invalid": "dict"})
+        Node(content={"value": "test"}, embedding={"invalid": "dict"})
 
 
 def test_node_embedding_serialization():
     """Test Node embedding serializes correctly in different modes."""
-    node = Node(content="test", embedding=[0.1, 0.2, 0.3])
+    node = Node(content={"value": "test"}, embedding=[0.1, 0.2, 0.3])
 
     # Python mode preserves list
     python_dict = node.to_dict(mode="python")
@@ -967,7 +969,7 @@ def test_node_embedding_serialization():
 
 def test_node_embedding_roundtrip():
     """Test Node embedding survives serialization roundtrip."""
-    original = Node(content="test", embedding=[0.1, 0.2, 0.3])
+    original = Node(content={"value": "test"}, embedding=[0.1, 0.2, 0.3])
 
     # Roundtrip through dict
     data = original.to_dict(mode="db")
@@ -983,7 +985,7 @@ def test_node_created_at_format_datetime():
     """Test Node to_dict with created_at_format='datetime' (default)."""
     import datetime as dt
 
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
     data = node.to_dict(mode="python", created_at_format="datetime")
 
     # Default: keep as datetime object
@@ -993,7 +995,7 @@ def test_node_created_at_format_datetime():
 
 def test_node_created_at_format_isoformat():
     """Test Node to_dict with created_at_format='isoformat'."""
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
     data = node.to_dict(mode="python", created_at_format="isoformat")
 
     # ISO format: string
@@ -1003,7 +1005,7 @@ def test_node_created_at_format_isoformat():
 
 def test_node_created_at_format_timestamp():
     """Test Node to_dict with created_at_format='timestamp' (legacy)."""
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
     data = node.to_dict(mode="python", created_at_format="timestamp")
 
     # Timestamp: float
@@ -1013,7 +1015,7 @@ def test_node_created_at_format_timestamp():
 
 def test_node_created_at_format_db_mode():
     """Test Node to_dict with created_at_format in db mode."""
-    node = Node(content="test")
+    node = Node(content={"value": "test"})
 
     # DB mode with isoformat
     data = node.to_dict(mode="db", created_at_format="isoformat")
@@ -1023,7 +1025,7 @@ def test_node_created_at_format_db_mode():
 
 def test_node_created_at_roundtrip_isoformat():
     """Test Node created_at survives roundtrip via isoformat."""
-    original = Node(content="test")
+    original = Node(content={"value": "test"})
 
     # Serialize with isoformat
     data = original.to_dict(mode="db", created_at_format="isoformat")
@@ -1155,7 +1157,7 @@ class TestNodeContentValidationEdgeCases:
         """
         # Pass invalid JSON string as embedding
         with pytest.raises(ValueError, match="Failed to parse embedding JSON string"):
-            Node(content="test", embedding="not valid json [[[")
+            Node(content={"value": "test"}, embedding="not valid json [[[")
 
     def test_embedding_malformed_json_string(self):
         """Test incomplete embedding JSON raises clear ValueError.
@@ -1170,7 +1172,7 @@ class TestNodeContentValidationEdgeCases:
             ValueError with "Failed to parse embedding JSON string" message
         """
         with pytest.raises(ValueError, match="Failed to parse embedding JSON string"):
-            Node(content="test", embedding='{"incomplete": ')
+            Node(content={"value": "test"}, embedding='{"incomplete": ')
 
     def test_from_dict_with_non_dict_metadata(self):
         """Test non-dict metadata disables polymorphism but doesn't crash.
@@ -1196,14 +1198,14 @@ class TestNodeContentValidationEdgeCases:
             Node created successfully, metadata stored as-is, no polymorphism
         """
         # Create data with metadata as string (not dict)
-        data = {"content": "test", "metadata": "not a dict"}
+        data = {"content": {"value": "test"}, "metadata": "not a dict"}
 
         # Should handle non-dict metadata (lion_class = None)
         node = Node.from_dict(data)
 
         # Should still create node, just no polymorphism
         assert isinstance(node, Node)
-        assert node.content == "test"
+        assert node.content == {"value": "test"}
 
     def test_from_dict_with_metadata_as_list(self):
         """Test metadata as list raises validation error.
@@ -1225,7 +1227,7 @@ class TestNodeContentValidationEdgeCases:
         Expected:
             ValidationError or TypeError from Pydantic
         """
-        data = {"content": "test", "metadata": ["list", "not", "dict"]}
+        data = {"content": {"value": "test"}, "metadata": ["list", "not", "dict"]}
 
         # Pydantic will reject list as metadata
         with pytest.raises((ValueError, TypeError)):
@@ -1276,7 +1278,7 @@ class TestNodeContentValidationEdgeCases:
         embedding = [1, 2, 3]
         json_str = orjson.dumps(embedding).decode()
 
-        node = Node(content="test", embedding=json_str)
+        node = Node(content={"value": "test"}, embedding=json_str)
 
         # Should parse and coerce to floats
         assert node.embedding == [1.0, 2.0, 3.0]
@@ -1299,7 +1301,7 @@ class TestNodeContentValidationEdgeCases:
         embedding = [1, 2.5, 3, 4.7]
         json_str = orjson.dumps(embedding).decode()
 
-        node = Node(content="test", embedding=json_str)
+        node = Node(content={"value": "test"}, embedding=json_str)
 
         # Should parse correctly
         assert node.embedding == [1.0, 2.5, 3.0, 4.7]

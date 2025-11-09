@@ -238,9 +238,9 @@ def simple_graph():
     graph = Graph()
 
     # Create nodes
-    n1 = Node(content="A")
-    n2 = Node(content="B")
-    n3 = Node(content="C")
+    n1 = Node(content={"value": "A"})
+    n2 = Node(content={"value": "B"})
+    n3 = Node(content={"value": "C"})
 
     graph.add_node(n1)
     graph.add_node(n2)
@@ -262,9 +262,9 @@ def cyclic_graph():
     graph = Graph()
 
     # Create nodes
-    n1 = Node(content="A")
-    n2 = Node(content="B")
-    n3 = Node(content="C")
+    n1 = Node(content={"value": "A"})
+    n2 = Node(content={"value": "B"})
+    n3 = Node(content={"value": "C"})
 
     graph.add_node(n1)
     graph.add_node(n2)
@@ -288,10 +288,10 @@ def dag_graph():
     graph = Graph()
 
     # Create nodes
-    n1 = Node(content="A")
-    n2 = Node(content="B")
-    n3 = Node(content="C")
-    n4 = Node(content="D")
+    n1 = Node(content={"value": "A"})
+    n2 = Node(content={"value": "B"})
+    n3 = Node(content={"value": "C"})
+    n4 = Node(content={"value": "D"})
 
     graph.add_node(n1)
     graph.add_node(n2)
@@ -377,7 +377,7 @@ class TestGraphBasics:
         """Test __contains__ returns False for non-members."""
         graph, _, _ = simple_graph
 
-        new_node = Node(content="X")
+        new_node = Node(content={"value": "X"})
         new_edge = Edge(head=new_node.id, tail=new_node.id)
 
         assert new_node not in graph
@@ -415,7 +415,7 @@ class TestGraphBasics:
         nodes_pile = Pile(item_type=Node)
         edges_pile = Pile(item_type=Edge)
 
-        n1 = Node(content="A")
+        n1 = Node(content={"value": "A"})
         nodes_pile.add(n1)
 
         # Pass Pile directly to Graph initialization
@@ -460,7 +460,7 @@ class TestNodeOperations:
 
     def test_add_node_basic(self, empty_graph):
         """Test adding a node to empty graph."""
-        node = Node(content="test")
+        node = Node(content={"value": "test"})
         empty_graph.add_node(node)
 
         assert len(empty_graph) == 1
@@ -469,7 +469,7 @@ class TestNodeOperations:
 
     def test_add_node_updates_adjacency(self, empty_graph):
         """Test adding node initializes adjacency lists."""
-        node = Node(content="test")
+        node = Node(content={"value": "test"})
         empty_graph.add_node(node)
 
         # Should have empty adjacency sets
@@ -529,7 +529,7 @@ class TestNodeOperations:
 
     def test_remove_node_not_found_raises(self, empty_graph):
         """Test removing non-existent node raises ValueError."""
-        fake_node = Node(content="fake")
+        fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(ValueError, match="not found"):
             empty_graph.remove_node(fake_node)
@@ -618,8 +618,8 @@ class TestEdgeOperations:
 
     def test_add_edge_missing_head_raises(self, empty_graph):
         """Test adding edge with missing head node raises ValueError."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
 
         # n2 not in graph
@@ -630,8 +630,8 @@ class TestEdgeOperations:
 
     def test_add_edge_missing_tail_raises(self, empty_graph):
         """Test adding edge with missing tail node raises ValueError."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
 
         # n2 not in graph
@@ -846,7 +846,7 @@ class TestAdjacencyQueries:
 
     def test_get_node_edges_isolated_node(self, empty_graph):
         """Test getting edges for isolated node (no edges)."""
-        node = Node(content="isolated")
+        node = Node(content={"value": "isolated"})
         empty_graph.add_node(node)
 
         edges = empty_graph.get_node_edges(node, direction="both")
@@ -862,9 +862,9 @@ class TestAdjacencyQueries:
 
     def test_get_heads_multiple(self, empty_graph):
         """Test getting multiple head nodes."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
-        n3 = Node(content="C")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
+        n3 = Node(content={"value": "C"})
 
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
@@ -894,8 +894,8 @@ class TestAdjacencyQueries:
 
     def test_get_tails_multiple(self, empty_graph):
         """Test getting multiple tail nodes."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
 
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
@@ -1171,7 +1171,7 @@ class TestGraphAlgorithms:
 
     def test_is_acyclic_single_node(self, empty_graph):
         """Test single node graph is acyclic."""
-        empty_graph.add_node(Node(content="A"))
+        empty_graph.add_node(Node(content={"value": "A"}))
         assert empty_graph.is_acyclic() is True
 
     def test_is_acyclic_chain(self, simple_graph):
@@ -1191,7 +1191,7 @@ class TestGraphAlgorithms:
 
     def test_is_acyclic_self_loop(self, empty_graph):
         """Test self-loop is detected as cycle."""
-        node = Node(content="A")
+        node = Node(content={"value": "A"})
         empty_graph.add_node(node)
 
         # Self-loop
@@ -1236,7 +1236,7 @@ class TestGraphAlgorithms:
 
     def test_topological_sort_single_node(self, empty_graph):
         """Test topological sort on single node."""
-        node = Node(content="A")
+        node = Node(content={"value": "A"})
         empty_graph.add_node(node)
 
         sorted_nodes = empty_graph.topological_sort()
@@ -1284,8 +1284,8 @@ class TestGraphAlgorithms:
 
     def test_find_path_disconnected_components(self, empty_graph):
         """Test find_path returns None for disconnected components."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
 
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
@@ -1317,7 +1317,7 @@ class TestGraphAlgorithms:
     def test_find_path_start_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if start node not in graph."""
         graph, _, _ = simple_graph
-        fake_node = Node(content="fake")
+        fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(ValueError, match="not in graph"):
             graph.find_path(fake_node, graph.nodes.items[next(iter(graph.nodes.items.keys()))])
@@ -1325,7 +1325,7 @@ class TestGraphAlgorithms:
     def test_find_path_end_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if end node not in graph."""
         graph, (n1, _, _), _ = simple_graph
-        fake_node = Node(content="fake")
+        fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(ValueError, match="not in graph"):
             graph.find_path(n1, fake_node)
@@ -1492,8 +1492,8 @@ class TestSerialization:
 
     def test_roundtrip_preserves_edge_properties(self, empty_graph):
         """Test edge properties are preserved through roundtrip."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
 
@@ -1545,7 +1545,7 @@ class TestSerialization:
             List converted to set internally, exclusion works correctly
         """
         graph = Graph()
-        n1 = Node(content="A")
+        n1 = Node(content={"value": "A"})
         graph.add_node(n1)
 
         # Pass exclude as list (not set) - should work just like set
@@ -1697,7 +1697,7 @@ class TestEdgeCases:
 
     def test_single_node_graph(self, empty_graph):
         """Test graph with single isolated node."""
-        node = Node(content="lonely")
+        node = Node(content={"value": "lonely"})
         empty_graph.add_node(node)
 
         # Single node is both head and tail
@@ -1715,15 +1715,15 @@ class TestEdgeCases:
     def test_disconnected_components(self, empty_graph):
         """Test graph with multiple disconnected components."""
         # Component 1: A -> B
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
         empty_graph.add_edge(Edge(head=n1.id, tail=n2.id))
 
         # Component 2: C -> D
-        n3 = Node(content="C")
-        n4 = Node(content="D")
+        n3 = Node(content={"value": "C"})
+        n4 = Node(content={"value": "D"})
         empty_graph.add_node(n3)
         empty_graph.add_node(n4)
         empty_graph.add_edge(Edge(head=n3.id, tail=n4.id))
@@ -1743,7 +1743,7 @@ class TestEdgeCases:
 
     def test_self_loop_graph(self, empty_graph):
         """Test graph with self-loop."""
-        node = Node(content="self")
+        node = Node(content={"value": "self"})
         empty_graph.add_node(node)
 
         # Self-loop edge
@@ -1763,8 +1763,8 @@ class TestEdgeCases:
 
     def test_multiple_edges_between_nodes(self, empty_graph):
         """Test multiple edges between same pair of nodes."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
 
@@ -1793,8 +1793,8 @@ class TestEdgeCases:
 
     def test_graph_with_edge_conditions_serialization(self, empty_graph):
         """Test graph with EdgeCondition survives roundtrip."""
-        n1 = Node(content="A")
-        n2 = Node(content="B")
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
         empty_graph.add_node(n2)
 
