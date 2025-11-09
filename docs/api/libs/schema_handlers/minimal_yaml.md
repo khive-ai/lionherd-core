@@ -92,9 +92,7 @@ Whether to sort dictionary keys alphabetically in output.
 
 ## Returns
 
-**str**
-
-YAML-formatted string representation of `value`.
+`str` - YAML-formatted string representation of `value`.
 
 - **Format**: Standard YAML 1.1 syntax
 - **Encoding**: UTF-8 with `allow_unicode=True` (supports international characters)

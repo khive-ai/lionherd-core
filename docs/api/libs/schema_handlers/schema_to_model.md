@@ -147,14 +147,14 @@ Dynamically generated Pydantic model class ready for instantiation.
 
 ## Raises
 
-**ImportError**
+### ImportError
 
 `datamodel-code-generator` not installed.
 
 - **Message**: Includes installation instructions
 - **Fix**: `pip install 'lionherd-core[schema-gen]'` or `pip install datamodel-code-generator`
 
-**ValueError**
+### ValueError
 
 Invalid schema format or content.
 
@@ -164,13 +164,13 @@ Invalid schema format or content.
   - Model name cannot be sanitized to valid identifier
 - **Context**: Error includes original exception details
 
-**TypeError**
+### TypeError
 
 Schema is neither string nor dict.
 
 - **Message**: "Schema must be a JSON string or a dictionary"
 
-**RuntimeError**
+### RuntimeError
 
 Code generation or module loading failed.
 
@@ -181,7 +181,7 @@ Code generation or module loading failed.
   - Type resolution failed during `model_rebuild()`
 - **Context**: Error includes underlying exception and file path details
 
-**AttributeError**
+### AttributeError
 
 Generated model class not found in module.
 
