@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `errors` module defines the **exception hierarchy** for LNDL (Lionherd Natural Data Language) parsing and validation failures. These exceptions are raised during structured output extraction when LLM responses fail to match expected specifications or contain invalid constructor syntax.
+The `errors` module defines the **exception hierarchy** for LNDL (Language InterOperable Network Directive Language) parsing and validation failures. These exceptions are raised during structured output extraction when LLM responses fail to match expected specifications or contain invalid constructor syntax.
 
 **Key Capabilities:**
 
@@ -687,13 +687,11 @@ This separation enables different handling strategies at different pipeline stag
 ## See Also
 
 - **Related Modules**:
-  - [lndl](../lndl.md): LNDL parsing and extraction overview
   - [Spec](../types/spec.md): Spec definition and validation
   - [Operable](../types/operable.md): Structured output integration
-- **Related Concepts**:
-  - [Validation Strategies](../lndl.md#validation-strategies): Strict, lenient, and fuzzy modes
-  - [Constructor Syntax](../lndl.md#constructor-syntax): LNDL syntax specification
-  - [Error Recovery](../lndl.md#error-recovery): Fallback and retry patterns
+  - [LNDL Parser](parser.md): Parser API documentation
+  - [LNDL Resolver](resolver.md): Resolver and validation
+  - [LNDL Fuzzy](fuzzy.md): Fuzzy matching for error tolerance
 
 ## Examples
 

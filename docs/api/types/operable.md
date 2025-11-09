@@ -425,7 +425,7 @@ Validation failed
 
 - Only Pydantic adapter implemented (v1.0.0-alpha)
 - Validation modes (strict/lenient/fuzzy) not yet exposed in API
-- LNDL (lionagi-native-data-language) support planned for future releases
+- LNDL (Language InterOperable Network Directive Language) integration available via [lndl module](../lndl/types.md)
 
 Pydantic adapter implementation is available in `src/lionherd_core/types/spec_adapters/pydantic_field.py`.
 
@@ -875,18 +875,26 @@ Operable will support multiple validation modes for different use cases:
 
 **Current State**: Validation mode configuration not yet exposed in Operable API. Pydantic adapter uses framework defaults.
 
-## LNDL Support (Future)
+## LNDL Support
 
-**Status**: Planned for future releases
+**Status**: Available in lionherd v1.0.0-alpha3+
 
-LNDL (lionagi-native-data-language) integration will enable:
+LNDL (Language InterOperable Network Directive Language) integration enables:
 
-- Natural language schema definitions
-- LLM-generated Spec collections
-- Schema evolution from conversational requirements
-- Automated field inference from examples
+- Structured LLM output parsing with `OUT{}` blocks
+- Variable resolution and templating with `LVAR{}`
+- Tool/ActionCall invocation with `ActionCall{}`
+- Fuzzy matching for schema validation
+- Template-based generation with metadata preservation
 
-**Current State**: LNDL syntax not yet supported. Use explicit Spec construction.
+**Usage**: See comprehensive documentation in the [LNDL module](../lndl/parser.md):
+
+- [Parser](../lndl/parser.md): Parse LVAR, ActionCall, and OUT blocks
+- [Resolver](../lndl/resolver.md): Variable resolution and validation
+- [Fuzzy](../lndl/fuzzy.md): Typo-tolerant parsing with Operable integration
+- [Types](../lndl/types.md): Core LNDL data structures
+- [Prompt](../lndl/prompt.md): System prompts for LLMs
+- [Errors](../lndl/errors.md): Exception hierarchy
 
 ## See Also
 

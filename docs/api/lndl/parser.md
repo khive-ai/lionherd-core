@@ -1,6 +1,6 @@
 # LNDL Parser
 
-> Low-level parsing utilities for LNDL (Language for Non-Deterministic Loads) structured outputs
+> Low-level parsing utilities for LNDL (Language InterOperable Network Directive Language) structured outputs
 
 ## Overview
 
@@ -1018,10 +1018,10 @@ This ensures **safe parsing** of untrusted LLM outputs.
 - **Related Modules**:
   - [lndl.types](types.md): `LvarMetadata`, `LactMetadata` dataclasses
   - [lndl.errors](errors.md): `MissingOutBlockError` exception
-  - [lndl.response](response.md): High-level response parsing with validation
-- **Related Guides**:
-  - [LNDL Format Guide](../../user_guide/lndl_format.md): LNDL syntax and conventions
-  - [Response Processing Guide](../../user_guide/response_processing.md): End-to-end response handling
+  - [lndl.resolver](resolver.md): Reference resolution and validation
+  - [lndl.fuzzy](fuzzy.md): Fuzzy matching for error tolerance
+  - [Spec](../types/spec.md): Type specifications
+  - [Operable](../types/operable.md): Structured output integration
 - **Standard Library**:
   - [`ast.literal_eval`](https://docs.python.org/3/library/ast.html#ast.literal_eval): Safe literal evaluation
   - [`re`](https://docs.python.org/3/library/re.html): Regular expressions module

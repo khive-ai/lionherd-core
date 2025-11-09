@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Comprehensive Element API documentation and reference notebook (#39)
+- **LNDL Documentation**: Complete API documentation and Jupyter notebooks for LNDL
+  (Language InterOperable Network Directive Language) system (#53). Includes 6
+  module docs (types, parser, resolver, fuzzy, prompt, errors) and 6 reference
+  notebooks with 100% execution coverage (185/185 cells)
 
 ## [1.0.0a3](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha3) - 2025-11-06
 

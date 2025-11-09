@@ -4,7 +4,7 @@
 
 ## Overview
 
-The fuzzy LNDL parser provides **typo-tolerant parsing** for LNDL (Lion Natural Description Language) responses, automatically correcting misspellings in model names, field names, spec names, and variable references. It supports both fuzzy matching (production default) and strict mode (exact matching only).
+The fuzzy LNDL parser provides **typo-tolerant parsing** for LNDL (Language InterOperable Network Directive Language) responses, automatically correcting misspellings in model names, field names, spec names, and variable references. It supports both fuzzy matching (production default) and strict mode (exact matching only).
 
 **Key Capabilities:**
 
@@ -637,9 +637,10 @@ levenshtein("titel", "tidle")   # 0.833 (1 edit) - but "tidle" is nonsense
 - **Related Errors**:
   - [`MissingFieldError`](errors.md#missingfielderror): No match above threshold
   - [`AmbiguousMatchError`](errors.md#ambiguousmatcherror): Tie detection
-- **Related Guides**:
-  - [LNDL Overview](../../user_guide/lndl.md): LNDL syntax and concepts
-  - [Fuzzy Matching Guide](../../user_guide/fuzzy_matching.md): Best practices
+- **Related Modules**:
+  - [LNDL Resolver](resolver.md): Strict parsing and validation
+  - [LNDL Parser](parser.md): LNDL response parsing
+  - [LNDL Types](types.md): Type definitions
 
 ## Examples
 

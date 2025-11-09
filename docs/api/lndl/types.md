@@ -1,6 +1,6 @@
 # LNDL Types
 
-> Core types for LNDL (Lion Directive Language) parsing and execution
+> Core types for LNDL (Language InterOperable Network Directive Language) parsing and execution
 
 ## Overview
 
@@ -957,11 +957,10 @@ These guards enforce the **action execution lifecycle protocol** at the type lev
 
 - **Related Modules**:
   - [LNDL Parser](parser.md): LNDL response parsing and validation
-  - [Operable Types](operable.md): Type specifications for LNDL integration
-- **Related Guides**:
-  - [LNDL User Guide](../../user_guide/lndl.md): Complete LNDL syntax and patterns
-  - [Action Execution Guide](../../user_guide/lndl_actions.md): Action execution workflows
-  - [Validation Guide](../../user_guide/validation.md): Pydantic validation strategies
+  - [LNDL Resolver](resolver.md): Reference resolution and validation
+  - [LNDL Fuzzy](fuzzy.md): Fuzzy matching for typo tolerance
+  - [Spec](../types/spec.md): Type specifications
+  - [Operable](../types/operable.md): Structured output integration
 
 ---
 

@@ -4,7 +4,7 @@
 
 ## Overview
 
-The LNDL Resolver module provides **namespace-aware variable resolution** and **spec-based validation** for Language-Neutral Data Layer (LNDL) responses. It transforms structured LLM outputs containing variable declarations (`<lvar>`), action declarations (`<lact>`), and output mappings (`OUT{}`) into validated Pydantic model instances.
+The LNDL Resolver module provides **namespace-aware variable resolution** and **spec-based validation** for Language InterOperable Network Directive Language (LNDL) responses. It transforms structured LLM outputs containing variable declarations (`<lvar>`), action declarations (`<lact>`), and output mappings (`OUT{}`) into validated Pydantic model instances.
 
 **Key Capabilities:**
 
@@ -694,10 +694,10 @@ Type conversion still applied (validates literal converts to spec's base_type).
 - **Related Errors**:
   - [MissingFieldError](errors.md#missingfielderror): Required field absent
   - [TypeMismatchError](errors.md#typemismatcherror): Variable/action model mismatch
-- **Related Guides**:
-  - [LNDL Overview](../../user_guide/lndl.md): Language-Neutral Data Layer concepts
-  - [Operable Guide](../../user_guide/operable.md): Spec definitions and validation
-  - [Action Execution](../../user_guide/actions.md): Complete action lifecycle
+- **Related Modules**:
+  - [LNDL Parser](parser.md): LNDL response parsing
+  - [LNDL Types](types.md): ActionCall and metadata types
+  - [LNDL Fuzzy](fuzzy.md): Fuzzy matching for error tolerance
 
 ## Examples
 

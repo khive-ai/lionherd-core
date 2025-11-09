@@ -1,6 +1,6 @@
 # LNDL Prompt
 
-> System prompt for LNDL (Lion Natural Data Language) - Structured output with natural thinking
+> System prompt for LNDL (Language InterOperable Network Directive Language) - Structured output with natural thinking
 
 ## Overview
 
@@ -510,10 +510,11 @@ Explicit output declaration separates **thinking** (prose + tags) from **result*
 
 - **Related Modules**:
   - [LNDL Parser](parser.md): Parses LNDL-formatted LLM responses
-  - [LNDL Models](models.md): Pydantic models for LNDL structures
-- **Related Guides**:
-  - [LNDL User Guide](../../user_guide/lndl.md): Comprehensive LNDL usage guide
-  - [Structured Output Guide](../../user_guide/structured_output.md): Structured output patterns
+  - [LNDL Types](types.md): Pydantic models for LNDL structures
+  - [LNDL Resolver](resolver.md): Reference resolution and validation
+  - [LNDL Fuzzy](fuzzy.md): Fuzzy matching for error tolerance
+  - [Spec](../types/spec.md): Type specifications
+  - [Operable](../types/operable.md): Structured output integration
 
 ## Examples
 
