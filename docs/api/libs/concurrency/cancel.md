@@ -32,7 +32,7 @@ The `lionherd_core.libs.concurrency.cancel` module provides a unified interface 
 ## Module Contents
 
 ```python
-from lionherd_core.libs.concurrency.cancel import (
+from lionherd_core.libs.concurrency import (
     CancelScope,           # Re-exported from anyio
     fail_after,            # Timeout context (raises on timeout)
     move_on_after,         # Timeout context (silent on timeout)
@@ -53,7 +53,7 @@ Re-exported from `anyio.CancelScope`. See [AnyIO documentation](https://anyio.re
 **Usage:**
 
 ```python
-from lionherd_core.libs.concurrency.cancel import CancelScope
+from lionherd_core.libs.concurrency import CancelScope
 
 async def example():
     with CancelScope() as scope:
@@ -95,21 +95,17 @@ def fail_after(seconds: float | None) -> Iterator[CancelScope]: ...
 from lionherd_core.libs.concurrency.cancel import fail_after
 from lionherd_core.libs.concurrency import sleep
 
-async def fetch_data():
-    await sleep(2.0)
-    return "data"
-
 async def example():
     try:
         # Timeout after 1 second - raises TimeoutError
-        async with fail_after(1.0) as scope:
-            result = await fetch_data()
+        async with fail_after(1.0):
+            await sleep(2.0)  # Takes 2s, times out at 1s
     except TimeoutError:
         print("Operation timed out!")
 
     # No timeout - still cancellable by outer scopes
-    async with fail_after(None) as scope:
-        result = await fetch_data()  # Will complete normally
+    async with fail_after(None):
+        await sleep(0.5)  # Completes normally
 
     # Check if cancelled
     async with fail_after(0.5) as scope:
@@ -158,14 +154,13 @@ def move_on_after(seconds: float | None) -> Iterator[CancelScope]: ...
 from lionherd_core.libs.concurrency.cancel import move_on_after
 from lionherd_core.libs.concurrency import sleep
 
-async def fetch_optional_data():
-    await sleep(2.0)
-    return "optional_data"
-
 async def example():
-    # Timeout after 1 second - no exception, result is None
+    result = None
+
+    # Timeout after 1 second - no exception raised
     async with move_on_after(1.0) as scope:
-        result = await fetch_optional_data()
+        await sleep(2.0)  # Takes 2s, cancelled at 1s
+        result = "optional_data"  # Never reached
 
     if scope.cancel_called:
         print("Timed out, using default")
@@ -174,7 +169,8 @@ async def example():
     # Pattern: optional enrichment with fallback
     user_data = {"id": 123}
     async with move_on_after(0.5) as scope:
-        user_data["avatar"] = await fetch_avatar()  # Optional
+        await sleep(0.2)  # Simulate avatar fetch
+        user_data["avatar"] = "https://example.com/avatar.png"
 
     # Continue regardless of timeout
     return user_data
@@ -221,31 +217,32 @@ def fail_at(deadline: float | None) -> Iterator[CancelScope]: ...
 
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_at
-from lionherd_core.libs.concurrency import current_time
-
-async def batch_process(items):
-    # Process items until deadline
-    for item in items:
-        await process_item(item)
+from lionherd_core.libs.concurrency import current_time, sleep
 
 async def example():
-    # Absolute deadline: 5 seconds from now
-    deadline = current_time() + 5.0
+    # Absolute deadline: 2 seconds from now
+    deadline = current_time() + 2.0
 
     try:
-        async with fail_at(deadline) as scope:
-            await batch_process(large_dataset)
+        async with fail_at(deadline):
+            await sleep(3.0)  # Takes 3s, times out at 2s
     except TimeoutError:
         print("Deadline exceeded")
 
     # Shared deadline across multiple operations
-    end_time = current_time() + 10.0
+    end_time = current_time() + 1.0
 
-    async with fail_at(end_time):
-        await operation_1()  # Uses remaining time
+    try:
+        async with fail_at(end_time):
+            await sleep(0.4)  # Uses 0.4s, succeeds
 
-    async with fail_at(end_time):
-        await operation_2()  # Uses further reduced remaining time
+        async with fail_at(end_time):
+            await sleep(0.4)  # Uses 0.4s, ~0.2s remaining, succeeds
+
+        async with fail_at(end_time):
+            await sleep(0.5)  # Would need 0.5s, times out
+    except TimeoutError:
+        print("Final operation exceeded shared deadline")
 ```
 
 **See Also:**
@@ -288,20 +285,20 @@ def move_on_at(deadline: float | None) -> Iterator[CancelScope]: ...
 
 ```python
 from lionherd_core.libs.concurrency.cancel import move_on_at
-from lionherd_core.libs.concurrency import current_time
-
-async def gather_metrics():
-    metrics = []
-    async for metric in metric_stream():
-        metrics.append(metric)
-    return metrics
+from lionherd_core.libs.concurrency import current_time, sleep
 
 async def example():
+    metrics = []
+
     # Gather metrics until deadline
-    deadline = current_time() + 3.0
+    deadline = current_time() + 1.0
 
     async with move_on_at(deadline) as scope:
-        metrics = await gather_metrics()
+        # Simulate collecting metrics
+        for i in range(100):
+            await sleep(0.1)  # Each metric takes 0.1s
+            metrics.append({"id": i, "value": i * 10})
+            # After ~10 iterations, deadline reached
 
     # Continue with partial results if timed out
     if scope.cancel_called:
@@ -347,21 +344,24 @@ from lionherd_core.libs.concurrency.cancel import (
     move_on_after,
     effective_deadline,
 )
-from lionherd_core.libs.concurrency import current_time
+from lionherd_core.libs.concurrency import current_time, sleep
 
 async def adaptive_operation():
     deadline = effective_deadline()
 
     if deadline is None:
-        # No deadline - use thorough algorithm
-        return await thorough_processing()
+        # No deadline - use thorough approach
+        await sleep(1.0)
+        return {"method": "thorough", "accuracy": 0.99}
     else:
-        # Limited time - use fast approximation
+        # Limited time - adapt based on remaining time
         remaining = deadline - current_time()
         if remaining < 1.0:
-            return await quick_approximation()
+            await sleep(0.1)
+            return {"method": "quick", "accuracy": 0.85}
         else:
-            return await balanced_processing()
+            await sleep(0.5)
+            return {"method": "balanced", "accuracy": 0.92}
 
 async def example():
     # No deadline
@@ -414,6 +414,7 @@ data = await fetch_with_timeout("https://api.example.com/data")
 
 ```python
 from lionherd_core.libs.concurrency.cancel import move_on_after
+from lionherd_core.libs.concurrency import sleep
 
 async def enrich_user_profile(user_id: int):
     """Enrich user profile with optional data sources."""
@@ -421,11 +422,15 @@ async def enrich_user_profile(user_id: int):
 
     # Best-effort avatar fetch (max 0.5s)
     async with move_on_after(0.5) as scope:
-        profile["avatar_url"] = await fetch_avatar(user_id)
+        await sleep(0.2)  # Simulate avatar fetch
+        if not scope.cancel_called:
+            profile["avatar_url"] = f"https://example.com/avatar/{user_id}.png"
 
     # Best-effort activity history (max 1.0s)
     async with move_on_after(1.0) as scope:
-        profile["recent_activity"] = await fetch_activity(user_id)
+        await sleep(0.4)  # Simulate activity fetch
+        if not scope.cancel_called:
+            profile["recent_activity"] = [{"action": "login", "ts": "2025-01-01"}]
 
     return profile  # Returns with partial data if timeouts occur
 ```
@@ -434,26 +439,32 @@ async def enrich_user_profile(user_id: int):
 
 ```python
 from lionherd_core.libs.concurrency.cancel import fail_at
-from lionherd_core.libs.concurrency import current_time
+from lionherd_core.libs.concurrency import current_time, sleep
 
 async def multi_stage_pipeline(data, total_timeout: float = 10.0):
     """Process data through multiple stages under shared deadline."""
     deadline = current_time() + total_timeout
 
     try:
+        # Stage 1: Validation
         async with fail_at(deadline):
-            validated = await validate_data(data)
+            await sleep(0.1)
+            validated = {**data, "validated": True}
 
+        # Stage 2: Transformation
         async with fail_at(deadline):
-            transformed = await transform_data(validated)
+            await sleep(0.1)
+            transformed = {**validated, "transformed": True}
 
+        # Stage 3: Storage
         async with fail_at(deadline):
-            result = await store_data(transformed)
+            await sleep(0.1)
+            result = {"stored": True, "data": transformed}
 
         return result
 
     except TimeoutError:
-        logger.error(f"Pipeline exceeded {total_timeout}s deadline")
+        print(f"Pipeline exceeded {total_timeout}s deadline")
         raise
 ```
 
@@ -464,7 +475,7 @@ from lionherd_core.libs.concurrency.cancel import (
     fail_after,
     effective_deadline,
 )
-from lionherd_core.libs.concurrency import current_time
+from lionherd_core.libs.concurrency import current_time, sleep
 
 async def search_database(query: str):
     """Adaptive search based on available time."""
@@ -472,19 +483,23 @@ async def search_database(query: str):
 
     if deadline is None:
         # No deadline - use comprehensive search
-        return await full_text_search(query)
+        await sleep(0.3)
+        return [{"result": query, "score": 0.95, "method": "full"}]
 
     remaining = deadline - current_time()
 
     if remaining < 0.5:
         # Very tight deadline - use index-only search
-        return await quick_index_search(query)
+        await sleep(0.05)
+        return [{"result": query, "score": 0.75, "method": "quick"}]
     elif remaining < 2.0:
         # Moderate time - use optimized search
-        return await optimized_search(query)
+        await sleep(0.15)
+        return [{"result": query, "score": 0.85, "method": "optimized"}]
     else:
         # Ample time - use comprehensive search
-        return await full_text_search(query)
+        await sleep(0.3)
+        return [{"result": query, "score": 0.95, "method": "full"}]
 
 # Usage with timeout
 async with fail_after(5.0):
@@ -494,7 +509,8 @@ async with fail_after(5.0):
 ### Pattern 5: Graceful Degradation
 
 ```python
-from lionherd_core.libs.concurrency.cancel import move_on_after
+from lionherd_core.libs.concurrency.cancel import move_on_after, fail_after
+from lionherd_core.libs.concurrency import sleep
 
 async def fetch_dashboard_data(user_id: int):
     """Fetch dashboard with graceful degradation."""
@@ -508,17 +524,22 @@ async def fetch_dashboard_data(user_id: int):
     # Core data - required, higher timeout
     try:
         async with fail_after(3.0):
-            dashboard["core_data"] = await fetch_core_data(user_id)
+            await sleep(0.2)
+            dashboard["core_data"] = {"name": "User", "email": "user@example.com"}
     except TimeoutError:
         raise ValueError("Core data fetch failed")
 
     # Analytics - optional, moderate timeout
     async with move_on_after(1.0) as scope:
-        dashboard["analytics"] = await fetch_analytics(user_id)
+        await sleep(0.5)
+        if not scope.cancel_called:
+            dashboard["analytics"] = {"views": 100, "clicks": 50}
 
     # Recommendations - optional, low timeout
     async with move_on_after(0.5) as scope:
-        dashboard["recommendations"] = await fetch_recommendations(user_id)
+        await sleep(0.3)
+        if not scope.cancel_called:
+            dashboard["recommendations"] = ["item1", "item2", "item3"]
 
     return dashboard  # Returns with available optional data
 ```
@@ -690,8 +711,7 @@ deadline = current_time() + 5.0
 ## See Also
 
 - **Related Modules**:
-  - [Concurrency Utils](../concurrency/utils.md): `current_time()` for monotonic timestamps
-  - [Async Utilities](../concurrency/async_utils.md): Other async helpers
+  - [Concurrency Utils](../concurrency/utils.md): `current_time()` for monotonic timestamps and other async helpers
 - **External Documentation**:
   - [AnyIO Cancellation](https://anyio.readthedocs.io/en/stable/cancellation.html): Underlying cancellation scope API
   - [Trio Timeouts](https://trio.readthedocs.io/en/stable/reference-core.html#cancellation-and-timeouts): Inspiration for timeout patterns
@@ -700,6 +720,8 @@ deadline = current_time() + 5.0
   - [Error Handling](../../user_guide/error_handling.md): Timeout error patterns
 
 ## Examples
+
+> **Note:** For production patterns and complex use cases, see the tutorials section. These examples focus on demonstrating the API surface.
 
 ### Example 1: Retry with Timeout
 
@@ -735,79 +757,13 @@ async def flaky_api_call():
 result = await retry_with_timeout(flaky_api_call, max_attempts=3, timeout=2.0)
 ```
 
-### Example 2: Parallel Operations with Individual Timeouts
-
-```python
-from lionherd_core.libs.concurrency.cancel import move_on_after
-from lionherd_core.libs.concurrency import create_task_group
-
-async def fetch_all_sources(sources: list[str], timeout: float = 2.0):
-    """Fetch from multiple sources with individual timeouts."""
-
-    async def fetch_with_timeout(source: str):
-        async with move_on_after(timeout) as scope:
-            data = await fetch_from_source(source)
-
-        if scope.cancel_called:
-            return None
-        return data
-
-    async with create_task_group() as tg:
-        results = []
-        for source in sources:
-            results.append(await tg.start(fetch_with_timeout, source))
-
-    # Filter out None (timed out sources)
-    return [r for r in results if r is not None]
-
-# Usage - get results from sources that respond within 2s
-data = await fetch_all_sources(
-    ["source1", "source2", "source3"],
-    timeout=2.0
-)
-```
-
-### Example 3: Deadline-Aware Task Queue
-
-```python
-from lionherd_core.libs.concurrency.cancel import fail_at, effective_deadline
-from lionherd_core.libs.concurrency import current_time
-
-async def process_queue(tasks, total_timeout: float = 30.0):
-    """Process tasks until queue empty or deadline reached."""
-    deadline = current_time() + total_timeout
-    results = []
-
-    async with fail_at(deadline):
-        for task in tasks:
-            # Check remaining time before starting task
-            remaining = effective_deadline() - current_time()
-
-            if remaining < 1.0:
-                print(f"Insufficient time ({remaining:.2f}s), stopping")
-                break
-
-            try:
-                result = await process_task(task)
-                results.append(result)
-            except TimeoutError:
-                print(f"Deadline reached after {len(results)} tasks")
-                break
-
-    return results
-
-# Usage
-tasks = generate_task_queue(100)
-completed = await process_queue(tasks, total_timeout=30.0)
-print(f"Completed {len(completed)}/100 tasks within deadline")
-```
-
-### Example 4: Conditional Timeout Based on Environment
+### Example 2: Conditional Timeout Based on Environment
 
 ```python
 import os
 
 from lionherd_core.libs.concurrency.cancel import fail_after
+from lionherd_core.libs.concurrency import sleep
 
 async def environment_aware_operation():
     """Apply strict timeout in production, relaxed in development."""
@@ -817,7 +773,9 @@ async def environment_aware_operation():
     timeout = 5.0 if os.getenv("ENV") == "production" else None
 
     async with fail_after(timeout):
-        result = await complex_operation()
+        # Simulate complex operation
+        await sleep(1.0)
+        result = {"result": "complex", "env": os.getenv("ENV", "dev")}
 
     return result
 
@@ -826,57 +784,4 @@ async def environment_aware_operation():
 result = await environment_aware_operation()
 ```
 
-### Example 5: Circuit Breaker with Timeout
-
-```python
-from lionherd_core.libs.concurrency.cancel import fail_after
-from lionherd_core.libs.concurrency import sleep
-
-class CircuitBreaker:
-    """Circuit breaker with timeout enforcement."""
-
-    def __init__(self, timeout: float = 5.0, failure_threshold: int = 3):
-        self.timeout = timeout
-        self.failure_threshold = failure_threshold
-        self.failure_count = 0
-        self.state = "closed"  # closed, open, half_open
-
-    async def call(self, operation):
-        """Execute operation with timeout and circuit breaking."""
-
-        if self.state == "open":
-            raise Exception("Circuit breaker open")
-
-        try:
-            async with fail_after(self.timeout):
-                result = await operation()
-
-            # Success - reset failure count
-            self.failure_count = 0
-            if self.state == "half_open":
-                self.state = "closed"
-
-            return result
-
-        except (TimeoutError, Exception) as e:
-            # Failure - increment count
-            self.failure_count += 1
-
-            if self.failure_count >= self.failure_threshold:
-                self.state = "open"
-                print("Circuit breaker opened")
-
-            raise
-
-# Usage
-breaker = CircuitBreaker(timeout=2.0, failure_threshold=3)
-
-for i in range(10):
-    try:
-        result = await breaker.call(lambda: api_request())
-        print(f"Request {i}: success")
-    except Exception as e:
-        print(f"Request {i}: failed - {e}")
-
-    await sleep(1.0)
-```
+> **Note:** For more complex patterns like parallel operations with timeouts, deadline-aware task queues, and circuit breakers, see the concurrency tutorials (issues [#64](https://github.com/khive-ai/lionherd-core/issues/64), [#65](https://github.com/khive-ai/lionherd-core/issues/65), [#66](https://github.com/khive-ai/lionherd-core/issues/66)).
