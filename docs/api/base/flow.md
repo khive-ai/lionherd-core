@@ -25,6 +25,7 @@ This dual-pile architecture enables M:N relationships where items can exist in m
 - **M:N state relationships**: Items in multiple stages (e.g., task in "testing" and "
 
 documentation")
+
 - **Named stage access**: Ergonomic `flow.get_progression("pending")` vs UUID lookup
 - **Independent lifecycles**: Items persist when removed from stages
 - **Workflow introspection**: Query all stages, count items per stage
