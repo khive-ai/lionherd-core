@@ -655,6 +655,7 @@ print(restored.id == prog.id)        # True
 ### Why Progression Exists
 
 **Problem**: Workflow systems need ordered sequences with:
+
 - Identity and metadata (Element base)
 - List operations (append, remove, pop)
 - Workflow operations (move, swap, reverse)
@@ -670,11 +671,13 @@ print(restored.id == prog.id)        # True
 **Decision**: Allow duplicate UUIDs in progression
 
 **Rationale**:
+
 - Matches list semantics users expect
 - Enables retry tracking (same task appears multiple times)
 - Event sourcing patterns (duplicate events with different timestamps)
 
 **Alternative Rejected**: Set semantics (no duplicates)
+
 - Would require separate tracking for retry counts
 - Loses order information for duplicates
 - Incompatible with event sourcing patterns
@@ -686,11 +689,13 @@ print(restored.id == prog.id)        # True
 **Decision**: Provide `include()` and `exclude()` alongside `append()` and `remove()`
 
 **Rationale**:
+
 - Distributed systems need retry-safe operations
 - At-least-once delivery requires idempotency
 - Concurrent workflow agents benefit from safe operations
 
 **Pattern**:
+
 ```python
 # Non-idempotent (raises on retry)
 prog.remove(task_id)  # ValueError if not present
@@ -704,11 +709,13 @@ prog.exclude(task_id)  # Returns False if not present, no error
 **Decision**: Provide dedicated reordering methods instead of expecting users to manipulate `.order` directly
 
 **Rationale**:
+
 - Common workflow patterns deserve first-class support
 - Clear intent (move vs manual list manipulation)
 - Future optimization potential (move tracking, undo support)
 
 **Alternative Rejected**: Direct list manipulation
+
 ```python
 # ❌ Unclear intent, error-prone
 item = prog.order.pop(2)
@@ -721,11 +728,13 @@ prog.move(2, 0)
 ### Trade-offs
 
 **Flexibility vs Constraints**:
+
 - **Chosen**: List semantics (duplicates allowed, ordered)
 - **Trade-off**: More memory than set, potential duplicate confusion
 - **Mitigation**: Provide `include()` for set-like behavior
 
 **Mutability**:
+
 - **Chosen**: Mutable progression (in-place operations)
 - **Trade-off**: Shared reference issues vs ergonomics
 - **Mitigation**: Element identity (id/created_at frozen) provides stability
