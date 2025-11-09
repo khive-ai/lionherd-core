@@ -331,7 +331,7 @@ added2 = pile.include(item)  # False (already present)
 
 **Time Complexity:** O(1) for membership check, O(1) for add if needed
 
-**Note**: Not thread-safe for concurrent calls with same item. Use external synchronization.
+**Note**: Not thread-safe for concurrent calls with same item (check-then-act race condition). Use external synchronization for concurrent access.
 
 #### `exclude()`
 
@@ -357,6 +357,8 @@ removed2 = pile.exclude(item)  # False (not present)
 ```
 
 **Time Complexity:** O(n) - must update progression if found
+
+**Note**: Not thread-safe for concurrent calls with same item (check-then-act race condition). Use external synchronization for concurrent access.
 
 ---
 
@@ -563,6 +565,33 @@ async def get_async(self, item_id: UUID | str | Element, default: Any = ...) -> 
 ```
 
 **Time Complexity:** O(1)
+
+#### `remove_async()`
+
+Remove item asynchronously (thread-safe with async lock).
+
+**Signature:**
+
+```python
+async def remove_async(self, item_id: UUID | str | Element) -> T
+```
+
+**Parameters:**
+
+- `item_id`: Item UUID, string UUID, or Element to remove
+
+**Returns:** T - The removed item
+
+**Raises:** ValueError if item not found
+
+**Time Complexity:** O(n) - progression linear scan
+
+**Example:**
+
+```python
+removed = await pile.remove_async(item_id)
+print(f"Removed: {removed}")
+```
 
 #### Async Context Manager
 
