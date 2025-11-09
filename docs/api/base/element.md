@@ -236,9 +236,9 @@ The `lion_class` key in metadata enables **polymorphic deserialization** - `from
 - **json**: API responses, JSON file persistence, client-server communication
 - **db**: Database storage via pydapter adapters, ORM integration
 
-**Format Behavior (Post-PR #39):**
+**Format Behavior (Updated in v1.0.0-alpha3):**
 
-Prior to PR #39, `created_at_format` only applied to `python` mode. Now it applies to **ALL modes**, providing consistent timestamp formatting across serialization contexts.
+The `created_at_format` parameter applies to **ALL modes** (python/json/db), providing consistent timestamp formatting across serialization contexts. Previously, this parameter only affected python mode.
 
 #### `to_json()`
 
@@ -704,13 +704,14 @@ assert restored.label == 'agent_1'
 ```python
 from lionherd_core import Element
 
-# Metadata auto-converts to dict
-class Config:
-    def __dict__(self):
-        return {"setting": "value"}
+# Metadata auto-converts to dict via to_dict()
+from lionherd_core import BaseModel
+
+class Config(BaseModel):
+    setting: str = "value"
 
 elem = Element(metadata=Config())
-# metadata = {'setting': 'value'}
+# metadata = {'setting': 'value'} (auto-converted via to_dict())
 
 # Metadata is mutable (not frozen)
 elem.metadata["new_key"] = "new_value"  # OK
@@ -830,6 +831,20 @@ Different contexts require different serialization formats:
 3. **db**: Database adapters need specific field naming (e.g., `node_metadata` for Neo4j)
 
 Single `to_dict()` method with `mode` parameter provides consistent API across contexts.
+
+### Why DB Mode Uses Datetime Objects by Default?
+
+DB mode defaults to `created_at_format='datetime'` (datetime objects) instead of `'isoformat'` (strings) for database compatibility:
+
+1. **ORM Integration**: SQLAlchemy, Django ORM, and other ORMs expect datetime columns as datetime objects, not strings. String timestamps require manual conversion and type coercion.
+
+2. **Temporal Indexing**: Database engines (PostgreSQL, MySQL) optimize temporal queries on TIMESTAMP/DATETIME columns. String-based timestamps can't leverage these optimizations without casting.
+
+3. **Graph Database Compatibility**: Neo4j and other graph databases support native datetime types for efficient temporal queries. String timestamps require conversion overhead on every query.
+
+4. **Timezone Preservation**: Some database adapters lose timezone information when converting ISO strings. Native datetime objects preserve timezone metadata through the entire persistence layer.
+
+**Migration**: Existing code using `mode='db'` without explicit format can preserve string behavior with `to_dict(mode='db', created_at_format='isoformat')`.
 
 ### Why Polymorphic Serialization?
 
