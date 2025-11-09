@@ -376,7 +376,7 @@ Duration to sleep in seconds. Can be fractional (e.g., 0.1 for 100ms).
 
 ### Returns
 
-**None**
+- None
 
 ### Examples
 

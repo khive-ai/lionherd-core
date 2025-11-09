@@ -68,7 +68,7 @@ class LeakInfo:
 | Attribute    | Type         | Description                                    |
 | ------------ | ------------ | ---------------------------------------------- |
 | `name`       | `str`        | Human-readable identifier (auto-generated if not provided) |
-| `kind`       | `str | None` | Optional resource classification (e.g., "connection", "file") |
+| `kind`       | `str \| None` | Optional resource classification (e.g., "connection", "file") |
 | `created_at` | `float`      | Unix timestamp when tracking started (via `time.time()`) |
 
 ### Examples
