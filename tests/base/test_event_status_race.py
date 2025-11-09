@@ -94,26 +94,29 @@ class CountingEvent(Event):
 class TimeoutEvent(Event):
     """Test event that times out during execution."""
 
+    tracker: Any = Field(default=None, exclude=True)
     counter_key: str = Field(default="default", exclude=True)
     timeout: float = Field(default=0.001)  # Very short timeout
 
     def model_post_init(self, __context) -> None:
         """Initialize tracking after Pydantic validation."""
         super().model_post_init(__context)
-        key = str(self.id)
-        self.counter_key = key
-        _execution_counts[key] = 0
-        _execution_locks[key] = asyncio.Lock()
+        if self.tracker is not None:
+            key = str(self.id)
+            self.counter_key = key
+            self.tracker.register(key)
 
     @property
     def execution_count(self) -> int:
         """Get execution count for this event."""
-        return _execution_counts.get(self.counter_key, 0)
+        if self.tracker is None:
+            return 0
+        return self.tracker.get_count(self.counter_key)
 
     async def _invoke(self):
         """Simulate work that exceeds timeout."""
-        async with _execution_locks[self.counter_key]:
-            _execution_counts[self.counter_key] += 1
+        if self.tracker is not None:
+            await self.tracker.increment(self.counter_key)
 
         # Sleep longer than timeout to trigger timeout
         await asyncio.sleep(self.timeout * 10)
@@ -123,26 +126,29 @@ class TimeoutEvent(Event):
 class FailingEvent(Event):
     """Test event that raises an exception during execution."""
 
+    tracker: Any = Field(default=None, exclude=True)
     counter_key: str = Field(default="default", exclude=True)
 
     def model_post_init(self, __context) -> None:
         """Initialize tracking after Pydantic validation."""
         super().model_post_init(__context)
-        key = str(self.id)
-        self.counter_key = key
-        _execution_counts[key] = 0
-        _execution_locks[key] = asyncio.Lock()
+        if self.tracker is not None:
+            key = str(self.id)
+            self.counter_key = key
+            self.tracker.register(key)
 
     @property
     def execution_count(self) -> int:
         """Get execution count for this event."""
-        return _execution_counts.get(self.counter_key, 0)
+        if self.tracker is None:
+            return 0
+        return self.tracker.get_count(self.counter_key)
 
     async def _invoke(self):
         """Raise an exception during execution."""
         # Increment counter before raising
-        async with _execution_locks[self.counter_key]:
-            _execution_counts[self.counter_key] += 1
+        if self.tracker is not None:
+            await self.tracker.increment(self.counter_key)
 
         # Simulate some async work before failing
         await asyncio.sleep(0.01)
@@ -152,25 +158,28 @@ class FailingEvent(Event):
 class SlowEvent(Event):
     """Test event with slow execution for cancellation testing."""
 
+    tracker: Any = Field(default=None, exclude=True)
     counter_key: str = Field(default="default", exclude=True)
 
     def model_post_init(self, __context) -> None:
         """Initialize tracking after Pydantic validation."""
         super().model_post_init(__context)
-        key = str(self.id)
-        self.counter_key = key
-        _execution_counts[key] = 0
-        _execution_locks[key] = asyncio.Lock()
+        if self.tracker is not None:
+            key = str(self.id)
+            self.counter_key = key
+            self.tracker.register(key)
 
     @property
     def execution_count(self) -> int:
         """Get execution count for this event."""
-        return _execution_counts.get(self.counter_key, 0)
+        if self.tracker is None:
+            return 0
+        return self.tracker.get_count(self.counter_key)
 
     async def _invoke(self):
         """Simulate slow work that can be cancelled."""
-        async with _execution_locks[self.counter_key]:
-            _execution_counts[self.counter_key] += 1
+        if self.tracker is not None:
+            await self.tracker.increment(self.counter_key)
 
         # Long sleep to allow cancellation
         await asyncio.sleep(1.0)
@@ -269,7 +278,7 @@ async def test_invoke_idempotency_with_delay(execution_tracker):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invoke_with_timeout_race():
+async def test_concurrent_invoke_with_timeout_race(execution_tracker):
     """Multiple concurrent invoke() calls during timeout should execute once.
 
     Verifies that @async_synchronized prevents duplicate execution even when
@@ -277,7 +286,7 @@ async def test_concurrent_invoke_with_timeout_race():
     """
     from lionherd_core.types._sentinel import Unset
 
-    event = TimeoutEvent(timeout=0.001)
+    event = TimeoutEvent(tracker=execution_tracker, timeout=0.001)
 
     # Sanity check - starts in PENDING
     assert event.status == EventStatus.PENDING
@@ -301,7 +310,7 @@ async def test_concurrent_invoke_with_timeout_race():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invoke_with_exception_race():
+async def test_concurrent_invoke_with_exception_race(execution_tracker):
     """Multiple concurrent invoke() calls when _invoke() raises should execute once.
 
     Verifies that @async_synchronized prevents duplicate execution even when
@@ -309,7 +318,7 @@ async def test_concurrent_invoke_with_exception_race():
     """
     from lionherd_core.types._sentinel import Unset
 
-    event = FailingEvent()
+    event = FailingEvent(tracker=execution_tracker)
 
     # Sanity check - starts in PENDING
     assert event.status == EventStatus.PENDING
@@ -337,13 +346,13 @@ async def test_concurrent_invoke_with_exception_race():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_invoke_with_cancellation_race():
+async def test_concurrent_invoke_with_cancellation_race(execution_tracker):
     """Multiple concurrent invoke() calls during cancellation should execute once.
 
     Verifies that @async_synchronized prevents duplicate execution even when
     tasks are cancelled mid-execution.
     """
-    event = SlowEvent()
+    event = SlowEvent(tracker=execution_tracker)
 
     # Sanity check - starts in PENDING
     assert event.status == EventStatus.PENDING
