@@ -10,7 +10,9 @@ Status: Active
 
 ## Philosophy
 
-lionherd-core documentation follows **Google-style docstrings** with lionherd-specific adaptations for protocol-based architecture and async-first design.
+lionherd-core documentation follows **Google-style docstrings** with
+lionherd-specific adaptations for protocol-based architecture and
+async-first design.
 
 **Core Principles:**
 
@@ -28,7 +30,8 @@ lionherd-core documentation follows **Google-style docstrings** with lionherd-sp
 
 **Location**: Source code
 **Audience**: IDE users, API consumers
-**Format**: Google-style docstring convention (matching existing lionherd-core codebase)
+**Format**: Google-style docstring convention (matching existing
+lionherd-core codebase)
 
 **Required Sections:**
 
@@ -39,14 +42,16 @@ Extended summary with context, use cases, and design rationale.
 Explain protocol implementations and architectural decisions.
 
 Args:
-    param_name (type): Description of parameter. Use "optional" for None-default params.
-        For multiple types: "int or str" (use "or" for final pairing).
-        For discrete values: "{'low', 'medium', 'high'}"
-        For defaults: "int, default 0" or "str, optional"
+    param_name (type): Description of parameter. Use "optional" for
+        None-default params. For multiple types: "int or str"
+        (use "or" for final pairing). For discrete values:
+        "{'low', 'medium', 'high'}". For defaults: "int, default 0"
+        or "str, optional"
     another_param (str, optional): Optional parameter description.
 
 Returns:
-    return_type: Description of return value. Include state changes if applicable.
+    return_type: Description of return value. Include state changes
+        if applicable.
 
 Raises:
     ExceptionType: When and why this exception is raised.
@@ -110,7 +115,8 @@ Element  # concrete class
 **Examples Section Standards:**
 
 - **Imports**: numpy and pandas assumed pre-imported; explicitly import all else
-- **Naming**: Consistent variable names: `elem` for Element, `pile` for Pile, `df` for DataFrame
+- **Naming**: Consistent variable names: `elem` for Element,
+  `pile` for Pile, `df` for DataFrame
 - **Data size**: ~4 rows of data (concise examples)
 - **Meaningful data**: Prefer semantic data over random matrices
 - **Keyword args**: Use `head(n=3)` not `head(3)`
@@ -197,14 +203,17 @@ result
 
 ## Protocol Implementations
 
-Explicitly document which protocols are implemented (use `@implements()` decorator):
+Explicitly document which protocols are implemented
+(use `@implements()` decorator):
 
 - **Observable**: `id` property (UUID identifier for object identity)
 - **Serializable**: `to_dict()`, `to_json()` for serialization
 - **Deserializable**: `from_dict()`, `from_json()` for deserialization
 - **Hashable**: `__hash__()` based on ID (identity-based hashing)
-- **Adaptable**: `adapt_to()`, `adapt_from()` for sync format conversion (TOML/YAML/JSON/SQL)
-- **AsyncAdaptable**: `adapt_to_async()`, `adapt_from_async()` for async I/O format conversion
+- **Adaptable**: `adapt_to()`, `adapt_from()` for sync format
+  conversion (TOML/YAML/JSON/SQL)
+- **AsyncAdaptable**: `adapt_to_async()`, `adapt_from_async()` for
+  async I/O format conversion
 - **Invocable**: `invoke()` for async execution
 - **Containable**: `__contains__()` for membership testing (`in` operator)
 - **Allowable**: `allowed()` for defining allowed values/keys
@@ -273,24 +282,31 @@ All examples must be executable and produce shown output.
 
 ### Protocol Documentation
 
-Always document protocol implementations (use `@implements()` decorator in class):
+Always document protocol implementations
+(use `@implements()` decorator in class):
 
 ```markdown
 ## Protocol Implementations
 
-This class implements the following protocols (declared via `@implements()`):
+This class implements the following protocols
+(declared via `@implements()`):
 
 - **Observable**: UUID identifier via `id` property
-- **Serializable**: Supports `to_dict(mode='python'|'json'|'db')` and `to_json()`
-- **Deserializable**: Supports `from_dict()` and `from_json()` with polymorphic reconstruction
+- **Serializable**: Supports `to_dict(mode='python'|'json'|'db')`
+  and `to_json()`
+- **Deserializable**: Supports `from_dict()` and `from_json()` with
+  polymorphic reconstruction
 - **Hashable**: ID-based hashing via `__hash__()` (identity equality)
-- **Adaptable**: Sync format conversion via `adapt_to()`, `adapt_from()` (if applicable)
-- **AsyncAdaptable**: Async format conversion via `adapt_to_async()`, `adapt_from_async()` (if applicable)
+- **Adaptable**: Sync format conversion via `adapt_to()`, `adapt_from()`
+  (if applicable)
+- **AsyncAdaptable**: Async format conversion via `adapt_to_async()`,
+  `adapt_from_async()` (if applicable)
 - **Invocable**: Async execution via `invoke()` (if applicable)
 - **Containable**: Membership testing via `__contains__()` (if applicable)
 - **Allowable**: Allowed values via `allowed()` (if applicable)
 
-See [Protocols Guide](../user_guide/protocols.md) for detailed protocol documentation.
+See [Protocols Guide](../user_guide/protocols.md) for detailed
+protocol documentation.
 ```
 
 ### Async Documentation
@@ -429,31 +445,38 @@ def to_dict(
     created_at_format: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Serialize Element to dictionary with polymorphic reconstruction support.
+    """Serialize Element to dictionary with polymorphic reconstruction.
 
-    Injects `lion_class` into metadata for polymorphic deserialization via `from_dict()`.
-    Supports three serialization modes for different use cases.
+    Injects `lion_class` into metadata for polymorphic deserialization
+    via `from_dict()`. Supports three serialization modes for different
+    use cases.
 
     Args:
-        mode ({'python', 'json', 'db'}, optional): Serialization mode. Defaults to 'python'.
+        mode ({'python', 'json', 'db'}, optional): Serialization mode.
+            Defaults to 'python'.
             - 'python': Native Python types (UUID, datetime objects)
             - 'json': JSON-safe types (str representations)
             - 'db': Database adapter format (via pydapter)
-        meta_key (str, optional): Custom metadata key. If None, uses 'metadata'.
-        created_at_format (str, optional): strftime format for created_at. Applies to ALL modes.
-            If None, uses default format based on mode.
-        **kwargs: Passed to pydantic's model_dump(). Common: include, exclude, by_alias.
+        meta_key (str, optional): Custom metadata key. If None,
+            uses 'metadata'.
+        created_at_format (str, optional): strftime format for created_at.
+            Applies to ALL modes. If None, uses default format based
+            on mode.
+        **kwargs: Passed to pydantic's model_dump(). Common: include,
+            exclude, by_alias.
 
     Returns:
-        dict[str, Any]: Serialized dictionary with lion_class injected in metadata for polymorphism.
+        dict[str, Any]: Serialized dictionary with lion_class injected
+            in metadata for polymorphism.
 
     See Also:
         from_dict: Deserialize from dictionary with polymorphic reconstruction
         to_json: Serialize to JSON string
 
     Note:
-        The `lion_class` key (injected into metadata dict) enables polymorphic deserialization -
-        `from_dict()` uses it to reconstruct the correct subclass. This is critical for
+        The `lion_class` key (injected into metadata dict) enables
+        polymorphic deserialization - `from_dict()` uses it to
+        reconstruct the correct subclass. This is critical for
         deserialization in multi-class workflows.
 
         Mode selection:
@@ -559,7 +582,8 @@ Example deprecation notice:
 
 ## mkdocs Configuration
 
-lionherd-core uses **mkdocs** with **mkdocstrings** for documentation generation.
+lionherd-core uses **mkdocs** with **mkdocstrings** for documentation
+generation.
 
 **Required `mkdocs.yml` configuration:**
 
