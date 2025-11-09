@@ -272,3 +272,78 @@ def test_enum_comparison_with_strings():
     assert SampleStrEnum.FOO != "bar"
     assert SampleStrEnum.FOO in ["foo", "baz"]
     assert "foo" in [SampleStrEnum.FOO, SampleStrEnum.BAR]
+
+
+def test_sentinel_union_syntax():
+    """Sentinels should support Python 3.10+ union syntax with | operator."""
+    from typing import get_args
+
+    # Test str | Unset (uses __ror__ on Unset)
+    result1 = str | Unset
+    assert get_args(result1) == (str, UnsetType)
+
+    # Test Unset | str (uses __or__ on Unset)
+    result2 = Unset | str
+    assert get_args(result2) == (UnsetType, str)
+
+    # Test int | Undefined (uses __ror__ on Undefined)
+    result3 = int | Undefined
+    assert get_args(result3) == (int, UndefinedType)
+
+    # Test Undefined | int (uses __or__ on Undefined)
+    result4 = Undefined | int
+    assert get_args(result4) == (UndefinedType, int)
+
+    # Test complex union: str | None | Unset
+    result5 = str | None | Unset
+    args5 = get_args(result5)
+    assert str in args5
+    assert type(None) in args5
+    assert UnsetType in args5
+
+    # Test in function annotations
+    def func(value: str | Unset = Unset) -> str:  # type: ignore[misc]
+        if value is Unset:
+            return "unset"
+        return value
+
+    assert func() == "unset"
+    assert func("hello") == "hello"
+
+    # Test singleton identity preserved after union operations
+    assert Unset is Unset
+    assert Undefined is Undefined
+
+    # Test sentinel-to-sentinel unions (edge cases)
+    # Undefined | Unset should produce Union[UndefinedType, UnsetType] (both types)
+    result6 = Undefined | Unset
+    args6 = get_args(result6)
+    assert args6 == (UndefinedType, UnsetType), f"Expected (UndefinedType, UnsetType), got {args6}"
+    assert UndefinedType in args6
+    assert UnsetType in args6
+    # Ensure no sentinel instances leaked into union args
+    assert Undefined not in args6
+    assert Unset not in args6
+
+    # Unset | Undefined (reverse) should also produce both types
+    result7 = Unset | Undefined
+    args7 = get_args(result7)
+    assert args7 == (UnsetType, UndefinedType), f"Expected (UnsetType, UndefinedType), got {args7}"
+    assert UnsetType in args7
+    assert UndefinedType in args7
+    assert Unset not in args7
+    assert Undefined not in args7
+
+    # Test edge case: invalid operands (non-type values) should still work
+    # Python's Union handles these gracefully by accepting the value as-is
+    result8 = Unset | 123
+    args8 = get_args(result8)
+    assert UnsetType in args8
+    assert 123 in args8  # Union accepts literal integers
+
+    # Test edge case: self-union (type | same type)
+    # Python's Union deduplicates these automatically
+    result9 = str | str
+    args9 = get_args(result9)
+    # Union[str, str] collapses to just str, so get_args returns ()
+    assert args9 == () or args9 == (str,)  # Python typing behavior varies by version

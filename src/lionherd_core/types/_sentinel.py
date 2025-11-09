@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Final, Literal, Self, TypeAlias, TypeGuard, TypeVar
+from typing import Any, ClassVar, Final, Literal, Self, TypeAlias, TypeGuard, TypeVar, Union
 
 __all__ = (
     "MaybeSentinel",
@@ -72,6 +72,16 @@ class UndefinedType(SingletonType):
         """Preserve singleton identity across pickle/unpickle."""
         return (UndefinedType, ())
 
+    def __or__(self, other: type) -> Any:
+        """Enable union syntax: str | Undefined or Undefined | Unset"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[type(self), other_type]
+
+    def __ror__(self, other: type) -> Any:
+        """Enable reverse union: Undefined | str or Unset | Undefined"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[other_type, type(self)]
+
 
 class UnsetType(SingletonType):
     """Sentinel: key present but value not provided. Use to distinguish None from 'not provided'."""
@@ -90,6 +100,16 @@ class UnsetType(SingletonType):
     def __reduce__(self) -> tuple[type[UnsetType], tuple[()]]:
         """Preserve singleton identity across pickle/unpickle."""
         return (UnsetType, ())
+
+    def __or__(self, other: type) -> Any:
+        """Enable union syntax: str | Unset or Unset | Undefined"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[type(self), other_type]
+
+    def __ror__(self, other: type) -> Any:
+        """Enable reverse union: Unset | str or Undefined | Unset"""
+        other_type = type(other) if isinstance(other, SingletonType) else other
+        return Union[other_type, type(self)]
 
 
 Undefined: Final[UndefinedType] = UndefinedType()
