@@ -24,7 +24,7 @@ The LNDL types module provides data structures for parsing, validating, and exec
 
 **Action Execution Lifecycle:**
 
-```
+```text
 1. Parse LNDL response → ActionCall objects created
 2. Partial Validation → BaseModels use model_construct() (bypass validation)
 3. Execute Actions → Caller executes ActionCall.function with ActionCall.arguments
@@ -461,9 +461,7 @@ Pydantic BaseModel instance to check for ActionCall objects.
 
 **Returns:**
 
-**bool**
-
-True if any field value is an ActionCall (at any nesting level), False otherwise.
+- **bool**: True if any field value is an ActionCall (at any nesting level), False otherwise.
 
 **Examples:**
 
@@ -539,15 +537,11 @@ BaseModel instance to validate for ActionCall placeholders.
 
 **Returns:**
 
-**BaseModel**
-
-The same model instance if validation passes (no ActionCall objects found).
+- **BaseModel**: The same model instance if validation passes (no ActionCall objects found).
 
 **Raises:**
 
-**ValueError**
-
-If model contains any ActionCall objects. Error message includes field paths showing where ActionCall objects were found (up to first 3 fields).
+- **ValueError**: If model contains any ActionCall objects. Error message includes field paths showing where ActionCall objects were found (up to first 3 fields).
 
 **Examples:**
 
@@ -651,19 +645,12 @@ Dictionary mapping action names to their execution results.
 
 **Returns:**
 
-**BaseModel**
-
-Fully validated BaseModel instance with action results substituted and all field constraints enforced.
+- **BaseModel**: Fully validated BaseModel instance with action results substituted and all field constraints enforced.
 
 **Raises:**
 
-**ValueError**
-
-If an ActionCall's name is not found in `action_results` dictionary.
-
-**ValidationError**
-
-If action results don't satisfy field constraints (type, validators, bounds, regex).
+- **ValueError**: If an ActionCall's name is not found in `action_results` dictionary.
+- **ValidationError**: If action results don't satisfy field constraints (type, validators, bounds, regex).
 
 **Examples:**
 
