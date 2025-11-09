@@ -1,6 +1,6 @@
 # LNDL Parser
 
-> Low-level parsing utilities for LNDL (Language for Non-Deterministic Loads) structured outputs
+> Low-level parsing utilities for LNDL (Language InterOperable Network Directive Language) structured outputs
 
 ## Overview
 

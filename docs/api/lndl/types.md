@@ -1,6 +1,6 @@
 # LNDL Types
 
-> Core types for LNDL (Lion Directive Language) parsing and execution
+> Core types for LNDL (Language InterOperable Network Directive Language) parsing and execution
 
 ## Overview
 

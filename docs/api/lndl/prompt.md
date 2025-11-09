@@ -1,6 +1,6 @@
 # LNDL Prompt
 
-> System prompt for LNDL (Lion Natural Data Language) - Structured output with natural thinking
+> System prompt for LNDL (Language InterOperable Network Directive Language) - Structured output with natural thinking
 
 ## Overview
 

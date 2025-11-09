@@ -4,7 +4,7 @@
 
 ## Overview
 
-The fuzzy LNDL parser provides **typo-tolerant parsing** for LNDL (Lion Natural Description Language) responses, automatically correcting misspellings in model names, field names, spec names, and variable references. It supports both fuzzy matching (production default) and strict mode (exact matching only).
+The fuzzy LNDL parser provides **typo-tolerant parsing** for LNDL (Language InterOperable Network Directive Language) responses, automatically correcting misspellings in model names, field names, spec names, and variable references. It supports both fuzzy matching (production default) and strict mode (exact matching only).
 
 **Key Capabilities:**
 

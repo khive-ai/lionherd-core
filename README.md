@@ -122,7 +122,7 @@ while current:
     current = successors[0] if successors else None
 ```
 
-### 3. Structured LLM Outputs (LNDL)
+### 3. Structured LLM Outputs (LNDL - Language InterOperable Network Directive Language)
 
 ```python
 from lionherd_core import Spec, Operable

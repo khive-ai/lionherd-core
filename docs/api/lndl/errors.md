@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `errors` module defines the **exception hierarchy** for LNDL (Lionherd Natural Data Language) parsing and validation failures. These exceptions are raised during structured output extraction when LLM responses fail to match expected specifications or contain invalid constructor syntax.
+The `errors` module defines the **exception hierarchy** for LNDL (Language InterOperable Network Directive Language) parsing and validation failures. These exceptions are raised during structured output extraction when LLM responses fail to match expected specifications or contain invalid constructor syntax.
 
 **Key Capabilities:**
 
