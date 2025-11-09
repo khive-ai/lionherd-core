@@ -1,6 +1,6 @@
 # Graph
 
-Directed graph with Pile-backed storage, O(1) adjacency queries, and classical graph algorithms.
+> Directed graph with Pile-backed storage, O(1) adjacency queries, and classical graph algorithms.
 
 ---
 
