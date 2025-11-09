@@ -113,6 +113,8 @@ class ShutdownEvent(Event):
 
 class ShutdownBroadcaster(Broadcaster):
     _event_type = ShutdownEvent
+    _subscribers = []  # Must redeclare for subclass isolation
+    _instance = None   # Must redeclare for subclass singleton
 
 # Sync callback
 def on_shutdown(event):
@@ -335,6 +337,8 @@ class ShutdownEvent(Event):
 
 class ShutdownBroadcaster(Broadcaster):
     _event_type = ShutdownEvent
+    _subscribers = []
+    _instance = None
 
 # Service components subscribe
 class DatabaseService:
@@ -371,6 +375,8 @@ class ConfigChangeEvent(Event):
 
 class ConfigBroadcaster(Broadcaster):
     _event_type = ConfigChangeEvent
+    _subscribers = []
+    _instance = None
 
 # Multiple components react to config changes
 def update_rate_limit(event):
@@ -523,7 +529,7 @@ Broadcaster does NOT implement lionherd-core protocols (Observable, Serializable
 
 - [`EventBus`](eventbus.md): Instance-based pub/sub with topic routing and concurrent handlers
 - [`Event`](event.md): Base event class for lifecycle tracking
-- [Pub/Sub Patterns Notebook](../../notebooks/references/broadcaster_eventbus.ipynb): Comprehensive examples
+- [Pub/Sub Patterns Notebook](../../../notebooks/references/broadcaster_eventbus.ipynb): Comprehensive examples
 
 ---
 
@@ -542,6 +548,8 @@ class SystemEvent(Event):
 # Define broadcaster subclass
 class SystemBroadcaster(Broadcaster):
     _event_type = SystemEvent
+    _subscribers = []
+    _instance = None
 
 # Subscribe handlers
 received = []

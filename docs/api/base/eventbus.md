@@ -12,7 +12,7 @@
 
 - **Instance-Based**: Each EventBus has independent subscription registry
 - **Topic Routing**: Handlers only receive events for subscribed topics
-- **Concurrent Execution**: Handlers run concurrently via `asyncio.gather()`
+- **Concurrent Execution**: Handlers run concurrently via `gather()`
 - **Weakref Cleanup**: Automatic handler removal when garbage collected
 - **Exception Isolation**: Handler exceptions suppressed (fire-and-forget)
 - **Flexible Signatures**: Handlers receive arbitrary `*args` and `**kwargs`
@@ -271,7 +271,7 @@ async def emit(self, topic: str, *args: Any, **kwargs: Any) -> None: ...
 
 1. Returns early if topic has no subscriptions
 2. Cleans up dead weakrefs (lazy cleanup)
-3. Executes all live handlers concurrently via `asyncio.gather()`
+3. Executes all live handlers concurrently via `gather()`
 4. Exceptions suppressed via `return_exceptions=True`
 
 **Concurrency:**
@@ -337,13 +337,13 @@ def _cleanup_dead_refs(self, topic: str) -> list[Handler]: ...
 
 ### Concurrent Handler Execution
 
-**Why `asyncio.gather()` instead of sequential execution?**
+**Why concurrent execution via `gather()` instead of sequential?**
 
 1. **Performance**: Handlers run in parallel (critical for I/O-bound operations)
 2. **Latency**: Slow handlers don't block fast handlers
 3. **Observability**: Multiple metrics collectors can run concurrently
 
-**Implementation**: `await gather(*(h(*args, **kwargs) for h in handlers), return_exceptions=True)`
+**Implementation**: `await gather(*(h(*args, **kwargs) for h in handlers), return_exceptions=True)` (uses custom `gather` from `lionherd_core.libs.concurrency`)
 
 **Trade-off**: Unpredictable execution order, but far better performance.
 
@@ -442,6 +442,9 @@ await log_bus.emit("log", level="INFO", message="Request processed")
 ### Pattern 3: Multi-Handler Concurrent Execution
 
 ```python
+import asyncio
+from lionherd_core.base.eventbus import EventBus
+
 bus = EventBus()
 execution_order = []
 
@@ -470,17 +473,19 @@ print(execution_order)
 ```python
 bus = EventBus()
 
-# Plugin system with dynamic handlers
-class Plugin:
-    def __init__(self, name, bus):
-        self.name = name
-        bus.subscribe("plugin.event", self.handle)
+# Plugin system with module-level handlers (weakref-compatible)
+plugin_registry = {}
 
-    async def handle(self, **data):
-        print(f"{self.name}: {data}")
+async def plugin_handler(plugin_id: str, **data):
+    """Module-level function for stable weakref."""
+    print(f"{plugin_id}: {data}")
 
 # Register plugins dynamically
-plugins = [Plugin(f"P{i}", bus) for i in range(3)]
+for i in range(3):
+    plugin_id = f"P{i}"
+    plugin_registry[plugin_id] = plugin_id
+    # Subscribe module-level function (weakref-stable)
+    bus.subscribe("plugin.event", lambda pid=plugin_id, **d: plugin_handler(pid, **d))
 
 # Broadcast to all plugins
 await bus.emit("plugin.event", message="test")
@@ -489,13 +494,10 @@ await bus.emit("plugin.event", message="test")
 # P1: {'message': 'test'}
 # P2: {'message': 'test'}
 
-# Cleanup - weakrefs auto-remove dead plugins
-del plugins[0]
-import gc
-gc.collect()
-
-print(bus.handler_count("plugin.event"))  # 2 (P0 auto-removed)
+print(bus.handler_count("plugin.event"))  # 3
 ```
+
+**Note on Bound Methods**: EventBus uses `weakref.ref()` which creates dead references for bound methods. Use module-level functions or keep strong references to objects. For bound method support, consider using Broadcaster which handles `WeakMethod` internally.
 
 ---
 
@@ -607,7 +609,7 @@ EventBus does NOT implement lionherd-core protocols (Observable, Serializable, e
 
 - [`Broadcaster`](broadcaster.md): Singleton pub/sub for global event channels
 - [`Event`](event.md): Base event class for lifecycle tracking
-- [Pub/Sub Patterns Notebook](../../notebooks/references/broadcaster_eventbus.ipynb): Comprehensive examples
+- [Pub/Sub Patterns Notebook](../../../notebooks/references/broadcaster_eventbus.ipynb): Comprehensive examples
 
 ---
 
@@ -724,7 +726,7 @@ EventBus provides **instance-based pub/sub with topic routing** for observabilit
 
 1. **Instance-Based**: Each EventBus has independent subscription registry
 2. **Topic Routing**: Handlers only receive events for subscribed topics
-3. **Concurrent Execution**: Handlers run concurrently via `asyncio.gather()`
+3. **Concurrent Execution**: Handlers run concurrently via `gather()`
 4. **Weakref Cleanup**: Automatic handler removal when garbage collected
 5. **Exception Isolation**: Handler exceptions suppressed (fire-and-forget)
 
