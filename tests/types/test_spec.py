@@ -1004,6 +1004,81 @@ class TestSpec:
         with pytest.raises(ValueError, match="must be a type"):
             Spec("not_a_type")
 
+    def test_name_cannot_be_none(self):
+        """
+        Spec name must be a valid string, not None
+
+        **Pattern**: Early validation for required string metadata
+
+        **Scenario**: User passes None as name:
+        ```python
+        Spec(str, name=None)  # Invalid: name cannot be None
+        ```
+
+        **Expected Behavior**:
+        - ValueError raised immediately
+        - Error message: "must be a non-empty string"
+        - No Spec object created
+
+        **Design Rationale**:
+        Spec name is used for field identification in Operable collections.
+        None is not a valid identifier and would cause errors in:
+        - Operable.allowed() (expects string names)
+        - Operable.get() (dict-like access by name)
+        - Model generation (field names must be strings)
+        """
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            Spec(str, name=None)
+
+    def test_name_cannot_be_empty_string(self):
+        """
+        Spec name must be non-empty string
+
+        **Pattern**: Early validation for meaningful identifiers
+
+        **Scenario**: User passes empty string as name:
+        ```python
+        Spec(str, name="")  # Invalid: empty string not allowed
+        ```
+
+        **Expected Behavior**:
+        - ValueError raised immediately
+        - Error message: "must be a non-empty string"
+
+        **Design Rationale**:
+        Empty string is not a valid field identifier:
+        - Confuses users (what field is this?)
+        - Breaks model generation (invalid Python identifier)
+        - Complicates debugging (all empty names look the same)
+        """
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            Spec(str, name="")
+
+    def test_name_must_be_string_type(self):
+        """
+        Spec name must be string type, not other types
+
+        **Pattern**: Type safety for field identifiers
+
+        **Scenario**: User passes non-string as name:
+        ```python
+        Spec(str, name=123)  # Invalid: integer, not string
+        ```
+
+        **Expected Behavior**:
+        - ValueError raised immediately
+        - Error message: "must be a non-empty string"
+
+        **Design Rationale**:
+        Field names must be strings for:
+        - Python syntax (attribute names are strings)
+        - JSON serialization (keys must be strings)
+        - Model generation (Pydantic/dataclass field names)
+        - Dict-like access consistency
+        """
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            Spec(str, name=123)
+
     def test_create_default_without_default_raises(self):
         """
         create_default_value() requires default or factory

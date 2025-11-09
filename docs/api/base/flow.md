@@ -1,6 +1,6 @@
 # Flow
 
-Dual-pile workflow state machine with named progression stages and shared item storage.
+> Dual-pile workflow state machine with named progression stages and shared item storage.
 
 ---
 

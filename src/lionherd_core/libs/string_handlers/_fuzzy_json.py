@@ -9,32 +9,81 @@ import orjson
 
 
 def fuzzy_json(str_to_parse: str, /) -> dict[str, Any] | list[dict[str, Any]]:
-    """Parse JSON string with fuzzy error correction (quotes, spacing, brackets)."""
+    """Parse JSON string with fuzzy error correction (quotes, spacing, brackets).
+
+    Returns:
+        Either a dict or a list of dicts. Will NOT return primitive types
+        (int, float, str, bool, None) or lists of primitives.
+
+    Raises:
+        TypeError: If parsed JSON is a primitive type or list of primitives.
+        ValueError: If JSON parsing fails after all correction attempts.
+    """
     _check_valid_str(str_to_parse)
 
     # 1. Direct attempt
     with contextlib.suppress(orjson.JSONDecodeError):
-        return orjson.loads(str_to_parse)
+        result = orjson.loads(str_to_parse)
+        return _validate_return_type(result)
 
     # 2. Try cleaning: replace single quotes with double and normalize
     cleaned = _clean_json_string(str_to_parse.replace("'", '"'))
     with contextlib.suppress(orjson.JSONDecodeError):
-        return orjson.loads(cleaned)
+        result = orjson.loads(cleaned)
+        return _validate_return_type(result)
 
     # 3. Try fixing brackets
     fixed = fix_json_string(cleaned)
     with contextlib.suppress(orjson.JSONDecodeError):
-        return orjson.loads(fixed)
+        result = orjson.loads(fixed)
+        return _validate_return_type(result)
 
     # If all attempts fail
     raise ValueError("Invalid JSON string")
 
 
-def _check_valid_str(str_to_parse: str, /):
+def _check_valid_str(str_to_parse: str, /) -> None:
     if not isinstance(str_to_parse, str):
         raise TypeError("Input must be a string")
     if not str_to_parse.strip():
         raise ValueError("Input string is empty")
+
+
+def _validate_return_type(result: Any) -> dict[str, Any] | list[dict[str, Any]]:
+    """Validate that parsed JSON matches the declared return type.
+
+    Args:
+        result: The result from orjson.loads()
+
+    Returns:
+        The validated result (dict or list[dict])
+
+    Raises:
+        TypeError: If result is a primitive type or list of non-dict elements
+    """
+    # Check if it's a dict
+    if isinstance(result, dict):
+        return result
+
+    # Check if it's a list
+    if isinstance(result, list):
+        # Ensure all elements are dicts
+        if not result:
+            # Empty list is valid as list[dict] (vacuous truth)
+            return result
+
+        for i, item in enumerate(result):
+            if not isinstance(item, dict):
+                raise TypeError(
+                    f"fuzzy_json returns dict or list[dict], got list with "
+                    f"non-dict element at index {i}: {type(item).__name__}"
+                )
+        return result
+
+    # If we got here, it's a primitive type (int, float, str, bool, None)
+    raise TypeError(
+        f"fuzzy_json returns dict or list[dict], got primitive type: {type(result).__name__}"
+    )
 
 
 def _clean_json_string(s: str) -> str:
