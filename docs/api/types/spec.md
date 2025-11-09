@@ -855,7 +855,7 @@ ValueError: Duplicate metadata key: name
 
 ## Special Methods
 
-#### `__hash__()`
+### `__hash__()`
 
 Hash based on `base_type` and `metadata` (immutable spec hashing).
 
