@@ -660,6 +660,8 @@ conditional_path = graph.find_path(start_node, end_node, check_conditions=True)
 
 **Conditional Traversal**: When `check_conditions=True`, edges with conditions that evaluate to False are skipped.
 
+**Note**: Conditional traversal works seamlessly in Jupyter notebooks (event loop handling is automatic via nest-asyncio).
+
 ---
 
 ### Serialization

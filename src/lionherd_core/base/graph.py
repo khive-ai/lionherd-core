@@ -70,7 +70,7 @@ class EdgeCondition:
             import nest_asyncio
 
             nest_asyncio.apply()
-            return asyncio.run(_run)
+            return asyncio.run(_run())
 
 
 # ==================== Edge ====================
