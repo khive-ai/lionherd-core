@@ -10,7 +10,7 @@ Status: Active
 
 ## Philosophy
 
-lionherd-core documentation follows **pandas/NumPy conventions** with lionherd-specific adaptations for protocol-based architecture and async-first design.
+lionherd-core documentation follows **Google-style docstrings** with lionherd-specific adaptations for protocol-based architecture and async-first design.
 
 **Core Principles:**
 
@@ -24,11 +24,11 @@ lionherd-core documentation follows **pandas/NumPy conventions** with lionherd-s
 
 ## Documentation Layers
 
-### Layer 1: Inline Docstrings (NumPy Style)
+### Layer 1: Inline Docstrings (Google Style)
 
 **Location**: Source code
 **Audience**: IDE users, API consumers
-**Format**: NumPy docstring convention (numpydoc)
+**Format**: Google-style docstring convention (matching existing lionherd-core codebase)
 
 **Required Sections:**
 
@@ -38,40 +38,32 @@ lionherd-core documentation follows **pandas/NumPy conventions** with lionherd-s
 Extended summary with context, use cases, and design rationale.
 Explain protocol implementations and architectural decisions.
 
-Parameters
-----------
-param_name : type
-    Description of parameter. Use "optional" for None-default params.
-    For multiple types: "int or str" (use "or" for final pairing).
-    For discrete values: "{'low', 'medium', 'high'}"
-    For defaults: "int, default 0" or "str, optional"
+Args:
+    param_name (type): Description of parameter. Use "optional" for None-default params.
+        For multiple types: "int or str" (use "or" for final pairing).
+        For discrete values: "{'low', 'medium', 'high'}"
+        For defaults: "int, default 0" or "str, optional"
+    another_param (str, optional): Optional parameter description.
 
-Returns
--------
-return_type
-    Description of return value. Include state changes if applicable.
+Returns:
+    return_type: Description of return value. Include state changes if applicable.
 
-Raises
-------
-ExceptionType
-    When and why this exception is raised.
+Raises:
+    ExceptionType: When and why this exception is raised.
 
-See Also
---------
-related_function : Brief description
-related_class : Related functionality
+See Also:
+    related_function: Brief description
+    related_class: Related functionality
 
-Notes
------
-Technical implementation details, caveats, performance considerations.
-Reference protocols implemented: Observable, Serializable, etc.
+Note:
+    Technical implementation details, caveats, performance considerations.
+    Reference protocols implemented: Observable, Serializable, etc.
 
-Examples
---------
->>> from lionherd_core import Element
->>> elem = Element(metadata={"key": "value"})
->>> elem.id
-UUID('...')
+Examples:
+    >>> from lionherd_core import Element
+    >>> elem = Element(metadata={"key": "value"})
+    >>> elem.id
+    UUID('...')
 """
 ```
 
@@ -82,8 +74,8 @@ UUID('...')
 - Text starts on line after opening quotes
 - Closing quotes on separate line
 - Inline code uses backticks: `` `param_name` ``
-- Cross-references use Sphinx syntax: `` :class:`~lionherd_core.Element` ``
-- The tilde prefix (`~`) displays only final component in links
+- Cross-references use markdown links: `` [`Element`](../api/base/element.md) ``
+- Auto-generated API docs via mkdocstrings support docstring cross-refs
 
 **Type Documentation:**
 
@@ -205,12 +197,17 @@ result
 
 ## Protocol Implementations
 
-Explicitly document which protocols are implemented:
+Explicitly document which protocols are implemented (use `@implements()` decorator):
 
-- **Observable**: `observe()` method for event registration
+- **Observable**: `id` property (UUID identifier for object identity)
 - **Serializable**: `to_dict()`, `to_json()` for serialization
 - **Deserializable**: `from_dict()`, `from_json()` for deserialization
-- **Hashable**: `__hash__()` based on ID (identity-based)
+- **Hashable**: `__hash__()` based on ID (identity-based hashing)
+- **Adaptable**: `adapt_to()`, `adapt_from()` for sync format conversion (TOML/YAML/JSON/SQL)
+- **AsyncAdaptable**: `adapt_to_async()`, `adapt_from_async()` for async I/O format conversion
+- **Invocable**: `invoke()` for async execution
+- **Containable**: `__contains__()` for membership testing (`in` operator)
+- **Allowable**: `allowed()` for defining allowed values/keys
 
 ## Usage Patterns
 
@@ -276,17 +273,22 @@ All examples must be executable and produce shown output.
 
 ### Protocol Documentation
 
-Always document protocol implementations:
+Always document protocol implementations (use `@implements()` decorator in class):
 
 ```markdown
 ## Protocol Implementations
 
-This class implements the following protocols:
+This class implements the following protocols (declared via `@implements()`):
 
-- **Observable**: Event observation via `observe(event_type, handler)`
+- **Observable**: UUID identifier via `id` property
 - **Serializable**: Supports `to_dict(mode='python'|'json'|'db')` and `to_json()`
 - **Deserializable**: Supports `from_dict()` and `from_json()` with polymorphic reconstruction
 - **Hashable**: ID-based hashing via `__hash__()` (identity equality)
+- **Adaptable**: Sync format conversion via `adapt_to()`, `adapt_from()` (if applicable)
+- **AsyncAdaptable**: Async format conversion via `adapt_to_async()`, `adapt_from_async()` (if applicable)
+- **Invocable**: Async execution via `invoke()` (if applicable)
+- **Containable**: Membership testing via `__contains__()` (if applicable)
+- **Allowable**: Allowed values via `allowed()` (if applicable)
 
 See [Protocols Guide](../user_guide/protocols.md) for detailed protocol documentation.
 ```
@@ -429,47 +431,37 @@ def to_dict(
 ) -> dict[str, Any]:
     """Serialize Element to dictionary with polymorphic reconstruction support.
 
-    Injects `lion_class` for polymorphic deserialization via `from_dict()`.
+    Injects `lion_class` into metadata for polymorphic deserialization via `from_dict()`.
     Supports three serialization modes for different use cases.
 
-    Parameters
-    ----------
-    mode : {'python', 'json', 'db'}, default 'python'
-        Serialization mode:
-        - 'python': Native Python types (UUID, datetime objects)
-        - 'json': JSON-safe types (str representations)
-        - 'db': Database adapter format (via pydapter)
-    meta_key : str, optional
-        Custom metadata key. If None, uses 'metadata'.
-    created_at_format : str, optional
-        strftime format for created_at. Applies to ALL modes.
-        If None, uses default format based on mode.
-    **kwargs : Any
-        Passed to pydantic's model_dump(). Common: include, exclude, by_alias.
+    Args:
+        mode ({'python', 'json', 'db'}, optional): Serialization mode. Defaults to 'python'.
+            - 'python': Native Python types (UUID, datetime objects)
+            - 'json': JSON-safe types (str representations)
+            - 'db': Database adapter format (via pydapter)
+        meta_key (str, optional): Custom metadata key. If None, uses 'metadata'.
+        created_at_format (str, optional): strftime format for created_at. Applies to ALL modes.
+            If None, uses default format based on mode.
+        **kwargs: Passed to pydantic's model_dump(). Common: include, exclude, by_alias.
 
-    Returns
-    -------
-    dict[str, Any]
-        Serialized dictionary with lion_class injected for polymorphism.
+    Returns:
+        dict[str, Any]: Serialized dictionary with lion_class injected in metadata for polymorphism.
 
-    See Also
-    --------
-    from_dict : Deserialize from dictionary with polymorphic reconstruction
-    to_json : Serialize to JSON string
+    See Also:
+        from_dict: Deserialize from dictionary with polymorphic reconstruction
+        to_json: Serialize to JSON string
 
-    Notes
-    -----
-    The `lion_class` key enables polymorphic deserialization - `from_dict()`
-    uses it to reconstruct the correct subclass. This is critical for
-    deserialization in multi-class workflows.
+    Note:
+        The `lion_class` key (injected into metadata dict) enables polymorphic deserialization -
+        `from_dict()` uses it to reconstruct the correct subclass. This is critical for
+        deserialization in multi-class workflows.
 
-    Mode selection:
-    - Use 'python' for in-memory operations and local serialization
-    - Use 'json' for API responses and JSON persistence
-    - Use 'db' for database storage via pydapter adapters
+        Mode selection:
+        - Use 'python' for in-memory operations and local serialization
+        - Use 'json' for API responses and JSON persistence
+        - Use 'db' for database storage via pydapter adapters
 
-    Examples
-    --------
+    Examples:
     >>> from lionherd_core import Element
     >>> elem = Element(metadata={"key": "value"})
 
@@ -479,8 +471,10 @@ def to_dict(
     {
         'id': UUID('...'),
         'created_at': datetime.datetime(...),
-        'metadata': {'key': 'value'},
-        'lion_class': 'Element'
+        'metadata': {
+            'key': 'value',
+            'lion_class': 'lionherd_core.base.element.Element'
+        }
     }
 
     JSON mode (JSON-safe types):
@@ -489,8 +483,10 @@ def to_dict(
     {
         'id': '123e4567-...',
         'created_at': '2025-11-08T10:30:00.123456+00:00',
-        'metadata': {'key': 'value'},
-        'lion_class': 'Element'
+        'metadata': {
+            'key': 'value',
+            'lion_class': 'lionherd_core.base.element.Element'
+        }
     }
 
     Custom created_at format (applies to all modes):
@@ -499,8 +495,10 @@ def to_dict(
     {
         'id': '123e4567-...',
         'created_at': '2025-11-08',
-        'metadata': {'key': 'value'},
-        'lion_class': 'Element'
+        'metadata': {
+            'key': 'value',
+            'lion_class': 'lionherd_core.base.element.Element'
+        }
     }
     """
 ```
@@ -559,9 +557,63 @@ Example deprecation notice:
 
 ---
 
+## mkdocs Configuration
+
+lionherd-core uses **mkdocs** with **mkdocstrings** for documentation generation.
+
+**Required `mkdocs.yml` configuration:**
+
+```yaml
+site_name: lionherd-core Documentation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - search.suggest
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            merge_init_into_class: true
+            show_signature_annotations: true
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Quickstart: user_guide/quickstart.md
+      - Protocols: user_guide/protocols.md
+      - Serialization: user_guide/serialization.md
+  - API Reference:
+      - Base: api/base/element.md
+      - Graph: api/graph/pile.md
+```
+
+**Auto-generating API reference pages:**
+
+mkdocstrings automatically extracts docstrings. Create minimal markdown files:
+
+```markdown
+# Element
+
+::: lionherd_core.base.Element
+```
+
+This renders the full API documentation from source code docstrings.
+
+---
+
 ## References
 
-- [NumPy Docstring Guide](https://numpydoc.readthedocs.io/en/latest/format.html)
-- [pandas Docstring Guide](https://pandas.pydata.org/docs/development/contributing_docstring.html)
+- [Google Python Style Guide - Docstrings](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
 - [PEP 257 – Docstring Conventions](https://peps.python.org/pep-0257/)
-- [Sphinx Documentation](https://www.sphinx-doc.org/)
+- [mkdocs Documentation](https://www.mkdocs.org/)
+- [mkdocstrings Documentation](https://mkdocstrings.github.io/)
