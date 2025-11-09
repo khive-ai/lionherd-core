@@ -21,7 +21,7 @@ Key Differences from Element:
 """
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from lionherd_core.types import HashableModel
 
@@ -280,7 +280,7 @@ class TestHashableModelEdgeCases:
         """HashableModel is frozen by default to prevent hash corruption."""
         config = SimpleConfig(name="test", value=42)
 
-        with pytest.raises(Exception):  # ValidationError from Pydantic
+        with pytest.raises(ValidationError):
             config.value = 99
 
     def test_mutation_changes_hash_when_unfrozen(self):
