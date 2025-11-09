@@ -418,10 +418,7 @@ res.cleanup()  # Explicitly untrack before garbage collection
 ### Basic Leak Detection
 
 ```python
-from lionherd_core.libs.concurrency import track_resource, LeakTracker
-
-# Get global tracker to inspect state
-_TRACKER = LeakTracker()  # Or access module-level _TRACKER
+from lionherd_core.libs.concurrency import track_resource
 
 class Connection:
     def __init__(self, host: str):
@@ -436,9 +433,8 @@ class Connection:
 conn1 = Connection("db.example.com")
 conn2 = Connection("api.example.com")
 
-# Check live connections
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
-print(f"Live connections: {len(_TRACKER.live())}")  # 2
+# Connections are tracked automatically
+# When they're deleted and garbage collected, they're automatically untracked
 
 # Close and cleanup
 conn1.close()
@@ -446,13 +442,8 @@ del conn1
 import gc
 gc.collect()
 
-# Verify cleanup
-print(f"Live connections: {len(_TRACKER.live())}")  # 1 (conn1 removed)
-
-# Identify remaining leaks
-for info in _TRACKER.live():
-    print(f"Leak detected: {info.name} (age: {time.time() - info.created_at:.2f}s)")
-# Leak detected: conn:api.example.com (age: 5.23s)
+# Objects are automatically removed when garbage collected
+# due to weakref.finalize callbacks
 ```
 
 ### Context Manager Integration
@@ -487,73 +478,78 @@ with TrackedFile("/tmp/data.txt") as f:
 
 ### Test Cleanup Verification
 
+For testing, create isolated `LeakTracker` instances rather than using the global tracker:
+
 ```python
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
+from lionherd_core.libs.concurrency import LeakTracker, track_resource
 import pytest
+import gc
 
-@pytest.fixture(autouse=True)
-def verify_no_leaks():
-    """Verify no resource leaks after each test."""
-    # Clear before test
-    _TRACKER.clear()
+@pytest.fixture
+def leak_tracker():
+    """Isolated leak tracker for testing."""
+    tracker = LeakTracker()
+    yield tracker
+    # Auto-cleanup after test
+    tracker.clear()
 
-    yield
-
-    # Check for leaks after test
-    leaks = _TRACKER.live()
-    if leaks:
-        leak_info = "\n".join(
-            f"  - {info.name} ({info.kind}): {time.time() - info.created_at:.2f}s old"
-            for info in leaks
-        )
-        pytest.fail(f"Resource leaks detected:\n{leak_info}")
-
-def test_resource_cleanup():
+def test_resource_cleanup(leak_tracker):
     """Test that properly cleans up resources."""
-    from lionherd_core.libs.concurrency import track_resource
-
     obj = object()
-    track_resource(obj, name="test_obj", kind="test")
+    leak_tracker.track(obj, name="test_obj", kind="test")
+
+    # Verify tracked
+    assert len(leak_tracker.live()) == 1
 
     # Cleanup
     del obj
-    import gc
     gc.collect()
 
-    # No leaks - test passes
+    # Verify cleanup
+    assert len(leak_tracker.live()) == 0
 ```
 
-### Resource Aging Report
+### Custom Leak Reporting
+
+To implement custom leak reporting, create a helper function that wraps a `LeakTracker`:
 
 ```python
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
+from lionherd_core.libs.concurrency import LeakTracker
 import time
 
-def leak_report() -> str:
-    """Generate human-readable leak report."""
-    leaks = _TRACKER.live()
+class TrackerWithReporting:
+    """Wrapper for LeakTracker with reporting capabilities."""
 
-    if not leaks:
-        return "No resource leaks detected."
+    def __init__(self):
+        self.tracker = LeakTracker()
 
-    lines = [f"Resource Leaks Detected: {len(leaks)}"]
+    def track(self, obj, name=None, kind=None):
+        """Track an object."""
+        self.tracker.track(obj, name=name, kind=kind)
 
-    # Sort by age (oldest first)
-    sorted_leaks = sorted(leaks, key=lambda x: x.created_at)
+    def report(self) -> str:
+        """Generate human-readable leak report."""
+        leaks = self.tracker.live()
 
-    for info in sorted_leaks:
-        age = time.time() - info.created_at
-        kind_str = f" ({info.kind})" if info.kind else ""
-        lines.append(f"  - {info.name}{kind_str}: {age:.2f}s old")
+        if not leaks:
+            return "No resource leaks detected."
 
-    return "\n".join(lines)
+        lines = [f"Resource Leaks Detected: {len(leaks)}"]
+
+        # Sort by age (oldest first)
+        sorted_leaks = sorted(leaks, key=lambda x: x.created_at)
+
+        for info in sorted_leaks:
+            age = time.time() - info.created_at
+            kind_str = f" ({info.kind})" if info.kind else ""
+            lines.append(f"  - {info.name}{kind_str}: {age:.2f}s old")
+
+        return "\n".join(lines)
 
 # Usage
-print(leak_report())
-# Resource Leaks Detected: 3
-#   - conn:db.example.com (connection): 45.23s old
-#   - file:/tmp/data.txt (file): 12.45s old
-#   - lock:critical_section (lock): 3.21s old
+reporter = TrackerWithReporting()
+print(reporter.report())
+# Resource Leaks Detected: 0
 ```
 
 ## Design Rationale
@@ -625,21 +621,25 @@ async def bad_example():
 **Issue**: Objects remain tracked until garbage collection, not deletion.
 
 ```python
-from lionherd_core.libs.concurrency import track_resource
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
+from lionherd_core.libs.concurrency import LeakTracker, track_resource
+import gc
+
+# Using isolated tracker for testing
+tracker = LeakTracker()
 
 obj = object()
-track_resource(obj, name="obj", kind="test")
+tracker.track(obj, name="obj", kind="test")
 
+# Object still tracked after del (GC hasn't run)
 del obj
-print(len(_TRACKER.live()))  # May still be 1 (GC hasn't run)
+print(len(tracker.live()))  # May still be 1
 
-import gc
+# Force garbage collection
 gc.collect()
-print(len(_TRACKER.live()))  # 0 (after GC)
+print(len(tracker.live()))  # Now 0 (after GC)
 ```
 
-**Solution**: Call `gc.collect()` in tests to force garbage collection before checking for leaks.
+**Solution**: Always call `gc.collect()` in tests before checking tracker state, as Python's garbage collector is not deterministic.
 
 ### Pitfall 3: Circular References Prevent Cleanup
 
@@ -695,300 +695,14 @@ def hot_path_function():
 
 ## Examples
 
-### Example 1: Database Connection Pool Leak Detection
+The resource tracker is best learned through the **Usage Patterns** section above. For comprehensive production examples, see the planned tutorials:
 
-```python
-from lionherd_core.libs.concurrency import track_resource, untrack_resource
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
-import time
+- **Tutorial: Database Connection Pool Leak Detection** - Connection pool with automatic leak tracking and reporting
+- **Tutorial: File Handle Tracking** - File resource management with leak detection at exit
+- **Tutorial: Lock Acquisition Debugging** - Detecting deadlocks and lock contention with acquisition tracking
 
-class ConnectionPool:
-    """Connection pool with leak tracking."""
+These tutorials will be created as separate guides with detailed explanations of production patterns.
 
-    def __init__(self, size: int = 5):
-        self.size = size
-        self.connections = []
-        self._active = set()
+### Quick Testing Example
 
-    def acquire(self) -> 'Connection':
-        """Acquire connection from pool."""
-        if self.connections:
-            conn = self.connections.pop()
-        else:
-            conn = Connection(f"conn-{len(self._active)}")
-
-        self._active.add(conn)
-        return conn
-
-    def release(self, conn: 'Connection'):
-        """Release connection back to pool."""
-        self._active.discard(conn)
-        self.connections.append(conn)
-
-    def leak_check(self):
-        """Report any leaked connections."""
-        leaks = [
-            info for info in _TRACKER.live()
-            if info.kind == "connection"
-        ]
-
-        if leaks:
-            print(f"WARNING: {len(leaks)} leaked connections detected:")
-            for info in leaks:
-                age = time.time() - info.created_at
-                print(f"  - {info.name}: {age:.2f}s old")
-
-
-class Connection:
-    """Database connection with leak tracking."""
-
-    def __init__(self, name: str):
-        self.name = name
-        track_resource(self, name=f"db:{name}", kind="connection")
-
-    def close(self):
-        untrack_resource(self)
-
-
-# Usage
-pool = ConnectionPool(size=3)
-
-# Acquire connections
-conn1 = pool.acquire()
-conn2 = pool.acquire()
-
-# Release one
-pool.release(conn1)
-
-# Leak check (conn2 still active)
-pool.leak_check()
-# WARNING: 1 leaked connections detected:
-#   - db:conn-1: 2.34s old
-
-# Proper cleanup
-pool.release(conn2)
-pool.leak_check()
-# (no output - all cleaned up)
-```
-
-### Example 2: File Handle Tracking
-
-```python
-from lionherd_core.libs.concurrency import track_resource, untrack_resource
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
-import atexit
-
-class TrackedFileRegistry:
-    """Registry of all opened files for leak detection at exit."""
-
-    def __init__(self):
-        atexit.register(self.report_leaks)
-
-    def report_leaks(self):
-        """Report file handle leaks at program exit."""
-        file_leaks = [
-            info for info in _TRACKER.live()
-            if info.kind == "file"
-        ]
-
-        if file_leaks:
-            print("\n!!! FILE HANDLE LEAKS DETECTED !!!")
-            for info in file_leaks:
-                print(f"  - {info.name}")
-
-
-class ManagedFile:
-    """File handle with automatic leak tracking."""
-
-    def __init__(self, path: str, mode: str = 'r'):
-        self.path = path
-        self.file = open(path, mode)
-        track_resource(self, name=f"file:{path}", kind="file")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
-    def close(self):
-        if hasattr(self, 'file') and not self.file.closed:
-            self.file.close()
-            untrack_resource(self)
-
-
-# Setup registry
-registry = TrackedFileRegistry()
-
-# Proper usage (no leak)
-with ManagedFile("/tmp/data.txt") as f:
-    data = f.read()
-
-# Improper usage (leak!)
-leaked_file = ManagedFile("/tmp/leak.txt")
-# (forgot to close or use context manager)
-
-# At program exit:
-# !!! FILE HANDLE LEAKS DETECTED !!!
-#   - file:/tmp/leak.txt
-```
-
-### Example 3: Lock Acquisition Tracking
-
-```python
-from lionherd_core.libs.concurrency import track_resource, untrack_resource
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
-import threading
-import time
-
-class DebugLock:
-    """Lock with acquisition tracking for deadlock debugging."""
-
-    def __init__(self, name: str):
-        self.name = name
-        self.lock = threading.Lock()
-        self._holder = None
-
-    def acquire(self, timeout: float | None = None) -> bool:
-        """Acquire lock with tracking."""
-        acquired = self.lock.acquire(timeout=timeout if timeout else -1)
-
-        if acquired:
-            self._holder = threading.current_thread().name
-            track_resource(
-                self,
-                name=f"lock:{self.name}:{self._holder}",
-                kind="lock"
-            )
-
-        return acquired
-
-    def release(self):
-        """Release lock and untrack."""
-        untrack_resource(self)
-        self._holder = None
-        self.lock.release()
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, *args):
-        self.release()
-
-
-def check_held_locks():
-    """Report all currently held locks."""
-    locks = [
-        info for info in _TRACKER.live()
-        if info.kind == "lock"
-    ]
-
-    if locks:
-        print(f"Currently held locks: {len(locks)}")
-        for info in locks:
-            age = time.time() - info.created_at
-            print(f"  - {info.name}: held for {age:.2f}s")
-    else:
-        print("No locks currently held")
-
-
-# Usage
-lock1 = DebugLock("critical_section_1")
-lock2 = DebugLock("critical_section_2")
-
-# Proper usage
-with lock1:
-    check_held_locks()
-    # Currently held locks: 1
-    #   - lock:critical_section_1:MainThread: held for 0.00s
-
-check_held_locks()
-# No locks currently held
-
-# Deadlock scenario (for debugging)
-def worker(lock_a: DebugLock, lock_b: DebugLock):
-    lock_a.acquire()
-    time.sleep(0.1)  # Simulate work
-    lock_b.acquire()  # May deadlock
-    # ... work ...
-    lock_b.release()
-    lock_a.release()
-
-# After timeout, check which locks are still held
-t1 = threading.Thread(target=worker, args=(lock1, lock2), name="Worker1")
-t2 = threading.Thread(target=worker, args=(lock2, lock1), name="Worker2")
-
-t1.start()
-t2.start()
-
-time.sleep(0.5)  # Wait for potential deadlock
-check_held_locks()
-# Currently held locks: 2
-#   - lock:critical_section_1:Worker1: held for 0.45s
-#   - lock:critical_section_2:Worker2: held for 0.45s
-# (indicates deadlock)
-```
-
-### Example 4: Pytest Fixture for Leak Detection
-
-```python
-from lionherd_core.libs.concurrency._resource_tracker import _TRACKER
-from lionherd_core.libs.concurrency import track_resource
-import pytest
-import gc
-
-@pytest.fixture(autouse=True)
-def leak_detector():
-    """Automatically detect resource leaks in all tests."""
-    # Setup: clear tracker before test
-    _TRACKER.clear()
-
-    yield
-
-    # Teardown: check for leaks after test
-    gc.collect()  # Force garbage collection
-
-    leaks = _TRACKER.live()
-    if leaks:
-        leak_details = []
-        for info in leaks:
-            kind_str = f" ({info.kind})" if info.kind else ""
-            leak_details.append(f"  - {info.name}{kind_str}")
-
-        pytest.fail(
-            f"Resource leaks detected:\n" + "\n".join(leak_details)
-        )
-
-
-def test_proper_cleanup():
-    """Test that properly manages resources."""
-    class Resource:
-        def __init__(self, name: str):
-            self.name = name
-            track_resource(self, name=name, kind="test_resource")
-
-    # Create resource
-    res = Resource("test_res")
-
-    # Cleanup
-    del res
-    gc.collect()
-
-    # Test passes (no leaks)
-
-
-def test_leaked_resource():
-    """Test that leaks resources (will fail)."""
-    class Resource:
-        def __init__(self, name: str):
-            self.name = name
-            track_resource(self, name=name, kind="test_resource")
-
-    # Create resource but don't clean up
-    res = Resource("leaked_res")
-
-    # Test fails with:
-    # Resource leaks detected:
-    #   - leaked_res (test_resource)
-```
+For testing scenarios, use isolated tracker instances as shown in the **Test Cleanup Verification** usage pattern above.

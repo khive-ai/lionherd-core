@@ -684,8 +684,7 @@ run(main)
 ### Stable Priority with FIFO Ordering
 
 ```python
-from lionherd_core.libs.concurrency import PriorityQueue
-import time
+from lionherd_core.libs.concurrency import PriorityQueue, QueueEmpty
 
 queue = PriorityQueue[tuple[int, int, str]]()
 
@@ -698,10 +697,13 @@ async def demonstrate_stable_priority():
     await queue.put((1, 3, "critical"))
     await queue.put((5, 4, "third_normal"))
 
-    # Retrieve all items
-    while not queue.empty():
-        priority, ts, task = await queue.get()
-        print(f"[P{priority}] {task} (ts={ts})")
+    # Retrieve all items (use exception handling, not racy empty() check)
+    try:
+        while True:
+            priority, ts, task = await queue.get_nowait()
+            print(f"[P{priority}] {task} (ts={ts})")
+    except QueueEmpty:
+        pass  # All items processed
 
 await demonstrate_stable_priority()
 # Output (stable within priority):
