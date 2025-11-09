@@ -11,8 +11,8 @@
 - **Element Inheritance**: Auto-generated UUID, timestamps, metadata (from Element base class)
 - **List Operations**: `append`, `extend`, `insert`, `remove`, `pop`, `popleft`, `clear`
 - **Workflow Operations**: `move`, `swap`, `reverse` for dynamic reordering
-- **Idempotent Operations**: `include`, `exclude` for safe retry and concurrent access
-- **Query Operations**: `len`, `contains`, `getitem`, `index`, iteration
+- **Idempotent Operations**: `include`, `exclude` for safe retry (operations that can be called multiple times with the same effect as calling once)
+- **Query Operations**: `len`, `contains`, `getitem`, `setitem`, `index`, iteration
 - **Serialization**: JSON roundtrip with UUID string conversion
 
 ## When to Use Progression
@@ -48,13 +48,10 @@ class Progression(Element):
     # Constructor signature
     def __init__(
         self,
-        *,
-        order: list[UUID | Element] | None = None,
+        order: list[UUID] | list[Element] | None = None,
         name: str | None = None,
-        # Inherited from Element:
-        id: UUID | str | None = None,
-        created_at: datetime | str | int | float | None = None,
-        metadata: dict[str, Any] | None = None,
+        # Inherited from Element (keyword-only):
+        **data: Any,  # id, created_at, metadata
     ) -> None: ...
 ```
 
@@ -96,7 +93,7 @@ Additional metadata dictionary.
 | Attribute    | Type                | Mutable | Inherited | Description                        |
 |--------------|---------------------|---------|-----------|-----------------------------------|
 | `order`      | `list[UUID]`        | Yes     | No        | Ordered sequence of UUIDs         |
-| `name`       | `str | None`        | Yes     | No        | Descriptive name                  |
+| `name`       | `str \| None`       | Yes     | No        | Descriptive name                  |
 | `id`         | `UUID`              | No      | Yes       | Unique identifier (frozen)        |
 | `created_at` | `datetime`          | No      | Yes       | Creation timestamp (frozen)       |
 | `metadata`   | `dict[str, Any]`    | Yes     | Yes       | Additional metadata               |
@@ -133,6 +130,8 @@ prog.append(uuid4())
 print(len(prog))  # 2
 ```
 
+**Time Complexity:** O(1) - amortized constant time
+
 #### `extend()`
 
 Add multiple items to end of progression.
@@ -156,6 +155,8 @@ tasks = [uuid4() for _ in range(3)]
 prog.extend(tasks)
 print(len(prog))  # 5 (2 + 3)
 ```
+
+**Time Complexity:** O(k) where k = number of items to extend
 
 #### `insert()`
 
@@ -181,6 +182,8 @@ prog = Progression(order=[uuid4(), uuid4()])
 prog.insert(1, uuid4())  # Insert in middle
 print(len(prog))  # 3
 ```
+
+**Time Complexity:** O(n) - linear time due to list shift
 
 #### `remove()`
 
@@ -211,6 +214,8 @@ prog.remove(uid)
 # prog.remove(uid)  # ValueError: not in list
 ```
 
+**Time Complexity:** O(n) - must search for item, then shift remaining elements
+
 #### `pop()`
 
 Remove and return item at index (default: last item).
@@ -239,6 +244,8 @@ last = prog.pop()
 first = prog.pop(0)
 ```
 
+**Time Complexity:** O(1) for pop(), O(n) for pop(0) due to list shift
+
 #### `popleft()`
 
 Remove and return first item (queue behavior).
@@ -262,6 +269,8 @@ def popleft(self) -> UUID
 pending = Progression(order=[uuid4(), uuid4()])
 next_task = pending.popleft()
 ```
+
+**Time Complexity:** O(n) - removes from front, requires shifting all elements
 
 **See Also:**
 
@@ -323,6 +332,8 @@ prog.move(2, 0)  # Move task3 to front
 - Task reordering in workflow editors
 - Undo/redo stacks with position changes
 
+**Time Complexity:** O(n) in worst case (moving between distant positions)
+
 #### `swap()`
 
 Swap positions of two items.
@@ -354,6 +365,8 @@ prog.swap(0, -1)  # Swap first and last
 - Swapping execution order of dependent tasks
 - UI drag-and-drop implementations
 
+**Time Complexity:** O(1) - constant time swap
+
 #### `reverse()`
 
 Reverse order of all items.
@@ -379,6 +392,8 @@ prog.reverse()
 - Undo stacks (reverse chronological order)
 - Workflow direction changes
 - LIFO to FIFO conversion
+
+**Time Complexity:** O(n) - reverses all n elements
 
 ---
 
@@ -412,8 +427,12 @@ print(len(prog))  # 1 (only one instance)
 **Use Cases:**
 
 - Retry-safe task registration
-- Concurrent workflow systems (multiple agents calling include)
 - Idempotent event processing
+- Task deduplication in workflow systems
+
+**Time Complexity:** O(n) - must check if item exists
+
+**Note**: Not thread-safe. For concurrent access, use external synchronization.
 
 **See Also:**
 
@@ -452,6 +471,8 @@ print(len(prog))  # 0
 - Retry-safe task cancellation
 - Cleanup operations that can be called multiple times
 - Distributed systems with at-least-once delivery
+
+**Time Complexity:** O(n) - must search for item, then shift if found
 
 **See Also:**
 
@@ -533,6 +554,44 @@ first = prog[0]
 last = prog[-1]
 middle_three = prog[1:4]
 ```
+
+**Time Complexity:** O(1) for index access, O(k) for slice where k = slice length
+
+#### `__setitem__()`
+
+Set item at index or slice.
+
+**Signature:**
+
+```python
+def __setitem__(self, index: int | slice, value: UUID | Element | list) -> None
+```
+
+**Parameters:**
+
+- `index` (int | slice): Index or slice object
+- `value` (UUID | Element | list): Item(s) to set (list required for slice assignment)
+
+**Raises:**
+
+- `IndexError`: If index out of range
+- `TypeError`: If assigning non-list to slice
+
+**Returns:** None (modifies in place)
+
+**Example:**
+
+```python
+prog = Progression(order=[uuid4(), uuid4(), uuid4()])
+
+# Set single item
+prog[0] = uuid4()
+
+# Set slice
+prog[1:3] = [uuid4(), uuid4()]
+```
+
+**Time Complexity:** O(1) for index assignment, O(k) for slice where k = slice length
 
 #### `index()`
 
@@ -807,7 +866,7 @@ while high_priority or normal_priority:
 ### Idempotent Registration
 
 ```python
-# Safe for concurrent calls and retries
+# Safe for retries (idempotent operations)
 registered_tasks = Progression(name="registry")
 
 def register_task(task_id: UUID) -> bool:
@@ -827,6 +886,9 @@ register_task(task)  # False (already present)
 ### Serialization Roundtrip
 
 ```python
+import json
+from uuid import uuid4
+
 # Persist progression state
 prog = Progression(order=[uuid4(), uuid4()], name="workflow_steps")
 
@@ -980,7 +1042,7 @@ next_task = tasks.popleft()  # Gets task3 (urgent)
 ### Example 4: Idempotent Task Registration
 
 ```python
-# Distributed task registry (safe for concurrent access)
+# Task registry with retry-safe operations (idempotent)
 registry = Progression(name="task_registry")
 
 def register(task_id: UUID) -> str:
