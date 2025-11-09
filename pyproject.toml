@@ -32,6 +32,7 @@ dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0", "nest-asyncio>=1.6.0"]
 
 [project.optional-dependencies]
 schema-gen = ["datamodel-code-generator>=0.25.0"]
+all = ["lionherd-core[schema-gen]"]
 
 [project.urls]
 Homepage = "https://github.com/khive-ai/lionherd-core"

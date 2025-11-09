@@ -204,7 +204,7 @@ schema = {
     "properties": {
         "name": {"type": "string"},
         "age": {"type": "integer", "minimum": 0},
-        "email": {"type": "string", "format": "email"}
+        "email": {"type": "string"}
     },
     "required": ["name", "age"]
 }
@@ -460,10 +460,19 @@ Model = load_pydantic_model_from_schema(schema)
 **Issue**: Generating models repeatedly in performance-critical code.
 
 ```python
+# Example schema for user data
+USER_SCHEMA = {
+    "title": "User",
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "email": {"type": "string"},
+    },
+}
+
 # BAD: Generating model on every request
 def handle_request(data: dict):
-    schema = get_schema_for_data(data)
-    Model = load_pydantic_model_from_schema(schema)  # 100-300ms overhead
+    Model = load_pydantic_model_from_schema(USER_SCHEMA)  # 100-300ms overhead
     return Model(**data)
 
 # Called 1000x/sec → massive overhead
@@ -473,17 +482,17 @@ def handle_request(data: dict):
 
 ```python
 from functools import lru_cache
-import hashlib
 import json
 
 @lru_cache(maxsize=128)
 def get_cached_model(schema_json: str):
     return load_pydantic_model_from_schema(schema_json)
 
+# Convert schema to normalized JSON string for caching
+SCHEMA_JSON = json.dumps(USER_SCHEMA, sort_keys=True)
+
 def handle_request(data: dict):
-    schema = get_schema_for_data(data)
-    schema_json = json.dumps(schema, sort_keys=True)  # Normalize for caching
-    Model = get_cached_model(schema_json)  # Fast lookup after first call
+    Model = get_cached_model(SCHEMA_JSON)  # Fast lookup after first call
     return Model(**data)
 ```
 
@@ -622,7 +631,8 @@ Rebuilds model with proper type namespace resolution using `model_rebuild()`.
 
 - **Related Modules**:
   - [Spec](../../types/spec.md): Validation framework using Pydantic models
-  - [Operable](../../types/operable.md): Structured LLM outputs with dynamic models
+  - [Function Call Parser](./function_call_parser.md): Parsing LLM function calls
+  - [TypeScript Schema Handler](./typescript.md): TypeScript notation for schemas
 - **Related Guides**:
   - [Pydantic Documentation](https://docs.pydantic.dev/): Pydantic model usage
   - [JSON Schema](https://json-schema.org/): JSON Schema specification
@@ -638,18 +648,30 @@ Rebuilds model with proper type namespace resolution using `model_rebuild()`.
 
 ```python
 from lionherd_core.libs.schema_handlers import load_pydantic_model_from_schema
-import httpx
 
-# Fetch schema from API
-response = httpx.get("https://api.example.com/schema/user")
-schema = response.json()
+# Define API response schema
+schema = {
+    "title": "User",
+    "type": "object",
+    "properties": {
+        "id": {"type": "integer"},
+        "name": {"type": "string"},
+        "email": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"},
+    },
+    "required": ["id", "name", "email"],
+}
 
-# Generate model
+# Generate model from schema
 UserModel = load_pydantic_model_from_schema(schema)
 
-# Parse API data
-user_response = httpx.get("https://api.example.com/users/123")
-user_data = user_response.json()
+# Parse API data (e.g., from requests/httpx response)
+user_data = {
+    "id": 123,
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "created_at": "2025-11-09T12:00:00Z",
+}
 
 # Validate with generated model
 user = UserModel(**user_data)
@@ -724,7 +746,7 @@ def user_model():
         "properties": {
             "id": {"type": "integer"},
             "username": {"type": "string", "minLength": 3},
-            "email": {"type": "string", "format": "email"}
+            "email": {"type": "string"}
         },
         "required": ["id", "username"]
     }

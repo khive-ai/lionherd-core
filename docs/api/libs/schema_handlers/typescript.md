@@ -37,7 +37,7 @@ Main entry point for converting JSON Schema to TypeScript-style notation.
 **Signature:**
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 def typescript_schema(schema: dict, indent: int = 0) -> str: ...
 ```
@@ -58,7 +58,7 @@ def typescript_schema(schema: dict, indent: int = 0) -> str: ...
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+>>> from lionherd_core.libs.schema_handlers import typescript_schema
 
 # Simple schema
 >>> schema = {
@@ -130,239 +130,16 @@ config: Config
     nested?: object
 ```
 
-**See Also:**
-
-- `_extract_type_signature()`: Core type extraction logic
-- `_type_map()`: JSON Schema to TypeScript type mapping
-- `_format_enum_union()`: Enum formatting
-
 **Notes:**
 
 This function processes top-level properties only. For nested object schemas, recursively call `typescript_schema()` on nested property definitions with incremented `indent`.
-
----
-
-### `_extract_type_signature()`
-
-Extract TypeScript-style type signature from JSON Schema field specification.
-
-**Signature:**
-
-```python
-def _extract_type_signature(field_spec: dict, required: bool) -> tuple[str, bool]: ...
-```
-
-**Parameters:**
-
-- `field_spec` (dict): JSON Schema field definition (may contain `type`, `enum`, `anyOf`, `$ref`, `items`, `default`)
-- `required` (bool): Whether field is in parent schema's `required` list
-
-**Returns:**
-
-- tuple[str, bool]:
-  - `type_sig` (str): TypeScript-style type signature
-  - `is_optional` (bool): Whether field should be marked optional (`?`)
-
-**Type Resolution Priority:**
-
-1. **Enums** (most specific): `{"enum": ["a", "b"]}` → `"a" | "b"`
-2. **Unions** (anyOf): `{"anyOf": [...]}` → `type1 | type2 | ...`
-3. **Arrays**: `{"type": "array", "items": {...}}` → `item_type[]`
-4. **References**: `{"$ref": "#/definitions/Foo"}` → `Foo`
-5. **Simple types**: `{"type": "string"}` → `string`
-6. **Fallback**: `any` (if no type information)
-
-**Optional Detection:**
-
-Field marked optional (`is_optional=True`) if:
-
-- Not in `required` list, OR
-- Union includes `null` type, OR
-- Enum includes `null` value
-
-**Examples:**
-
-```python
->>> from lionherd_core.libs.schema_handlers._typescript import _extract_type_signature
-
-# Required string
->>> _extract_type_signature({"type": "string"}, required=True)
-('string', False)
-
-# Optional integer with default
->>> _extract_type_signature({"type": "integer", "default": 0}, required=False)
-('int', True)
-
-# Enum with null
->>> _extract_type_signature({"enum": ["a", "b", None]}, required=True)
-('"a" | "b" | null', True)  # Optional due to null in enum
-
-# Array of refs
->>> _extract_type_signature(
-...     {"type": "array", "items": {"$ref": "#/definitions/Item"}},
-...     required=True
-... )
-('Item[]', False)
-
-# Union (anyOf)
->>> _extract_type_signature(
-...     {"anyOf": [{"type": "string"}, {"type": "integer"}]},
-...     required=True
-... )
-('string | int', False)
-
-# Union with null
->>> _extract_type_signature(
-...     {"anyOf": [{"type": "string"}, {"type": "null"}]},
-...     required=False
-... )
-('string | null', True)  # Optional due to null in anyOf
-
-# No type info
->>> _extract_type_signature({}, required=True)
-('any', False)
-```
-
-**See Also:**
-
-- `_type_map()`: Base type conversion
-- `_format_enum_union()`: Enum literal formatting
-
-**Notes:**
-
-This function handles complex nested type definitions including:
-
-- Nested arrays: `{"type": "array", "items": {"type": "array", "items": {...}}}`
-- Enum arrays: `{"type": "array", "items": {"enum": ["a", "b"]}}`
-- Reference arrays: `{"type": "array", "items": {"$ref": "..."}}`
-- Mixed unions: `{"anyOf": [{"type": "string"}, {"$ref": "..."}, {"enum": [...]}]}`
-
----
-
-### `_type_map()`
-
-Map JSON Schema primitive types to TypeScript-like types.
-
-**Signature:**
-
-```python
-def _type_map(json_type: str) -> str: ...
-```
-
-**Parameters:**
-
-- `json_type` (str): JSON Schema type string
-
-**Returns:**
-
-- str: TypeScript-style type name
-
-**Type Mappings:**
-
-| JSON Schema Type | TypeScript Style |
-|-----------------|------------------|
-| `"string"`      | `"string"`       |
-| `"integer"`     | `"int"`          |
-| `"number"`      | `"float"`        |
-| `"boolean"`     | `"bool"`         |
-| `"array"`       | `"array"`        |
-| `"object"`      | `"object"`       |
-| `"null"`        | `"null"`         |
-| Unknown         | Input string (passthrough) |
-
-**Examples:**
-
-```python
->>> from lionherd_core.libs.schema_handlers._typescript import _type_map
-
->>> _type_map("string")
-'string'
->>> _type_map("integer")
-'int'
->>> _type_map("number")
-'float'
->>> _type_map("boolean")
-'bool'
->>> _type_map("array")
-'array'
->>> _type_map("null")
-'null'
-
-# Unknown types pass through
->>> _type_map("custom_type")
-'custom_type'
-```
-
-**Notes:**
-
-- Uses Python-friendly names (`int`, `float`, `bool`) instead of strict TypeScript (`number`, `boolean`)
-- `array` type handled specially by caller (usually formatted as `type[]`)
-- Unknown types returned as-is (allows custom type extensions)
-
----
-
-### `_format_enum_union()`
-
-Format enum values as TypeScript union of literals.
-
-**Signature:**
-
-```python
-def _format_enum_union(enum_values: list) -> str: ...
-```
-
-**Parameters:**
-
-- `enum_values` (list): List of enum values (may include strings, numbers, booleans, `None`)
-
-**Returns:**
-
-- str: TypeScript-style union of literal values (`"a" | "b" | null`)
-
-**Value Formatting:**
-
-- **Strings**: Wrapped in double quotes (`"value"`)
-- **None**: Converted to `null`
-- **Numbers/Booleans**: Converted to string representation (`42`, `true`, `false`)
-
-**Examples:**
-
-```python
->>> from lionherd_core.libs.schema_handlers._typescript import _format_enum_union
-
-# String enum
->>> _format_enum_union(["active", "inactive", "pending"])
-'"active" | "inactive" | "pending"'
-
-# Mixed types
->>> _format_enum_union(["auto", 42, True, None])
-'"auto" | 42 | true | null'
-
-# Nullable enum
->>> _format_enum_union(["value1", "value2", None])
-'"value1" | "value2" | null'
-
-# Single value
->>> _format_enum_union(["only"])
-'"only"'
-
-# Empty (edge case)
->>> _format_enum_union([])
-''
-```
-
-**Notes:**
-
-- Output is valid TypeScript literal union syntax
-- Boolean values use lowercase (`true`, `false`) matching TypeScript
-- `None` → `null` conversion for JSON compatibility
 
 ## Usage Patterns
 
 ### Basic Schema Conversion
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 # Define JSON Schema
 schema = {
@@ -401,7 +178,7 @@ print(ts_notation)
 ### MCP Tool Documentation
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 # Tool schema from MCP server
 tool_schema = {
@@ -443,7 +220,7 @@ Usage: search(action="search", query="...", limit=10)
 ### Complex Nested Types
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 # Schema with arrays, refs, and unions
 schema = {
@@ -483,7 +260,7 @@ print(ts_output)
 ### Indented Output for Nested Schemas
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 def format_nested_schema(schema: dict, indent: int = 0) -> str:
     """Recursively format nested object schemas."""
@@ -680,12 +457,10 @@ This improves readability in constrained contexts (LLM context windows, terminal
 
 ## See Also
 
-- **Related Handlers**:
-  - JSON Handler: Alternative schema representation (if implemented)
-  - Python Handler: Python type hint notation (if implemented)
-- **Related Tools**:
-  - [Pydapter Schema Conversion](../../pydapter/schema.md): Full schema conversion pipelines
-  - [MCP Tool Documentation](../../mcp/tools.md): Using TypeScript notation in MCP servers
+- **Related Modules**:
+  - [Schema to Model](./schema_to_model.md): Dynamic Pydantic model generation
+  - [Function Call Parser](./function_call_parser.md): Parsing LLM function calls
+  - [Spec](../../types/spec.md): Validation framework using Pydantic models
 - **External Resources**:
   - [JSON Schema Specification](https://json-schema.org/specification.html)
   - [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/intro.html)
@@ -695,7 +470,7 @@ This improves readability in constrained contexts (LLM context windows, terminal
 ### Example 1: Simple API Parameters
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 # API endpoint schema
 api_schema = {
@@ -732,7 +507,7 @@ print(typescript_schema(api_schema))
 ### Example 2: Database Query Builder
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 query_schema = {
     "properties": {
@@ -777,7 +552,7 @@ print(f"Query Parameters:\n{docs}")
 ### Example 3: MCP Tool with Complex Types
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 mcp_tool_schema = {
     "properties": {
@@ -821,7 +596,7 @@ tool_definition = {
 ### Example 4: Nullable Fields and Defaults
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 config_schema = {
     "properties": {
@@ -868,7 +643,7 @@ print(typescript_schema(config_schema))
 ### Example 5: Array Types
 
 ```python
-from lionherd_core.libs.schema_handlers._typescript import typescript_schema
+from lionherd_core.libs.schema_handlers import typescript_schema
 
 data_schema = {
     "properties": {

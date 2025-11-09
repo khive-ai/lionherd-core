@@ -69,7 +69,7 @@ Python function call expression as a string. Must be valid Python syntax represe
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.schema_handlers._function_call_parser import parse_function_call
+>>> from lionherd_core.libs.schema_handlers import parse_function_call
 
 # Simple function call with keyword arguments
 >>> parse_function_call('search(query="AI", limit=5)')
@@ -149,7 +149,7 @@ Ordered list of parameter names from the function schema. Positional arguments a
 **Examples:**
 
 ```python
->>> from lionherd_core.libs.schema_handlers._function_call_parser import (
+>>> from lionherd_core.libs.schema_handlers import (
 ...     parse_function_call,
 ...     map_positional_args
 ... )
@@ -235,7 +235,7 @@ Unknown fields (not in schema) are preserved at top level to enable Pydantic val
 
 ```python
 >>> from pydantic import BaseModel
->>> from lionherd_core.libs.schema_handlers._function_call_parser import nest_arguments_by_schema
+>>> from lionherd_core.libs.schema_handlers import nest_arguments_by_schema
 
 # Define schema with nested structure
 >>> class SearchOptions(BaseModel):
@@ -310,7 +310,7 @@ Unknown fields (not in schema) are preserved at top level to enable Pydantic val
 ### Basic MCP Tool Invocation
 
 ```python
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     map_positional_args,
     nest_arguments_by_schema
@@ -346,7 +346,7 @@ request = SearchAction(**nested)
 ### Positional Argument Handling
 
 ```python
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     map_positional_args
 )
@@ -369,7 +369,7 @@ mapped = map_positional_args(parsed['arguments'], param_names)
 ### Mixed Positional and Keyword Arguments
 
 ```python
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     map_positional_args
 )
@@ -393,7 +393,7 @@ mapped = map_positional_args(parsed['arguments'], ['query'])
 
 ```python
 from pydantic import BaseModel
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     map_positional_args,
     nest_arguments_by_schema
@@ -441,7 +441,7 @@ request = SearchRequest(**nested)
 
 ```python
 from pydantic import BaseModel
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     nest_arguments_by_schema
 )
@@ -648,79 +648,20 @@ Discarding unknown fields silently would hide configuration mistakes.
 ## See Also
 
 - **Related Modules**:
-  - [Schema Handlers](./README.md): Parent module overview
-  - [MCP Integration Guide](../../user_guide/mcp_integration.md): MCP tool invocation patterns
-- **Related Patterns**:
-  - [Tool Invocation](../../patterns/tool_invocation.md): Using parsed calls for tool execution
-  - [Schema Design](../../patterns/schema_design.md): Designing schemas for function calls
+  - [TypeScript Schema Handler](./typescript.md): TypeScript notation for schemas
+  - [Schema to Model](./schema_to_model.md): Dynamic Pydantic model generation
+  - [Spec](../../types/spec.md): Validation framework using Pydantic models
 
 ## Examples
 
 ### Example 1: Complete MCP Tool Pipeline
 
-```python
-from pydantic import BaseModel
-from lionherd_core.libs.schema_handlers._function_call_parser import (
-    parse_function_call,
-    map_positional_args,
-    nest_arguments_by_schema
-)
-
-# Define tool schema
-class SearchFilters(BaseModel):
-    category: str | None = None
-    min_score: float = 0.0
-
-class SearchAction(BaseModel):
-    action: str
-    query: str
-    limit: int = 10
-    filters: SearchFilters | None = None
-
-# User input with mixed syntax
-user_input = 'search("machine learning", limit=20, category="research", min_score=0.7)'
-
-# Step 1: Parse function call
-parsed = parse_function_call(user_input)
-print("Parsed:", parsed)
-# {'tool': 'search', 'arguments': {
-#     '_pos_0': 'machine learning',
-#     'limit': 20,
-#     'category': 'research',
-#     'min_score': 0.7
-# }}
-
-# Step 2: Map positional arguments
-param_names = ['query']  # First positional arg is 'query'
-mapped = map_positional_args(parsed['arguments'], param_names)
-print("Mapped:", mapped)
-# {'query': 'machine learning', 'limit': 20, 'category': 'research', 'min_score': 0.7}
-
-# Step 3: Nest by schema
-nested = nest_arguments_by_schema(mapped, SearchAction)
-print("Nested:", nested)
-# {
-#     'query': 'machine learning',
-#     'limit': 20,
-#     'filters': {
-#         'category': 'research',
-#         'min_score': 0.7
-#     }
-# }
-
-# Step 4: Add action and validate
-nested['action'] = parsed['tool']
-action = SearchAction(**nested)
-
-# Step 5: Execute tool
-print(f"Executing {action.action} with query: {action.query}")
-print(f"Filters: {action.filters}")
-```
+> **Tutorial Available**: See [Tutorial #94](https://github.com/khive-ai/lionherd-core/issues/94) for a complete end-to-end example of building an MCP tool pipeline with nested schemas, showing the parse → map → nest workflow pattern.
 
 ### Example 2: Batch Tool Invocations
 
 ```python
-from lionherd_core.libs.schema_handlers._function_call_parser import (
+from lionherd_core.libs.schema_handlers import (
     parse_function_call,
     map_positional_args
 )
@@ -759,7 +700,7 @@ for parsed in parsed_calls:
 ### Example 3: Error Handling
 
 ```python
-from lionherd_core.libs.schema_handlers._function_call_parser import parse_function_call
+from lionherd_core.libs.schema_handlers import parse_function_call
 
 def safe_parse(call_str: str):
     """Parse with comprehensive error handling."""
@@ -795,60 +736,4 @@ for test in test_cases:
 
 ### Example 4: Dynamic Schema Selection
 
-```python
-from pydantic import BaseModel
-from lionherd_core.libs.schema_handlers._function_call_parser import (
-    parse_function_call,
-    map_positional_args,
-    nest_arguments_by_schema
-)
-
-# Define multiple tool schemas
-class SearchOptions(BaseModel):
-    query: str
-    limit: int
-
-class CreateOptions(BaseModel):
-    entity_type: str
-    name: str
-
-class SearchAction(BaseModel):
-    action: str
-    options: SearchOptions
-
-class CreateAction(BaseModel):
-    action: str
-    options: CreateOptions
-
-# Schema registry
-SCHEMAS = {
-    'search': (SearchAction, ['query']),
-    'create': (CreateAction, ['entity_type'])
-}
-
-def process_call(call_str: str):
-    """Process function call with dynamic schema."""
-    # Parse
-    parsed = parse_function_call(call_str)
-    tool = parsed['tool']
-
-    # Get schema and param names
-    schema_cls, param_names = SCHEMAS[tool]
-
-    # Map and nest
-    mapped = map_positional_args(parsed['arguments'], param_names)
-    nested = nest_arguments_by_schema(mapped, schema_cls)
-
-    # Add action and validate
-    nested['action'] = tool
-    return schema_cls(**nested)
-
-# Test
-search_result = process_call('search("AI", limit=10)')
-print(search_result)
-# action='search' options=SearchOptions(query='AI', limit=10)
-
-create_result = process_call('create("user", name="Alice")')
-print(create_result)
-# action='create' options=CreateOptions(entity_type='user', name='Alice')
-```
+> **Tutorial Available**: See [Tutorial #95](https://github.com/khive-ai/lionherd-core/issues/95) for a production-ready example of implementing schema registry and dynamic routing patterns for multi-tool MCP systems.
