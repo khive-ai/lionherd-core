@@ -496,7 +496,7 @@ Get all source nodes (no incoming edges).
 **Signature:**
 
 ```python
-def get_heads() -> list[Node]
+def get_heads(self) -> list[Node]
 ```
 
 **Returns:** list[Node] - Nodes with in-degree = 0
@@ -522,7 +522,7 @@ Get all sink nodes (no outgoing edges).
 **Signature:**
 
 ```python
-def get_tails() -> list[Node]
+def get_tails(self) -> list[Node]
 ```
 
 **Returns:** list[Node] - Nodes with out-degree = 0
@@ -807,6 +807,149 @@ print(f"Graph has {len(graph.edges)} edges")
 ```
 
 **Note**: `len(graph)` returns node count, not edge count. Use `len(graph.edges)` for edge count.
+
+---
+
+### Adapter Methods
+
+Graph implements pydapter integration for external format conversion (e.g., Neo4j, NetworkX, JSON Graph Format).
+
+#### `adapt_to()`
+
+Convert graph to external format via registered adapter.
+
+**Signature:**
+
+```python
+def adapt_to(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any
+```
+
+**Parameters:**
+
+- `obj_key` (str): Adapter key (e.g., "neo4j", "networkx")
+- `many` (bool): Whether to adapt multiple Graph instances. Default: False
+- `**kwargs`: Additional arguments passed to adapter
+
+**Returns:** Any - Adapted object (format depends on adapter)
+
+**Default Behavior**: Uses `to_dict(mode="db")` for serialization
+
+**Example:**
+
+```python
+# Convert to Neo4j format (requires neo4j adapter registered)
+neo4j_data = graph.adapt_to("neo4j")
+
+# Convert to NetworkX format
+nx_graph = graph.adapt_to("networkx")
+```
+
+---
+
+#### `adapt_from()`
+
+Create Graph from external format via registered adapter.
+
+**Signature:**
+
+```python
+@classmethod
+def adapt_from(cls, obj: Any, obj_key: str, many: bool = False, **kwargs: Any) -> Graph
+```
+
+**Parameters:**
+
+- `obj` (Any): Source object in external format
+- `obj_key` (str): Adapter key
+- `many` (bool): Whether to deserialize multiple Graph instances. Default: False
+- `**kwargs`: Additional arguments passed to adapter
+
+**Returns:** Graph - Deserialized Graph instance
+
+**Default Behavior**: Uses `from_dict()` for deserialization
+
+**Example:**
+
+```python
+# Create from Neo4j query result
+graph = Graph.adapt_from(neo4j_result, "neo4j")
+
+# Create from NetworkX graph
+graph = Graph.adapt_from(nx_graph, "networkx")
+```
+
+---
+
+#### `adapt_to_async()`
+
+Async version of `adapt_to()` for async adapters.
+
+**Signature:**
+
+```python
+async def adapt_to_async(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any
+```
+
+**Parameters:** Same as `adapt_to()`
+
+**Returns:** Any - Adapted object
+
+**Use Case**: Async database operations, streaming serialization
+
+**Example:**
+
+```python
+# Async conversion to database format
+async with db_session() as session:
+    db_data = await graph.adapt_to_async("postgres")
+    await session.execute(insert_query(db_data))
+```
+
+---
+
+#### `adapt_from_async()`
+
+Async version of `adapt_from()` for async adapters.
+
+**Signature:**
+
+```python
+@classmethod
+async def adapt_from_async(
+    cls, obj: Any, obj_key: str, many: bool = False, **kwargs: Any
+) -> Graph
+```
+
+**Parameters:** Same as `adapt_from()`
+
+**Returns:** Graph - Deserialized Graph instance
+
+**Use Case**: Async database queries, streaming deserialization
+
+**Example:**
+
+```python
+# Async load from database
+async with db_session() as session:
+    result = await session.execute(graph_query)
+    graph = await Graph.adapt_from_async(result, "postgres")
+```
+
+---
+
+**Adapter Registration**:
+
+Adapters must be registered before use. See [pydapter documentation](https://github.com/khive-ai/pydapter) for registration details.
+
+```python
+from pydapter import Adapter
+
+# Register custom adapter
+@Graph.register_adapter("custom_format")
+class CustomAdapter(Adapter):
+    def adapt(self, graph: Graph) -> dict:
+        return {"nodes": [...], "edges": [...]}
+```
 
 ---
 
