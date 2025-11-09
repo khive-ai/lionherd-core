@@ -730,8 +730,7 @@ anyio.run(ServiceManager().run)
 ### Example 2: Retry with Cancellation Awareness
 
 ```python
-from lionherd_core.libs.concurrency._errors import is_cancelled
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core.libs.concurrency import is_cancelled, sleep
 
 async def retry_with_backoff(
     operation,
@@ -780,8 +779,7 @@ anyio.run(main)
 ### Example 3: Parallel Processing with Error Aggregation
 
 ```python
-from lionherd_core.libs.concurrency._errors import split_cancellation
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core.libs.concurrency import non_cancel_subgroup, sleep
 import anyio
 
 async def process_batch_with_partial_failure(items, min_success_rate=0.8):
@@ -803,17 +801,14 @@ async def process_batch_with_partial_failure(items, min_success_rate=0.8):
                 tg.start_soon(process_item, item_id, item)
 
     except BaseExceptionGroup as eg:
-        cancels, failures = split_cancellation(eg)
-
-        # Log cancellations (expected during shutdown)
-        if cancels:
-            print(f"Processing interrupted: {len(cancels.exceptions)} tasks cancelled")
+        # Extract non-cancellation errors
+        failures = non_cancel_subgroup(eg)
 
         # Analyze failures
         if failures:
             failure_count = len(failures.exceptions)
             total_count = len(items)
-            success_count = total_count - failure_count - len(cancels.exceptions if cancels else [])
+            success_count = total_count - failure_count
             success_rate = success_count / total_count
 
             print(f"Batch processing: {success_count}/{total_count} succeeded")
@@ -828,6 +823,9 @@ async def process_batch_with_partial_failure(items, min_success_rate=0.8):
                 raise failures
             else:
                 print(f"Partial failure acceptable ({success_rate:.1%} success)")
+        else:
+            # All exceptions were cancellations
+            print("Processing cancelled - all tasks stopped gracefully")
 
     return results
 

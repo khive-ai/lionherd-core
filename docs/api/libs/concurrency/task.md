@@ -458,12 +458,16 @@ async with create_task_group() as tg:
 
 ```python
 # ✅ Correct: Handle within task
+import logging
+
+logger = logging.getLogger(__name__)
+
 async def risky_task():
     try:
         await sleep(1)
         raise ValueError("Oops!")
     except ValueError as e:
-        logging.error(f"Task failed: {e}")
+        logger.error(f"Task failed: {e}")
         # Doesn't propagate to group
 
 # ✅ Correct: Handle at group level

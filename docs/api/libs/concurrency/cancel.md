@@ -395,8 +395,9 @@ async def example():
 ### Pattern 1: API Request Timeout
 
 ```python
-from lionherd_core.libs.concurrency.cancel import fail_after
 import httpx
+
+from lionherd_core.libs.concurrency.cancel import fail_after
 
 async def fetch_with_timeout(url: str, timeout: float = 5.0):
     """Fetch URL with timeout, raising on failure."""
@@ -703,6 +704,8 @@ deadline = current_time() + 5.0
 ### Example 1: Retry with Timeout
 
 ```python
+import httpx
+
 from lionherd_core.libs.concurrency.cancel import fail_after
 from lionherd_core.libs.concurrency import sleep
 
@@ -802,8 +805,9 @@ print(f"Completed {len(completed)}/100 tasks within deadline")
 ### Example 4: Conditional Timeout Based on Environment
 
 ```python
-from lionherd_core.libs.concurrency.cancel import fail_after
 import os
+
+from lionherd_core.libs.concurrency.cancel import fail_after
 
 async def environment_aware_operation():
     """Apply strict timeout in production, relaxed in development."""
