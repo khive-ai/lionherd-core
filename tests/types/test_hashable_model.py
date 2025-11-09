@@ -276,8 +276,15 @@ class TestHashableModelEdgeCases:
 
         assert hash(deep1) == hash(deep2)
 
-    def test_mutation_changes_hash(self):
-        """Mutating fields changes hash (content-based)."""
+    def test_frozen_by_default(self):
+        """HashableModel is frozen by default to prevent hash corruption."""
+        config = SimpleConfig(name="test", value=42)
+
+        with pytest.raises(Exception):  # ValidationError from Pydantic
+            config.value = 99
+
+    def test_mutation_changes_hash_when_unfrozen(self):
+        """When explicitly unfrozen, mutating fields changes hash (edge case)."""
 
         class MutableConfig(HashableModel):
             value: int

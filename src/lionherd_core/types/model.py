@@ -27,7 +27,12 @@ class HashableModel(BaseModel):
     Two instances with identical fields have same hash. Use for cache keys,
     deduplication, configs where value equality matters.
 
+    Frozen by default (immutable) to prevent hash corruption when used in
+    sets/dicts. This ensures safe use with to_list(unique=True) and as
+    cache keys.
+
     Use Cases:
+        - Structured LLM outputs with to_list(flatten=True, unique=True)
         - Cache keys where identical config values should deduplicate
         - Set deduplication based on field content
         - Value equality (same fields = same hash)
@@ -43,6 +48,7 @@ class HashableModel(BaseModel):
     """
 
     model_config = ConfigDict(
+        frozen=True,
         populate_by_name=True,
         validate_assignment=True,
         extra="forbid",
