@@ -1,6 +1,6 @@
 # Event
 
-Async execution with observable lifecycle tracking, idempotency, and retry support.
+> Async execution with observable lifecycle tracking, idempotency, and retry support.
 
 ---
 
@@ -530,6 +530,50 @@ cancellation semantics.
 
 **Pattern**: Loop through `eg.exceptions`, set `retryable = False` if any
 `LionherdError` has `retryable=False`.
+
+---
+
+## Protocol Implementations
+
+Event implements three core protocols:
+
+### Invocable
+
+**Method**: `invoke()` (async)
+
+Execute the event and manage lifecycle transitions. This is the primary protocol implementation that makes Event a first-class async operation.
+
+**Features**:
+
+- Idempotent execution (repeated calls return cached result)
+- Automatic status transitions (PENDING → PROCESSING → terminal)
+- Timeout support with cancellation
+- Error capture and retryable flag management
+
+**See**: [`invoke()` method](#invoke) for full signature and behavior.
+
+### Serializable
+
+**Methods** (inherited from Element):
+
+- `to_dict(mode='python'|'json'|'db', **kwargs)`: Dictionary serialization with three modes
+- `to_json(pretty=False, sort_keys=False, decode=True, **kwargs)`: JSON string serialization
+
+**Event-specific serialization**:
+
+- Execution state included in serialization (status, duration, response, error, retryable)
+- Timeout excluded from serialization (transient field marked with `exclude=True`)
+- EventStatus serialized as string value (`"pending"`, `"completed"`, etc.)
+
+**Polymorphism**: Automatically injects `lion_class` in metadata for subclass reconstruction.
+
+### Observable
+
+**Method** (inherited from Element): `id` property
+
+UUID-based identity for tracking events across distributed systems.
+
+**Usage**: Use `event.id` for correlation IDs in logs, distributed tracing, and debugging across async workflows.
 
 ---
 
