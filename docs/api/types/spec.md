@@ -1250,10 +1250,10 @@ Enumeration of common metadata keys provides:
 
 ## See Also
 
-- **Related Classes**:
-  - [Meta](base.md#meta): Key-value metadata container
-  - [Enum](base.md#enum): Base enumeration with Allowable protocol
-  - [HashableModel](model.md): Content-based hashable models
+- **Related Classes** (documentation pending):
+  - Meta: Key-value metadata container
+  - Enum: Base enumeration with Allowable protocol
+  - HashableModel: Content-based hashable models
 - **Related Modules**:
   - `_sentinel`: Undefined and sentinel value handling
   - `lionherd_core.protocols`: Hashable, Allowable protocols

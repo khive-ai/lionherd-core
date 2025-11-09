@@ -846,7 +846,7 @@ Without `TypeGuard`, type checkers wouldn't narrow the type, requiring manual ty
 
 - **Related Types**:
   - [Optional](https://docs.python.org/3/library/typing.html#typing.Optional): Standard library optional type (use when `None` suffices)
-  - [HashableModel](model.md): Content-based hashing (sentinels are identity-based)
+  - HashableModel (documentation pending): Content-based hashing (sentinels are identity-based)
 - **Related Guides** (documentation pending):
   - Type Safety Guide: Type narrowing and TypeGuards
   - API Design Guide: When to use sentinels vs Optional
