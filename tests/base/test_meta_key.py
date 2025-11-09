@@ -100,7 +100,7 @@ class TestNodeMetaKey:
         assert "custom_node_meta" in data
         assert "metadata" not in data
         assert data["custom_node_meta"]["node_data"] == "value"
-        assert data["content"] == "test node"
+        assert data["content"] == {"value": "test node"}
 
     def test_node_from_dict_custom_meta_key(self):
         """Test Node.from_dict with custom meta_key."""

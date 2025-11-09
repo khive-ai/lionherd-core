@@ -1334,9 +1334,9 @@ def test_class_name_serialization_across_subclasses():
     assert len(pile2) == 1
 
     # Test Node
-    node = Node(content="test content")
+    node = Node(content={"value": "test content"})
     node_data = to_dict(node)
     assert node_data["metadata"]["lion_class"] == "lionherd_core.base.node.Node"
     node2 = Node.from_dict(node_data)
     assert isinstance(node2, Node)
-    assert node2.content == "test content"
+    assert node2.content == {"value": "test content"}

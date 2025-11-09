@@ -541,7 +541,7 @@ class TestNodeOperations:
         retrieved = graph.get_node(n2.id)
 
         assert retrieved == n2
-        assert retrieved.content == "B"
+        assert retrieved.content == {"value": "B"}
 
     def test_get_node_by_node_object(self, simple_graph):
         """Test getting node by passing Node object (UUID coercion)."""
