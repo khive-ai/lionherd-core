@@ -51,12 +51,26 @@ class EdgeCondition:
 
     def __call__(self, *args: Any, **kwargs: Any) -> bool:
         """Sync callable interface. Prefer async apply() for async contexts."""
-        import anyio
+        import asyncio
 
         async def _run():
             return await self.apply(*args, **kwargs)
 
-        return anyio.run(_run)
+        # Check if event loop is already running
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop running - safe to use anyio.run()
+            import anyio
+
+            return anyio.run(_run)
+        else:
+            # Event loop already running (e.g., Jupyter notebook)
+            # Apply nest_asyncio to allow nested event loops
+            import nest_asyncio
+
+            nest_asyncio.apply()
+            return asyncio.run(_run())
 
 
 # ==================== Edge ====================
@@ -426,10 +440,25 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
                 if neighbor_id not in visited:
                     # Check condition if requested
                     if check_conditions:
-                        import anyio
+                        import asyncio
 
-                        if not anyio.run(edge.check_condition):
-                            continue
+                        # Check if event loop is already running
+                        try:
+                            asyncio.get_running_loop()
+                        except RuntimeError:
+                            # No event loop - safe to use anyio.run()
+                            import anyio
+
+                            if not anyio.run(edge.check_condition):
+                                continue
+                        else:
+                            # Event loop running (e.g., Jupyter notebook)
+                            # Apply nest_asyncio to allow nested event loops
+                            import nest_asyncio
+
+                            nest_asyncio.apply()
+                            if not asyncio.run(edge.check_condition()):
+                                continue
 
                     visited.add(neighbor_id)
                     parent[neighbor_id] = (current_id, edge_id)

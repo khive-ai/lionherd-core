@@ -28,7 +28,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Typing :: Typed",
 ]
-dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
+dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0", "nest-asyncio>=1.6.0"]
 
 [project.optional-dependencies]
 schema-gen = ["datamodel-code-generator>=0.25.0"]
@@ -51,6 +51,7 @@ artifacts = ["src/lionherd_core/py.typed"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--tb=short --no-header -q"
 markers = [
   "unit: Unit tests",
   "property: Property-based tests",
