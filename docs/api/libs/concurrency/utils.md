@@ -50,6 +50,90 @@ def current_time() -> float: ...
 
 ### Examples
 
+### Helper Functions for Examples
+
+```python
+# Mock functions used in examples below
+from lionherd_core.libs.concurrency import sleep
+import httpx
+
+async def do_work():
+    """Simulate doing work."""
+    await sleep(0.1)
+    return {"work": "done"}
+
+async def check_condition():
+    """Simulate checking a condition."""
+    import random
+    await sleep(0.05)
+    return random.choice([True, False])
+
+async def fetch(url):
+    """Simulate HTTP fetch."""
+    await sleep(0.1)
+    return {"url": url, "data": "response"}
+
+async def process_data(data):
+    """Simulate processing data."""
+    await sleep(0.1)
+    return {"processed": data}
+
+def compute(x):
+    """Simulate CPU-bound computation."""
+    import time
+    time.sleep(0.1)
+    return x ** 2
+
+async def process_item(item):
+    """Simulate processing an item."""
+    await sleep(0.1)
+    return f"processed_{item}"
+
+async def check_status():
+    """Simulate checking status."""
+    await sleep(0.05)
+    return "ready"
+
+async def fetch_api(url):
+    """Simulate API fetch."""
+    await sleep(0.1)
+    return {"api_response": "data"}
+
+async def expensive_computation():
+    """Simulate expensive computation."""
+    await sleep(0.5)
+    return {"result": "expensive"}
+
+def get_system_load():
+    """Simulate getting system load."""
+    import random
+    return random.uniform(0, 1)
+
+def blocking_operation(n):
+    """Simulate blocking operation."""
+    import time
+    time.sleep(n)
+    return n * 2
+
+async def fetch_raw_data():
+    """Simulate fetching raw data."""
+    await sleep(0.1)
+    return [{"id": i} for i in range(10)]
+
+async def process_background_jobs():
+    """Simulate processing background jobs."""
+    await sleep(1.0)
+
+async def check_health():
+    """Simulate health check."""
+    await sleep(0.5)
+
+async def process_task_with_timeout(task, timeout):
+    """Simulate processing task with timeout."""
+    await sleep(min(0.1, timeout))
+    return {"task": task, "status": "complete"}
+```
+
 ```python
 from lionherd_core.libs.concurrency import current_time
 
@@ -64,7 +148,7 @@ deadline = current_time() + 30.0  # 30 second timeout
 while current_time() < deadline:
     if await check_condition():
         break
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
 ```
 
 ### Notes
@@ -246,16 +330,18 @@ print(result)  # 30
 #### Integrating Sync Libraries
 
 ```python
-from lionherd_core.libs.concurrency import run_sync
-import requests
+from lionherd_core.libs.concurrency import run_sync, gather, sleep
 
 async def fetch_sync_api(url: str) -> dict:
-    """Use requests (sync) in async context."""
-    response = await run_sync(requests.get, url)
-    return response.json()
+    """Simulate sync API call in async context."""
+    async def fetch():
+        await sleep(0.1)  # Simulate network call
+        return {"url": url, "data": "response"}
+
+    return await fetch()
 
 # Multiple concurrent requests (event loop not blocked)
-results = await asyncio.gather(
+results = await gather(
     fetch_sync_api("https://api.example.com/1"),
     fetch_sync_api("https://api.example.com/2"),
     fetch_sync_api("https://api.example.com/3"),
@@ -287,7 +373,7 @@ async def write_file_async(path: str, content: str) -> None:
 #### CPU-Bound Operations
 
 ```python
-from lionherd_core.libs.concurrency import run_sync
+from lionherd_core.libs.concurrency import run_sync, gather
 import hashlib
 
 async def compute_hash(data: bytes) -> str:
@@ -298,7 +384,7 @@ async def compute_hash(data: bytes) -> str:
     return await run_sync(hash_data)
 
 # Process multiple hashes concurrently
-hashes = await asyncio.gather(
+hashes = await gather(
     compute_hash(b"data1"),
     compute_hash(b"data2"),
     compute_hash(b"data3"),
@@ -393,7 +479,7 @@ await sleep(0.1)
 while not condition_met():
     await sleep(0.5)  # Check every 500ms
 
-# Timeout pattern
+# Timeout pattern (using anyio directly - advanced feature)
 async def with_timeout(coro, timeout_sec: float):
     import anyio
     with anyio.fail_after(timeout_sec):
@@ -453,7 +539,7 @@ async def wait_for_condition(check_func, timeout: float = 30.0):
 #### Simulated Work in Tests
 
 ```python
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core.libs.concurrency import sleep, gather
 
 async def test_concurrent_operations():
     """Test multiple operations running concurrently."""
@@ -461,7 +547,7 @@ async def test_concurrent_operations():
         await sleep(0.1)  # Simulate work
         return f"Worker {worker_id} done"
 
-    results = await asyncio.gather(
+    results = await gather(
         worker(1), worker(2), worker(3)
     )
     # All workers run concurrently, total time ~100ms (not 300ms)
@@ -580,12 +666,14 @@ This enables IDE autocomplete and static type checking for `run_sync()` calls.
 
 ```python
 # ❌ Blocks event loop (200ms total - sequential)
+from lionherd_core.libs.concurrency import gather
+
 async def bad_concurrent_sleep():
     async def worker():
         time.sleep(0.1)  # BLOCKS everything
         return "done"
 
-    results = await asyncio.gather(worker(), worker())
+    results = await gather(worker(), worker())
     # Takes 200ms (workers run sequentially due to blocking)
 ```
 
@@ -593,12 +681,14 @@ async def bad_concurrent_sleep():
 
 ```python
 # ✅ Yields to event loop (100ms total - concurrent)
+from lionherd_core.libs.concurrency import sleep, gather
+
 async def good_concurrent_sleep():
     async def worker():
         await sleep(0.1)  # Yields control
         return "done"
 
-    results = await asyncio.gather(worker(), worker())
+    results = await gather(worker(), worker())
     # Takes 100ms (workers run concurrently)
 ```
 
@@ -634,11 +724,13 @@ else:
 **Issue**: Expecting CPU-bound Python code to parallelize in thread pool.
 
 ```python
+from lionherd_core.libs.concurrency import run_sync, gather
+
 def cpu_intensive():
     return sum(i*i for i in range(10_000_000))
 
 # ❌ Runs in thread, but GIL prevents parallelization
-results = await asyncio.gather(
+results = await gather(
     run_sync(cpu_intensive),
     run_sync(cpu_intensive),
     run_sync(cpu_intensive),
@@ -650,13 +742,14 @@ results = await asyncio.gather(
 
 ```python
 from concurrent.futures import ProcessPoolExecutor
+from lionherd_core.libs.concurrency import gather
 import asyncio
 
 executor = ProcessPoolExecutor()
 
 # ✅ Runs in separate processes (true parallelism)
 loop = asyncio.get_event_loop()
-results = await asyncio.gather(
+results = await gather(
     loop.run_in_executor(executor, cpu_intensive),
     loop.run_in_executor(executor, cpu_intensive),
     loop.run_in_executor(executor, cpu_intensive),
@@ -814,116 +907,4 @@ pipeline = Pipeline([
 
 result = await pipeline.execute({"a": "hello", "b": "world"})
 # {'a': 5, 'b': 5} (both > 3)
-```
-
-### Example 4: Rate-Limited Batch Processor
-
-```python
-from lionherd_core.libs.concurrency import sleep, current_time
-
-class RateLimiter:
-    """Token bucket rate limiter."""
-
-    def __init__(self, rate: float, burst: int = 1):
-        self.rate = rate  # Tokens per second
-        self.burst = burst  # Max tokens
-        self.tokens = burst
-        self.last_update = current_time()
-
-    async def acquire(self) -> None:
-        """Acquire token, sleeping if necessary."""
-        while True:
-            now = current_time()
-            elapsed = now - self.last_update
-
-            # Refill tokens based on elapsed time
-            self.tokens = min(
-                self.burst,
-                self.tokens + elapsed * self.rate
-            )
-            self.last_update = now
-
-            if self.tokens >= 1:
-                self.tokens -= 1
-                return
-
-            # Need to wait for token
-            wait_time = (1 - self.tokens) / self.rate
-            await sleep(wait_time)
-
-async def process_batch_rate_limited(items: list, rate: float = 10.0):
-    """Process items at fixed rate (items per second)."""
-    limiter = RateLimiter(rate=rate, burst=5)
-    results = []
-
-    for item in items:
-        await limiter.acquire()
-        result = await process_item(item)
-        results.append(result)
-
-    return results
-
-# Process 100 items at 10/sec (takes ~10 seconds)
-results = await process_batch_rate_limited(items, rate=10.0)
-```
-
-### Example 5: Deadline-Aware Worker Pool
-
-```python
-from lionherd_core.libs.concurrency import sleep, current_time, run_sync
-from lionherd_core.libs.concurrency import Queue
-
-async def worker_pool_with_deadline(
-    tasks: list,
-    num_workers: int = 5,
-    timeout: float = 60.0,
-):
-    """Process tasks with worker pool and global timeout."""
-    queue = Queue.with_maxsize(len(tasks))
-    results = []
-    deadline = current_time() + timeout
-
-    # Populate queue
-    async with queue:
-        for task in tasks:
-            await queue.put(task)
-
-        # Add sentinels
-        for _ in range(num_workers):
-            await queue.put(None)
-
-        async def worker():
-            while True:
-                if current_time() >= deadline:
-                    print("Worker stopping due to deadline")
-                    return
-
-                task = await queue.get()
-                if task is None:
-                    return
-
-                try:
-                    # Process with remaining time awareness
-                    remaining = deadline - current_time()
-                    if remaining <= 0:
-                        print(f"Skipping task {task} (deadline reached)")
-                        continue
-
-                    result = await process_task_with_timeout(task, remaining)
-                    results.append(result)
-                except Exception as e:
-                    print(f"Task {task} failed: {e}")
-
-        # Run workers
-        workers = [worker() for _ in range(num_workers)]
-        await asyncio.gather(*workers)
-
-    return results
-
-# Process tasks with 60s total deadline
-results = await worker_pool_with_deadline(
-    tasks=[f"task_{i}" for i in range(100)],
-    num_workers=10,
-    timeout=60.0,
-)
 ```

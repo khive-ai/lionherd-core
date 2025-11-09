@@ -26,6 +26,8 @@ The `lionherd_core.libs.concurrency._task` module provides **structured concurre
 from lionherd_core.libs.concurrency import (
     TaskGroup,
     create_task_group,
+    sleep,
+    current_time,
 )
 ```
 
@@ -88,7 +90,7 @@ Get cancel scope for controlling task group lifetime.
 ```python
 async with create_task_group() as tg:
     # Set timeout for all tasks in group
-    tg.cancel_scope.deadline = anyio.current_time() + 30.0
+    tg.cancel_scope.deadline = current_time() + 30.0
 
     tg.start_soon(long_running_task)
     tg.start_soon(another_task)
@@ -133,7 +135,7 @@ def start_soon(
 ```python
 async def worker(task_id: int):
     print(f"Worker {task_id} starting")
-    await asyncio.sleep(1)
+    await sleep(1)
     print(f"Worker {task_id} done")
 
 async with create_task_group() as tg:
@@ -178,20 +180,29 @@ async def start(
 
 ```python
 from anyio.abc import TaskStatus
+import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def server_task(
     port: int,
     *,
     task_status: TaskStatus[str] = anyio.TASK_STATUS_IGNORED,
 ):
-    # Initialize server
-    server = await start_server(port)
+    # Initialize server (simulated)
+    await sleep(0.1)  # Simulate server startup
+    server_url = f"http://localhost:{port}"
 
     # Signal ready and return server URL
-    task_status.started(f"http://localhost:{port}")
+    task_status.started(server_url)
 
-    # Continue running
-    await server.serve_forever()
+    # Continue running (simulated work)
+    for _ in range(10):
+        await sleep(0.5)
+
+async def client_task(url: str):
+    """Simulate client making requests."""
+    await sleep(0.1)
+    print(f"Client connected to {url}")
 
 async with create_task_group() as tg:
     # Wait for server to be ready
@@ -240,11 +251,12 @@ async with create_task_group() as tg:
 #### Basic Concurrent Execution
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group
+from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def fetch_data(url: str) -> dict:
-    response = await http_client.get(url)
-    return response.json()
+    """Simulate fetching data from URL."""
+    await sleep(0.1)  # Simulate network latency
+    return {"url": url, "data": f"result_{url}"}
 
 urls = [
     "https://api.example.com/user/1",
@@ -268,11 +280,11 @@ async with create_task_group() as tg:
 
 ```python
 async def failing_task():
-    await asyncio.sleep(1)
+    await sleep(1)
     raise ValueError("Task failed!")
 
 async def normal_task():
-    await asyncio.sleep(2)
+    await sleep(2)
     print("Normal task complete")
 
 try:
@@ -288,17 +300,16 @@ except ValueError as e:
 #### Timeout with Cancel Scope
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group
-import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def slow_task():
-    await asyncio.sleep(100)
+    await sleep(100)
     return "Done"
 
 try:
     async with create_task_group() as tg:
         # Set 5 second timeout for all tasks
-        tg.cancel_scope.deadline = anyio.current_time() + 5.0
+        tg.cancel_scope.deadline = current_time() + 5.0
 
         tg.start_soon(slow_task)
         tg.start_soon(slow_task)
@@ -311,6 +322,7 @@ except TimeoutError:
 ```python
 from anyio.abc import TaskStatus
 import anyio
+from lionherd_core.libs.concurrency import create_task_group, Queue, sleep
 
 async def background_worker(
     queue: Queue,
@@ -318,23 +330,33 @@ async def background_worker(
     task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED,
 ):
     # Initialize resources
-    connection = await setup_connection()
+    await sleep(0.1)  # Simulate connection setup
+    connection_id = "conn_123"
 
     # Signal ready
     task_status.started()
 
     # Run worker loop
-    while True:
-        item = await queue.get()
-        await process_item(item, connection)
+    try:
+        while True:
+            item = await queue.get()
+            await sleep(0.1)  # Simulate processing
+            print(f"Processed {item} with {connection_id}")
+    except Exception:
+        pass  # Queue closed, exit
 
 async with create_task_group() as tg:
+    # Create work queue
+    work_queue = Queue()
+
     # Wait for worker to initialize
     await tg.start(background_worker, work_queue)
 
     # Safe to add work now
-    await work_queue.put(item1)
-    await work_queue.put(item2)
+    await work_queue.put("task_1")
+    await work_queue.put("task_2")
+    await sleep(0.5)  # Let worker process
+    await work_queue.close()
 ```
 
 ---
@@ -400,7 +422,7 @@ async with create_task_group() as tg:
 # ❌ WRONG: Cannot do this
 async def background_loop():
     while True:
-        await asyncio.sleep(1)
+        await sleep(1)
         print("Still running...")
 
 async with create_task_group() as tg:
@@ -416,18 +438,18 @@ shutdown = Event()
 
 async def background_loop():
     while not shutdown.is_set():
-        await asyncio.sleep(1)
+        await sleep(1)
         print("Still running...")
 
 async with create_task_group() as tg:
     tg.start_soon(background_loop)
-    await asyncio.sleep(5)
+    await sleep(5)
     shutdown.set()  # Signal termination
 # Context exits cleanly
 
 # ✅ Correct: Use timeout
 async with create_task_group() as tg:
-    tg.cancel_scope.deadline = anyio.current_time() + 10.0
+    tg.cancel_scope.deadline = current_time() + 10.0
     tg.start_soon(background_loop)
 # Tasks cancelled after 10 seconds
 ```
@@ -439,12 +461,12 @@ async with create_task_group() as tg:
 ```python
 # ❌ WRONG: Unhandled exception crashes all tasks
 async def risky_task():
-    await asyncio.sleep(1)
+    await sleep(1)
     raise ValueError("Oops!")
 
 async def important_task():
     # This gets cancelled when risky_task fails
-    await asyncio.sleep(10)
+    await sleep(10)
     await save_critical_data()
 
 async with create_task_group() as tg:
@@ -457,12 +479,16 @@ async with create_task_group() as tg:
 
 ```python
 # ✅ Correct: Handle within task
+import logging
+
+logger = logging.getLogger(__name__)
+
 async def risky_task():
     try:
-        await asyncio.sleep(1)
+        await sleep(1)
         raise ValueError("Oops!")
     except ValueError as e:
-        logging.error(f"Task failed: {e}")
+        logger.error(f"Task failed: {e}")
         # Doesn't propagate to group
 
 # ✅ Correct: Handle at group level
@@ -480,10 +506,14 @@ except ValueError:
 **Issue**: Using `start()` with task that doesn't call `task_status.started()`.
 
 ```python
+from lionherd_core.libs.concurrency import create_task_group, sleep
+
 # ❌ WRONG: Task doesn't signal ready
 async def server_task(port: int):
-    server = await start_server(port)
-    await server.serve_forever()
+    await sleep(0.1)  # Simulate server startup
+    # Simulated server operation
+    for _ in range(100):
+        await sleep(0.1)
     # Never calls task_status.started()!
 
 async with create_task_group() as tg:
@@ -496,15 +526,18 @@ async with create_task_group() as tg:
 # ✅ Correct: Signal when ready
 from anyio.abc import TaskStatus
 import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def server_task(
     port: int,
     *,
     task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED,
 ):
-    server = await start_server(port)
+    await sleep(0.1)  # Simulate server startup
     task_status.started()  # Signal ready!
-    await server.serve_forever()
+    # Continue running simulated server
+    for _ in range(100):
+        await sleep(0.1)
 
 async with create_task_group() as tg:
     await tg.start(server_task, 8000)  # Returns when ready
@@ -547,14 +580,15 @@ async with create_task_group() as tg:
 ### Example 1: Parallel Data Processing
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group
+from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def process_chunk(chunk_id: int, data: list) -> dict:
     """Process data chunk and return results."""
     result = {"chunk_id": chunk_id, "items": []}
 
     for item in data:
-        processed = await expensive_computation(item)
+        await sleep(0.01)  # Simulate expensive computation
+        processed = item * 2  # Simple transformation
         result["items"].append(processed)
 
     return result
@@ -588,172 +622,15 @@ async def parallel_process(data: list, chunk_size: int = 100):
     return results
 
 # Usage
-data = list(range(1000))
-results = await parallel_process(data, chunk_size=100)
+data = list(range(100))
+results = await parallel_process(data, chunk_size=25)
+print(f"Processed {sum(len(r['items']) for r in results)} items")
 ```
 
-### Example 2: Service Lifecycle Management
+### Example 2: Timeout and Retry Pattern
 
 ```python
-from lionherd_core.libs.concurrency import create_task_group, Event
-from anyio.abc import TaskStatus
-import anyio
-
-class Service:
-    def __init__(self):
-        self.shutdown = Event()
-        self.ready = Event()
-
-    async def run_http_server(
-        self,
-        port: int,
-        *,
-        task_status: TaskStatus[str] = anyio.TASK_STATUS_IGNORED,
-    ):
-        """HTTP server component."""
-        server = await start_http_server(port)
-        url = f"http://localhost:{port}"
-
-        # Signal ready with URL
-        task_status.started(url)
-        self.ready.set()
-
-        # Run until shutdown
-        while not self.shutdown.is_set():
-            await handle_requests(server)
-            await asyncio.sleep(0.1)
-
-        await server.close()
-
-    async def run_background_worker(self):
-        """Background processing component."""
-        # Wait for service to be ready
-        await self.ready.wait()
-
-        while not self.shutdown.is_set():
-            await process_background_jobs()
-            await asyncio.sleep(1)
-
-    async def run_health_monitor(self):
-        """Health check component."""
-        await self.ready.wait()
-
-        while not self.shutdown.is_set():
-            await check_health()
-            await asyncio.sleep(5)
-
-    async def start(self):
-        """Start all service components."""
-        try:
-            async with create_task_group() as tg:
-                # Wait for HTTP server to be ready
-                url = await tg.start(self.run_http_server, 8000)
-                print(f"HTTP server ready at {url}")
-
-                # Start other components
-                tg.start_soon(self.run_background_worker, name="worker")
-                tg.start_soon(self.run_health_monitor, name="health")
-
-                # Run until shutdown signal
-                await self.shutdown.wait()
-        except Exception as e:
-            print(f"Service failed: {e}")
-        finally:
-            print("Service stopped")
-
-# Usage
-service = Service()
-
-async def main():
-    # Start service
-    service_task = asyncio.create_task(service.start())
-
-    # Run for a while
-    await asyncio.sleep(60)
-
-    # Trigger shutdown
-    service.shutdown.set()
-
-    # Wait for clean shutdown
-    await service_task
-
-await main()
-```
-
-### Example 3: Fan-Out/Fan-In Pattern
-
-```python
-from lionherd_core.libs.concurrency import create_task_group, Queue
-
-async def fan_out_fan_in(
-    inputs: list,
-    worker_func: Callable,
-    num_workers: int = 5,
-):
-    """
-    Fan-out work to multiple workers, fan-in results.
-
-    Pattern:
-    1. Fan-out: Distribute inputs across worker pool
-    2. Process: Workers process inputs concurrently
-    3. Fan-in: Collect all results
-    """
-    # Queues for coordination
-    input_queue = Queue.with_maxsize(len(inputs))
-    result_queue = Queue.with_maxsize(len(inputs))
-
-    # Worker task
-    async def worker(worker_id: int):
-        while True:
-            try:
-                item = input_queue.get_nowait()
-            except anyio.WouldBlock:
-                break  # No more work
-
-            try:
-                result = await worker_func(item)
-                await result_queue.put(result)
-            except Exception as e:
-                await result_queue.put({"error": str(e), "input": item})
-
-    # Populate input queue
-    async with input_queue:
-        for item in inputs:
-            await input_queue.put(item)
-
-    # Process with worker pool
-    async with create_task_group() as tg:
-        for i in range(num_workers):
-            tg.start_soon(worker, i, name=f"worker-{i}")
-
-    # Collect results
-    results = []
-    async with result_queue:
-        for _ in range(len(inputs)):
-            result = await result_queue.get()
-            results.append(result)
-
-    return results
-
-# Usage
-async def expensive_operation(x: int) -> int:
-    await asyncio.sleep(1)
-    return x * 2
-
-inputs = list(range(20))
-results = await fan_out_fan_in(
-    inputs,
-    expensive_operation,
-    num_workers=5
-)
-print(f"Processed {len(results)} items")
-```
-
-### Example 4: Timeout and Retry Pattern
-
-```python
-from lionherd_core.libs.concurrency import create_task_group
-import anyio
+from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def with_timeout_and_retry(
     func: Callable,
@@ -768,7 +645,7 @@ async def with_timeout_and_retry(
         try:
             async with create_task_group() as tg:
                 # Set timeout for this attempt
-                tg.cancel_scope.deadline = anyio.current_time() + timeout
+                tg.cancel_scope.deadline = current_time() + timeout
 
                 # Create result container
                 result_container = []
@@ -786,20 +663,21 @@ async def with_timeout_and_retry(
         except TimeoutError:
             if attempt < max_retries - 1:
                 print(f"Attempt {attempt + 1} timed out, retrying...")
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await sleep(2 ** attempt)  # Exponential backoff
             else:
                 raise TimeoutError(f"Failed after {max_retries} attempts")
         except Exception as e:
             if attempt < max_retries - 1:
                 print(f"Attempt {attempt + 1} failed: {e}, retrying...")
-                await asyncio.sleep(2 ** attempt)
+                await sleep(2 ** attempt)
             else:
                 raise
 
 # Usage
 async def flaky_api_call(endpoint: str):
-    response = await http_client.get(endpoint)
-    return response.json()
+    """Simulate an API call that may fail."""
+    await sleep(0.2)  # Simulate network latency
+    return {"data": f"response_from_{endpoint}"}
 
 try:
     data = await with_timeout_and_retry(

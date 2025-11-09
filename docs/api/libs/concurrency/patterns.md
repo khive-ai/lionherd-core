@@ -59,26 +59,28 @@ async def gather(
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import gather
+from lionherd_core.libs.concurrency import gather, sleep
 
 # Basic concurrent execution
 async def fetch(url):
-    return await http_client.get(url)
+    """Simulate fetching from URL."""
+    await sleep(0.1)
+    return {"url": url, "data": f"result_from_{url}"}
 
 results = await gather(
     fetch("https://api.example.com/1"),
     fetch("https://api.example.com/2"),
     fetch("https://api.example.com/3"),
 )
-# [response1, response2, response3]
+# [{"url": "...", "data": "..."}, ...]
 
 # With exception handling
 results = await gather(
     fetch("https://api.example.com/valid"),
-    fetch("https://invalid-url"),
+    sleep(0.1),  # Dummy operation
     return_exceptions=True,
 )
-# [response, ConnectionError(...)]
+# [result_dict, None]
 ```
 
 **Notes:**
@@ -121,21 +123,31 @@ async def race(*aws: Awaitable[T]) -> T: ...
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import race
-import anyio
+from lionherd_core.libs.concurrency import race, sleep
 
 # Timeout pattern
 async def fetch_with_timeout(url):
+    async def fetch(url):
+        """Simulate fetch operation."""
+        await sleep(10.0)  # Slow operation
+        return {"url": url, "data": "result"}
+
     return await race(
-        http_client.get(url),
-        anyio.sleep(5.0),  # 5-second timeout
+        fetch(url),
+        sleep(5.0),  # 5-second timeout wins
     )
 
 # Redundant requests (fastest server wins)
+async def fetch_from_region(region):
+    """Simulate fetching from different regions."""
+    delays = {"us-east": 0.2, "eu-west": 0.1, "ap-south": 0.3}
+    await sleep(delays[region])
+    return {"region": region, "data": "result"}
+
 result = await race(
-    fetch_from_server("us-east"),
-    fetch_from_server("eu-west"),
-    fetch_from_server("ap-south"),
+    fetch_from_region("us-east"),
+    fetch_from_region("eu-west"),  # Fastest (0.1s)
+    fetch_from_region("ap-south"),
 )
 ```
 
@@ -188,11 +200,13 @@ async def bounded_map(
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import bounded_map
+from lionherd_core.libs.concurrency import bounded_map, sleep
 
 # Rate-limited API calls (max 5 concurrent)
 async def fetch_user(user_id):
-    return await api.get_user(user_id)
+    """Simulate API call."""
+    await sleep(0.1)
+    return {"id": user_id, "name": f"User{user_id}"}
 
 user_ids = range(1, 101)
 users = await bounded_map(
@@ -203,6 +217,14 @@ users = await bounded_map(
 # Processes 100 users with max 5 concurrent requests
 
 # With exception handling
+async def process_item(item):
+    """Simulate processing that may fail."""
+    await sleep(0.05)
+    if item % 10 == 0:
+        raise ValueError(f"Failed to process {item}")
+    return {"item": item, "processed": True}
+
+items = range(1, 21)
 results = await bounded_map(
     process_item,
     items,
@@ -268,22 +290,34 @@ async def retry(
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import retry, move_on_after
-import httpx
+from lionherd_core.libs.concurrency import retry, move_on_after, sleep
 
 # Retry transient failures
+attempt_count = 0
+
 async def fetch_data():
-    return await http_client.get("https://api.example.com/data")
+    """Simulate flaky API call."""
+    global attempt_count
+    attempt_count += 1
+    await sleep(0.1)
+    if attempt_count < 3:
+        raise ConnectionError("Network error")
+    return {"data": "success"}
 
 result = await retry(
     fetch_data,
     attempts=5,
     base_delay=0.5,
     max_delay=10.0,
-    retry_on=(httpx.NetworkError, httpx.TimeoutException),
+    retry_on=(ConnectionError, TimeoutError),
 )
 
 # With ambient deadline (retry won't exceed deadline)
+async def expensive_operation():
+    """Simulate expensive operation."""
+    await sleep(2.0)
+    return {"result": "computed"}
+
 with move_on_after(30.0):  # 30-second total timeout
     result = await retry(
         expensive_operation,
@@ -381,9 +415,15 @@ Yields results as `(index, result)` tuples in **completion order** (not input or
 **Examples:**
 
 ```python
-from lionherd_core.libs.concurrency import CompletionStream
+from lionherd_core.libs.concurrency import CompletionStream, sleep
 
 # Stream results as they complete
+async def fetch(url):
+    """Simulate fetch operation."""
+    await sleep(0.1)
+    return {"url": url, "data": f"result_{url}"}
+
+urls = [f"https://api.example.com/{i}" for i in range(10)]
 tasks = [fetch(url) for url in urls]
 
 async with CompletionStream(tasks, limit=5) as stream:
@@ -394,7 +434,7 @@ async with CompletionStream(tasks, limit=5) as stream:
 # Early termination (remaining tasks cancelled)
 async with CompletionStream(tasks) as stream:
     async for idx, result in stream:
-        if is_good_enough(result):
+        if result.get("data", "").endswith("_5"):  # Found what we need
             break  # Exit context - cancels pending tasks
 
 # Collect results with completion order
@@ -610,33 +650,33 @@ This prevents masking actual errors when tasks are cancelled due to timeout or e
 ### Example 1: Parallel API Fetching with Error Handling
 
 ```python
-from lionherd_core.libs.concurrency import gather
-import httpx
+from lionherd_core.libs.concurrency import gather, sleep
 
 async def fetch_user_data():
-    async with httpx.AsyncClient() as client:
-        async def fetch(user_id):
-            resp = await client.get(f"https://api.example.com/users/{user_id}")
-            resp.raise_for_status()
-            return resp.json()
+    # Simulate async API calls
+    async def fetch(user_id):
+        await sleep(0.1)  # Simulate network delay
+        if user_id == 5:  # Simulate one failure
+            raise ValueError(f"User {user_id} not found")
+        return {"id": user_id, "name": f"User{user_id}"}
 
-        user_ids = range(1, 11)
-        results = await gather(
-            *[fetch(uid) for uid in user_ids],
-            return_exceptions=True,
-        )
+    user_ids = range(1, 11)
+    results = await gather(
+        *[fetch(uid) for uid in user_ids],
+        return_exceptions=True,
+    )
 
-        # Separate successes and failures
-        users = []
-        errors = []
-        for uid, result in zip(user_ids, results):
-            if isinstance(result, Exception):
-                errors.append((uid, result))
-            else:
-                users.append(result)
+    # Separate successes and failures
+    users = []
+    errors = []
+    for uid, result in zip(user_ids, results):
+        if isinstance(result, Exception):
+            errors.append((uid, result))
+        else:
+            users.append(result)
 
-        print(f"Fetched {len(users)} users, {len(errors)} errors")
-        return users, errors
+    print(f"Fetched {len(users)} users, {len(errors)} errors")
+    return users, errors
 ```
 
 ---
@@ -644,30 +684,31 @@ async def fetch_user_data():
 ### Example 2: Rate-Limited Bulk Processing
 
 ```python
-from lionherd_core.libs.concurrency import bounded_map
+from lionherd_core.libs.concurrency import bounded_map, sleep
 
-async def process_documents(docs):
-    async def analyze(doc):
-        # Expensive API call
-        return await ai_service.analyze(doc)
+async def process_documents(doc_ids):
+    # Simulate expensive API call
+    async def analyze(doc_id):
+        await sleep(0.2)  # Simulate processing time
+        return {"doc_id": doc_id, "analysis": f"result_{doc_id}"}
 
-    # Process 1000 docs with max 10 concurrent API calls
+    # Process with max 10 concurrent operations
     results = await bounded_map(
         analyze,
-        docs,
+        doc_ids,
         limit=10,
         return_exceptions=True,
     )
 
-    # Filter and log failures
-    successful = []
-    for doc, result in zip(docs, results):
-        if isinstance(result, Exception):
-            logger.error(f"Failed to analyze {doc.id}: {result}")
-        else:
-            successful.append(result)
+    # Filter failures
+    successful = [r for r in results if not isinstance(r, Exception)]
+    failed = [r for r in results if isinstance(r, Exception)]
 
+    print(f"Processed {len(successful)}, failed {len(failed)}")
     return successful
+
+# Usage: Process 100 documents with concurrency limit
+await process_documents(range(100))
 ```
 
 ---
@@ -675,27 +716,30 @@ async def process_documents(docs):
 ### Example 3: Timeout with Race
 
 ```python
-from lionherd_core.libs.concurrency import race
-import anyio
+from lionherd_core.libs.concurrency import race, sleep
 
-async def fetch_with_fallback(primary_url, fallback_url):
-    async def fetch_primary():
-        await anyio.sleep(0.5)  # Delay to simulate slow primary
-        return await http_client.get(primary_url)
+async def fetch_with_timeout():
+    # Primary operation
+    async def primary_fetch():
+        await sleep(0.5)  # Simulate work
+        return {"source": "primary", "data": [1, 2, 3]}
 
-    async def fetch_fallback():
-        await anyio.sleep(2.0)  # Only if primary times out
-        return await http_client.get(fallback_url)
-
+    # Timeout
     async def timeout():
-        await anyio.sleep(1.0)
+        await sleep(1.0)
         raise TimeoutError("Request timed out")
 
-    # Race primary vs timeout, fallback to secondary
+    # Race primary operation vs timeout
     try:
-        return await race(fetch_primary(), timeout())
+        result = await race(primary_fetch(), timeout())
+        print(f"Success: {result}")
+        return result
     except TimeoutError:
-        return await fetch_fallback()
+        print("Timed out, using fallback")
+        return {"source": "fallback", "data": []}
+
+# Usage
+await fetch_with_timeout()
 ```
 
 ---
@@ -703,27 +747,27 @@ async def fetch_with_fallback(primary_url, fallback_url):
 ### Example 4: Progress Tracking with CompletionStream
 
 ```python
-from lionherd_core.libs.concurrency import CompletionStream
+from lionherd_core.libs.concurrency import CompletionStream, sleep
 
-async def process_with_progress(tasks):
-    total = len(tasks)
+async def process_with_progress(item_count):
+    # Create tasks that complete at different times
+    async def process_item(item_id):
+        await sleep(0.1 + (item_id % 3) * 0.1)  # Variable duration
+        return {"id": item_id, "result": f"processed_{item_id}"}
+
+    tasks = [process_item(i) for i in range(item_count)]
     completed = 0
 
     async with CompletionStream(tasks, limit=5) as stream:
         async for idx, result in stream:
             completed += 1
-            progress = (completed / total) * 100
-            print(f"Progress: {progress:.1f}% ({completed}/{total})")
+            progress = (completed / len(tasks)) * 100
+            print(f"Progress: {progress:.1f}% - Task {idx} completed")
 
-            # Save result
-            await save_result(idx, result)
+    print(f"All {completed} tasks completed")
 
-            # Early termination if critical failure
-            if is_critical_failure(result):
-                print("Critical failure detected, aborting remaining tasks")
-                break
-
-    print(f"Completed {completed}/{total} tasks")
+# Usage: Process 20 items with progress tracking
+await process_with_progress(20)
 ```
 
 ---
@@ -731,27 +775,39 @@ async def process_with_progress(tasks):
 ### Example 5: Resilient Operation with Retry
 
 ```python
-from lionherd_core.libs.concurrency import retry, move_on_after
-import httpx
+from lionherd_core.libs.concurrency import retry, move_on_after, sleep
+import random
 
 async def fetch_important_data():
-    async def attempt():
-        async with httpx.AsyncClient() as client:
-            resp = await client.get("https://api.example.com/critical-data")
-            resp.raise_for_status()
-            return resp.json()
+    # Simulate flaky operation
+    attempt_count = 0
 
-    # Total timeout: 30 seconds
+    async def flaky_fetch():
+        nonlocal attempt_count
+        attempt_count += 1
+        await sleep(0.1)  # Simulate network delay
+
+        if attempt_count < 3:  # Fail first 2 attempts
+            raise ConnectionError(f"Attempt {attempt_count} failed")
+
+        return {"data": "success", "attempts": attempt_count}
+
     # Retry up to 5 times with exponential backoff
+    # Total timeout: 30 seconds
     with move_on_after(30.0):
-        return await retry(
-            attempt,
+        result = await retry(
+            flaky_fetch,
             attempts=5,
             base_delay=0.5,
             max_delay=5.0,
-            retry_on=(httpx.NetworkError, httpx.TimeoutException, httpx.HTTPStatusError),
+            retry_on=(ConnectionError,),
             jitter=0.2,
         )
+        print(f"Success after {result['attempts']} attempts")
+        return result
+
+# Usage
+await fetch_important_data()
 ```
 
 ---
@@ -759,29 +815,36 @@ async def fetch_important_data():
 ### Example 6: Mixed Gather and Race Pattern
 
 ```python
-from lionherd_core.libs.concurrency import gather, race
-import anyio
+from lionherd_core.libs.concurrency import gather, race, sleep
 
 async def fetch_from_multiple_sources():
     # Race to get data from fastest source
     async def source_a():
-        return await api_a.fetch()
+        await sleep(0.2)  # Slower source
+        return {"source": "A", "value": 100}
 
     async def source_b():
-        return await api_b.fetch()
+        await sleep(0.1)  # Faster source (wins)
+        return {"source": "B", "value": 200}
 
     # Gather supplementary data in parallel
     async def metadata():
-        return await metadata_service.get()
+        await sleep(0.15)
+        return {"version": "1.0"}
 
     async def config():
-        return await config_service.get()
+        await sleep(0.1)
+        return {"timeout": 30}
 
-    # Race primary sources, gather supplementary data
+    # Race primary sources, gather supplementary data concurrently
     primary, (meta, cfg) = await gather(
         race(source_a(), source_b()),
         gather(metadata(), config()),
     )
 
     return {"data": primary, "metadata": meta, "config": cfg}
+
+# Usage
+result = await fetch_from_multiple_sources()
+# result["data"]["source"] == "B" (faster source won the race)
 ```
