@@ -49,28 +49,9 @@ class EdgeCondition:
         """Evaluate condition. Override for custom logic. Default: always True."""
         return True
 
-    def __call__(self, *args: Any, **kwargs: Any) -> bool:
-        """Sync callable interface. Prefer async apply() for async contexts."""
-        import asyncio
-
-        async def _run():
-            return await self.apply(*args, **kwargs)
-
-        # Check if event loop is already running
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            # No event loop running - safe to use anyio.run()
-            import anyio
-
-            return anyio.run(_run)
-        else:
-            # Event loop already running (e.g., Jupyter notebook)
-            # Apply nest_asyncio to allow nested event loops
-            import nest_asyncio
-
-            nest_asyncio.apply()
-            return asyncio.run(_run())
+    async def __call__(self, *args: Any, **kwargs: Any) -> bool:
+        """Async callable interface. Calls apply() directly."""
+        return await self.apply(*args, **kwargs)
 
 
 # ==================== Edge ====================
@@ -399,7 +380,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
         return result
 
-    def find_path(
+    async def find_path(
         self,
         start: UUID | Node,
         end: UUID | Node,
@@ -434,31 +415,13 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
             # Explore neighbors
             for edge_id in self._out_edges[current_id]:
-                edge = self.edges.get(edge_id)
+                edge: Edge = self.edges.get(edge_id)
                 neighbor_id = edge.tail
 
                 if neighbor_id not in visited:
                     # Check condition if requested
-                    if check_conditions:
-                        import asyncio
-
-                        # Check if event loop is already running
-                        try:
-                            asyncio.get_running_loop()
-                        except RuntimeError:
-                            # No event loop - safe to use anyio.run()
-                            import anyio
-
-                            if not anyio.run(edge.check_condition):
-                                continue
-                        else:
-                            # Event loop running (e.g., Jupyter notebook)
-                            # Apply nest_asyncio to allow nested event loops
-                            import nest_asyncio
-
-                            nest_asyncio.apply()
-                            if not asyncio.run(edge.check_condition()):
-                                continue
+                    if check_conditions and not await edge.check_condition():
+                        continue
 
                     visited.add(neighbor_id)
                     parent[neighbor_id] = (current_id, edge_id)

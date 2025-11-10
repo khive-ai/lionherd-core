@@ -14,6 +14,7 @@ from ._patterns import CompletionStream, bounded_map, gather, race, retry
 from ._primitives import CapacityLimiter, Condition, Event, Lock, Queue, Semaphore
 from ._priority_queue import PriorityQueue, QueueEmpty, QueueFull
 from ._resource_tracker import LeakInfo, LeakTracker, track_resource, untrack_resource
+from ._run_async import run_async
 from ._task import TaskGroup, create_task_group
 from ._utils import current_time, is_coro_func, run_sync, sleep
 
@@ -52,6 +53,7 @@ __all__ = (
     "non_cancel_subgroup",
     "race",
     "retry",
+    "run_async",
     "run_sync",
     "shield",
     "sleep",

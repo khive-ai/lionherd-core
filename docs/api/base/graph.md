@@ -95,8 +95,8 @@ class EdgeCondition:
         """Evaluate condition. Override for custom logic. Default: always True."""
         return True
 
-    def __call__(self, *args: Any, **kwargs: Any) -> bool:
-        """Sync callable interface."""
+    async def __call__(self, *args: Any, **kwargs: Any) -> bool:
+        """Async callable interface. Calls apply() directly."""
 ```
 
 **Example:**
@@ -620,7 +620,7 @@ Find shortest path between two nodes using BFS.
 **Signature:**
 
 ```python
-def find_path(
+async def find_path(
     self,
     start: UUID | Node,
     end: UUID | Node,
@@ -645,22 +645,22 @@ def find_path(
 **Example:**
 
 ```python
-# Find path without condition checking
-path = graph.find_path(start_node, end_node)
+# Find path without condition checking (async-first design)
+path = await graph.find_path(start_node, end_node)
 if path:
     print(f"Path length: {len(path)} edges")
     for edge in path:
         print(f"  {edge.head} → {edge.tail}")
 
 # Find path with condition checking
-conditional_path = graph.find_path(start_node, end_node, check_conditions=True)
+conditional_path = await graph.find_path(start_node, end_node, check_conditions=True)
 ```
 
 **Property**: Returns shortest path by edge count (BFS guarantees shortest path in unweighted graphs).
 
 **Conditional Traversal**: When `check_conditions=True`, edges with conditions that evaluate to False are skipped.
 
-**Note**: Conditional traversal works seamlessly in Jupyter notebooks (event loop handling is automatic via nest-asyncio).
+**Note**: Graph uses async-first design. In Jupyter notebooks, use `await` syntax directly. In sync contexts, use `run_async()` from `lionherd_core.libs.concurrency`.
 
 ---
 
@@ -1093,7 +1093,7 @@ network.add_edge(low_cap)
 network.add_edge(high_cap)
 
 # Find path with capacity constraints
-path = network.find_path(n1, n3, check_conditions=True)
+path = await network.find_path(n1, n3, check_conditions=True)
 if path:
     print(f"High-capacity path found: {len(path)} edges")
 ```
@@ -1178,7 +1178,7 @@ graph.add_edge(Edge(head=node1.id, tail=node2.id))
 graph.add_edge(Edge(head=a.id, tail=b.id))
 
 # B → A path doesn't exist
-path = graph.find_path(b, a)  # Returns None
+path = await graph.find_path(b, a)  # Returns None
 ```
 
 **Solution**: Add edges in both directions for undirected behavior.
@@ -1382,7 +1382,7 @@ for city1, city2 in connections:
 
 # Find shortest path
 start, end = "NYC", "LAX"
-path = network.find_path(nodes[start], nodes[end])
+path = await network.find_path(nodes[start], nodes[end])
 
 if path:
     print(f"Shortest path from {start} to {end}:")
