@@ -158,8 +158,8 @@ class TestRunAsyncInSyncContextIntegration:
         results = []
         for i in range(5):
 
-            async def numbered_coro():
-                return i * 10
+            async def numbered_coro(n=i):
+                return n * 10
 
             results.append(run_async(numbered_coro()))
 

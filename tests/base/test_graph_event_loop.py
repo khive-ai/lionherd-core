@@ -63,13 +63,13 @@ class FailCondition(EdgeCondition):
 class TestEdgeConditionEventLoop:
     """Test EdgeCondition.__call__() event loop detection."""
 
-    def test_edgecondition_call_no_event_loop(self):
+    async def test_edgecondition_call_no_event_loop(self):
         """Test EdgeCondition.__call__() when no event loop is running (anyio.run path)."""
         condition = CountingCondition()
         CountingCondition.call_count = 0
 
-        # No event loop running - should use anyio.run()
-        result = condition()
+        # No event loop running - async call
+        result = await condition()
 
         assert result is True
         assert CountingCondition.call_count == 1
@@ -81,8 +81,8 @@ class TestEdgeConditionEventLoop:
         CountingCondition.call_count = 0
 
         # Event loop IS running (we're in async test)
-        # This should trigger nest_asyncio.apply() path
-        result = condition()
+        # Async call
+        result = await condition()
 
         assert result is True
         assert CountingCondition.call_count == 1
@@ -98,12 +98,12 @@ class TestEdgeConditionEventLoop:
         condition = FailCondition()
 
         # If bug exists, this would raise ValueError about expecting coroutine
-        result = condition()
+        result = await condition()
 
         # Should return False (the condition result), not raise ValueError
         assert result is False
 
-    def test_edgecondition_call_with_args(self):
+    async def test_edgecondition_call_with_args(self):
         """Test EdgeCondition.__call__() passes arguments correctly."""
 
         class ArgCondition(EdgeCondition):
@@ -113,29 +113,30 @@ class TestEdgeConditionEventLoop:
         condition = ArgCondition()
 
         # Pass argument
-        result = condition(threshold=15.0)
+        result = await condition(threshold=15.0)
         assert result is True
 
-        result = condition(threshold=3.0)
+        result = await condition(threshold=3.0)
         assert result is False
 
     @pytest.mark.asyncio
     async def test_edgecondition_nest_asyncio_applied_when_loop_exists(self):
-        """Verify nest_asyncio.apply() is actually called when event loop exists."""
-        with patch("nest_asyncio.apply") as mock_apply:
-            condition = CountingCondition()
+        """Verify EdgeCondition works in async context (nest_asyncio no longer needed for pure async)."""
+        condition = CountingCondition()
+        CountingCondition.call_count = 0
 
-            # Call in async context (event loop exists)
-            _ = condition()
+        # Call in async context (event loop exists)
+        result = await condition()
 
-            # nest_asyncio.apply() should have been called
-            mock_apply.assert_called_once()
+        # Should work correctly without nest_asyncio (pure async now)
+        assert result is True
+        assert CountingCondition.call_count == 1
 
 
 class TestGraphFindPathEventLoop:
     """Test Graph.find_path() event loop detection with conditional traversal."""
 
-    def test_find_path_conditional_no_event_loop(self):
+    async def test_find_path_conditional_no_event_loop(self):
         """Test find_path with check_conditions=True when no event loop (anyio.run path)."""
         graph = Graph()
 
@@ -150,8 +151,8 @@ class TestGraphFindPathEventLoop:
 
         CountingCondition.call_count = 0
 
-        # No event loop - should use anyio.run()
-        path = graph.find_path(n1, n2, check_conditions=True)
+        # Async call
+        path = await graph.find_path(n1, n2, check_conditions=True)
 
         assert path is not None
         assert len(path) == 1
@@ -173,8 +174,8 @@ class TestGraphFindPathEventLoop:
 
         CountingCondition.call_count = 0
 
-        # Event loop IS running - should use nest_asyncio path
-        path = graph.find_path(n1, n2, check_conditions=True)
+        # Event loop IS running - async call
+        path = await graph.find_path(n1, n2, check_conditions=True)
 
         assert path is not None
         assert len(path) == 1
@@ -202,7 +203,7 @@ class TestGraphFindPathEventLoop:
         graph.add_edge(allowed_edge2)
 
         # Event loop running - find alternate path
-        path = graph.find_path(n1, n3, check_conditions=True)
+        path = await graph.find_path(n1, n3, check_conditions=True)
 
         # Should find the longer path that isn't blocked
         assert path is not None
@@ -210,7 +211,7 @@ class TestGraphFindPathEventLoop:
 
     @pytest.mark.asyncio
     async def test_find_path_nest_asyncio_applied_when_conditions_checked(self):
-        """Verify nest_asyncio.apply() is called during conditional path finding."""
+        """Verify find_path works correctly in async context with conditions."""
         graph = Graph()
 
         n1 = Node(content={"name": "A"})
@@ -221,15 +222,18 @@ class TestGraphFindPathEventLoop:
         edge = Edge(head=n1.id, tail=n2.id, condition=CountingCondition())
         graph.add_edge(edge)
 
-        with patch("nest_asyncio.apply") as mock_apply:
-            # Call in async context with conditions
-            _ = graph.find_path(n1, n2, check_conditions=True)
+        CountingCondition.call_count = 0
 
-            # nest_asyncio should have been applied
-            mock_apply.assert_called()
+        # Call in async context with conditions
+        path = await graph.find_path(n1, n2, check_conditions=True)
 
-    def test_find_path_without_conditions_no_nest_asyncio(self):
-        """Verify nest_asyncio is NOT called when check_conditions=False."""
+        # Should work correctly (pure async, no nest_asyncio needed)
+        assert path is not None
+        assert len(path) == 1
+        assert CountingCondition.call_count == 1
+
+    async def test_find_path_without_conditions_no_nest_asyncio(self):
+        """Verify find_path works without checking conditions."""
         graph = Graph()
 
         n1 = Node(content={"name": "A"})
@@ -240,18 +244,21 @@ class TestGraphFindPathEventLoop:
         edge = Edge(head=n1.id, tail=n2.id, condition=CountingCondition())
         graph.add_edge(edge)
 
-        with patch("nest_asyncio.apply") as mock_apply:
-            # No conditions checked - no event loop handling needed
-            _ = graph.find_path(n1, n2, check_conditions=False)
+        CountingCondition.call_count = 0
 
-            # nest_asyncio should NOT be called
-            mock_apply.assert_not_called()
+        # No conditions checked
+        path = await graph.find_path(n1, n2, check_conditions=False)
+
+        # Should work and NOT evaluate condition
+        assert path is not None
+        assert len(path) == 1
+        assert CountingCondition.call_count == 0
 
 
 class TestEventLoopRegressions:
     """Regression tests for specific event loop bugs."""
 
-    def test_asyncio_run_receives_coroutine_not_function(self):
+    async def test_asyncio_run_receives_coroutine_not_function(self):
         """Regression: asyncio.run(_run) vs asyncio.run(_run()).
 
         Bug: Line 73 had asyncio.run(_run) - passes function object
@@ -272,8 +279,8 @@ class TestEventLoopRegressions:
         condition = InstrumentedCondition()
         InstrumentedCondition.executed = False
 
-        # Call sync interface
-        result = condition()
+        # Call async interface
+        result = await condition()
 
         # Should execute the async apply() method
         assert InstrumentedCondition.executed is True
@@ -300,15 +307,15 @@ class TestEventLoopRegressions:
         assert result is True
         assert CountingCondition.call_count == 1
 
-    def test_multiple_conditions_sequential_calls(self):
+    async def test_multiple_conditions_sequential_calls(self):
         """Test multiple EdgeCondition calls don't interfere with each other."""
         cond1 = CountingCondition()
         cond2 = CountingCondition()
 
         CountingCondition.call_count = 0
 
-        result1 = cond1()
-        result2 = cond2()
+        result1 = await cond1()
+        result2 = await cond2()
 
         assert result1 is True
         assert result2 is True
@@ -316,16 +323,16 @@ class TestEventLoopRegressions:
 
     @pytest.mark.asyncio
     async def test_mixed_sync_async_condition_calls(self):
-        """Test mixing sync __call__() and async apply() works correctly."""
+        """Test mixing __call__() and async apply() works correctly."""
         condition = CountingCondition()
         CountingCondition.call_count = 0
 
-        # Sync call
-        sync_result = condition()
-        assert sync_result is True
+        # Async __call__
+        call_result = await condition()
+        assert call_result is True
         assert CountingCondition.call_count == 1
 
-        # Async call
+        # Async apply() directly
         async_result = await condition.apply()
         assert async_result is True
         assert CountingCondition.call_count == 2
@@ -336,23 +343,19 @@ class TestNestAsyncioIntegration:
 
     @pytest.mark.asyncio
     async def test_nest_asyncio_is_idempotent(self):
-        """Verify nest_asyncio.apply() can be called multiple times safely.
+        """Verify EdgeCondition works correctly in async context (pure async, no nest_asyncio needed).
 
-        The implementation calls nest_asyncio.apply() on every invocation when
-        an event loop exists. This test ensures that's safe (idempotent).
+        The implementation is now pure async, no longer requiring nest_asyncio.
+        This test ensures conditions work correctly in async contexts.
         """
-        import nest_asyncio
-
-        # Apply multiple times - should not raise
-        nest_asyncio.apply()
-        nest_asyncio.apply()
-        nest_asyncio.apply()
-
-        # Conditions should still work
+        # Conditions should work in async context
         condition = CountingCondition()
-        result = condition()
+        CountingCondition.call_count = 0
+
+        result = await condition()
 
         assert result is True
+        assert CountingCondition.call_count == 1
 
     @pytest.mark.asyncio
     async def test_event_loop_detection_is_correct(self):

@@ -272,7 +272,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         return self.remove(item_id)
 
     @synchronized
-    def get(self, item_id: UUID | str | Element, default: Any = ...) -> T | None:
+    def get(self, item_id: UUID | str | Element, default: Any = ...) -> T | Any:
         """Get item by ID with optional default.
 
         Args:

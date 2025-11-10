@@ -1250,39 +1250,39 @@ class TestGraphAlgorithms:
         with pytest.raises(ValueError, match=r"Cannot topologically sort.*cycle"):
             graph.topological_sort()
 
-    def test_find_path_direct(self, simple_graph):
+    async def test_find_path_direct(self, simple_graph):
         """Test finding direct path."""
         graph, (n1, n2, _), (e1, _) = simple_graph
 
         # Direct path A -> B
-        path = graph.find_path(n1, n2)
+        path = await graph.find_path(n1, n2)
 
         assert path is not None
         assert len(path) == 1
         assert path[0] == e1
 
-    def test_find_path_multi_hop(self, simple_graph):
+    async def test_find_path_multi_hop(self, simple_graph):
         """Test finding multi-hop path."""
         graph, (n1, _, n3), (e1, e2) = simple_graph
 
         # Path A -> B -> C
-        path = graph.find_path(n1, n3)
+        path = await graph.find_path(n1, n3)
 
         assert path is not None
         assert len(path) == 2
         assert path[0] == e1
         assert path[1] == e2
 
-    def test_find_path_no_path_exists(self, simple_graph):
+    async def test_find_path_no_path_exists(self, simple_graph):
         """Test find_path returns None when no path exists."""
         graph, (n1, _, n3), _ = simple_graph
 
         # Reverse direction - no path from n3 to n1
-        path = graph.find_path(n3, n1)
+        path = await graph.find_path(n3, n1)
 
         assert path is None
 
-    def test_find_path_disconnected_components(self, empty_graph):
+    async def test_find_path_disconnected_components(self, empty_graph):
         """Test find_path returns None for disconnected components."""
         n1 = Node(content={"value": "A"})
         n2 = Node(content={"value": "B"})
@@ -1291,46 +1291,48 @@ class TestGraphAlgorithms:
         empty_graph.add_node(n2)
 
         # No edges - disconnected
-        path = empty_graph.find_path(n1, n2)
+        path = await empty_graph.find_path(n1, n2)
         assert path is None
 
-    def test_find_path_same_node(self, simple_graph):
+    async def test_find_path_same_node(self, simple_graph):
         """Test find_path from node to itself (no self-loop)."""
         graph, (n1, _, _), _ = simple_graph
 
-        path = graph.find_path(n1, n1)
+        path = await graph.find_path(n1, n1)
 
         # BFS finds empty path (already at destination)
         assert path is not None
         assert len(path) == 0
 
-    def test_find_path_shortest_path(self, dag_graph):
+    async def test_find_path_shortest_path(self, dag_graph):
         """Test find_path returns shortest path (BFS property)."""
         graph, (n1, _, _, n4), _ = dag_graph
 
         # Diamond: two paths from n1 to n4 (both length 2)
-        path = graph.find_path(n1, n4)
+        path = await graph.find_path(n1, n4)
 
         assert path is not None
         assert len(path) == 2
 
-    def test_find_path_start_not_in_graph_raises(self, simple_graph):
+    async def test_find_path_start_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if start node not in graph."""
         graph, _, _ = simple_graph
         fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(ValueError, match="not in graph"):
-            graph.find_path(fake_node, graph.nodes.items[next(iter(graph.nodes.items.keys()))])
+            await graph.find_path(
+                fake_node, graph.nodes.items[next(iter(graph.nodes.items.keys()))]
+            )
 
-    def test_find_path_end_not_in_graph_raises(self, simple_graph):
+    async def test_find_path_end_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if end node not in graph."""
         graph, (n1, _, _), _ = simple_graph
         fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(ValueError, match="not in graph"):
-            graph.find_path(n1, fake_node)
+            await graph.find_path(n1, fake_node)
 
-    def test_find_path_with_conditions_all_pass(self, simple_graph):
+    async def test_find_path_with_conditions_all_pass(self, simple_graph):
         """Test find_path with conditions that all pass."""
         graph, (n1, _, n3), _ = simple_graph
 
@@ -1339,24 +1341,24 @@ class TestGraphAlgorithms:
         graph.edges.items[edge_keys[0]].condition = AlwaysTrueCondition()
         graph.edges.items[edge_keys[1]].condition = AlwaysTrueCondition()
 
-        path = graph.find_path(n1, n3, check_conditions=True)
+        path = await graph.find_path(n1, n3, check_conditions=True)
 
         assert path is not None
         assert len(path) == 2
 
-    def test_find_path_with_conditions_blocked(self, simple_graph):
+    async def test_find_path_with_conditions_blocked(self, simple_graph):
         """Test find_path with condition that blocks traversal."""
         graph, (n1, _, n3), (e1, _) = simple_graph
 
         # Block first edge
         e1.condition = AlwaysFalseCondition()
 
-        path = graph.find_path(n1, n3, check_conditions=True)
+        path = await graph.find_path(n1, n3, check_conditions=True)
 
         # Path blocked
         assert path is None
 
-    def test_find_path_without_checking_conditions(self, simple_graph):
+    async def test_find_path_without_checking_conditions(self, simple_graph):
         """Test find_path ignores conditions when check_conditions=False."""
         graph, (n1, _, n3), (e1, _) = simple_graph
 
@@ -1364,7 +1366,7 @@ class TestGraphAlgorithms:
         e1.condition = AlwaysFalseCondition()
 
         # Should still find path (not checking conditions)
-        path = graph.find_path(n1, n3, check_conditions=False)
+        path = await graph.find_path(n1, n3, check_conditions=False)
 
         assert path is not None
         assert len(path) == 2
@@ -1563,12 +1565,12 @@ class TestSerialization:
 class TestEdgeConditions:
     """Edge conditions: traversal gates, async/sync application."""
 
-    def test_edge_condition_default_allows_traversal(self):
+    async def test_edge_condition_default_allows_traversal(self):
         """Test default EdgeCondition allows traversal."""
         condition = EdgeCondition()
 
-        # Sync call
-        result = condition()
+        # Async call
+        result = await condition()
         assert result is True
 
     async def test_edge_condition_async_apply_default(self):
@@ -1578,11 +1580,11 @@ class TestEdgeConditions:
         result = await condition.apply()
         assert result is True
 
-    def test_always_true_condition(self):
+    async def test_always_true_condition(self):
         """Test custom AlwaysTrueCondition."""
         condition = AlwaysTrueCondition()
 
-        assert condition() is True
+        assert await condition() is True
 
     async def test_always_true_condition_async(self):
         """Test AlwaysTrueCondition async."""
@@ -1591,11 +1593,11 @@ class TestEdgeConditions:
         result = await condition.apply()
         assert result is True
 
-    def test_always_false_condition(self):
+    async def test_always_false_condition(self):
         """Test custom AlwaysFalseCondition."""
         condition = AlwaysFalseCondition()
 
-        assert condition() is False
+        assert await condition() is False
 
     async def test_always_false_condition_async(self):
         """Test AlwaysFalseCondition async."""
@@ -1604,19 +1606,19 @@ class TestEdgeConditions:
         result = await condition.apply()
         assert result is False
 
-    def test_threshold_condition_pass(self):
+    async def test_threshold_condition_pass(self):
         """Test ThresholdCondition passes when value <= threshold."""
         condition = ThresholdCondition(properties={"value": 5.0})
 
         # Default threshold is 10.0
-        result = condition(threshold=10.0)
+        result = await condition(threshold=10.0)
         assert result is True
 
-    def test_threshold_condition_fail(self):
+    async def test_threshold_condition_fail(self):
         """Test ThresholdCondition fails when value > threshold."""
         condition = ThresholdCondition(properties={"value": 15.0})
 
-        result = condition(threshold=10.0)
+        result = await condition(threshold=10.0)
         assert result is False
 
     async def test_threshold_condition_async(self):
@@ -1811,7 +1813,7 @@ class TestEdgeCases:
         edge_restored = restored.edges.items[edge.id]
         assert edge_restored.condition is None  # Conditions are not serialized
 
-    def test_remove_node_from_middle_of_chain(self, simple_graph):
+    async def test_remove_node_from_middle_of_chain(self, simple_graph):
         """Test removing middle node breaks chain but preserves remaining."""
         graph, (n1, n2, n3), _ = simple_graph
 
@@ -1824,7 +1826,7 @@ class TestEdgeCases:
         assert len(graph) == 2
 
         # But no path exists
-        path = graph.find_path(n1, n3)
+        path = await graph.find_path(n1, n3)
         assert path is None
 
     def test_graph_repr(self, simple_graph):
