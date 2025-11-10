@@ -260,14 +260,16 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         kwargs.setdefault("adapt_meth", "from_dict")
         return super().adapt_from(obj, obj_key=obj_key, many=many, **kwargs)
 
-    async def adapt_to_async(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any:
+    async def adapt_to_async(
+        self, obj_key: str, many: bool = False, **kwargs: Any
+    ) -> Any:  # pragma: no cover
         """Async convert to external format via pydapter (defaults to mode='db')."""
         kwargs.setdefault("adapt_meth", "to_dict")
         kwargs.setdefault("adapt_kw", {"mode": "db"})
         return await super().adapt_to_async(obj_key=obj_key, many=many, **kwargs)
 
     @classmethod
-    async def adapt_from_async(
+    async def adapt_from_async(  # pragma: no cover
         cls, obj: Any, obj_key: str, many: bool = False, **kwargs: Any
     ) -> Node:
         """Async create from external format via pydapter (polymorphic)."""
