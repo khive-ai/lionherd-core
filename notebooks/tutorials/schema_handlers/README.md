@@ -413,9 +413,9 @@ def test_nest_arguments():
 ## Related Resources
 
 - **API Reference**: [libs/schema_handlers](../../../docs/api/libs/schema_handlers/)
-- **Function Call Parsing**: [parse_function_call](../../../docs/api/libs/schema_handlers/parse_function_call.md)
-- **Argument Mapping**: [map_positional_args](../../../docs/api/libs/schema_handlers/map_positional_args.md)
-- **MCP Specification**: <https://modelcontextprotocol.io/>
+- **Function Call Parsing**: [function_call_parser](../../../docs/api/libs/schema_handlers/function_call_parser.md)
+- **Argument Mapping**: [function_call_parser](../../../docs/api/libs/schema_handlers/function_call_parser.md)
+- **MCP Specification**: <https://spec.modelcontextprotocol.io/>
 - **OpenAI Function Calling**: <https://platform.openai.com/docs/guides/function-calling>
 
 ## Contributing
