@@ -77,7 +77,7 @@ class TestToDictFuzzyParsing:
         """Test that malformed JSON fails when fuzzy_parse=False."""
         malformed_json = "{malformed: 'value'}"
 
-        with pytest.raises(Exception):  # orjson.JSONDecodeError or similar
+        with pytest.raises((ValueError, TypeError)):  # JSON decode errors
             to_dict(malformed_json, fuzzy_parse=False)
 
 
@@ -123,7 +123,7 @@ class TestToDictSuppress:
 
     def test_suppress_false(self):
         """Test suppress=False raises on errors."""
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, TypeError)):
             to_dict(object(), suppress=False)
 
 

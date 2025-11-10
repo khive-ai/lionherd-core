@@ -1244,7 +1244,7 @@ def test_node_embedding_format_precision():
         restored = Node.from_dict(data)
 
         # Check precision (within float tolerance)
-        for orig, rest in zip(precise_embedding, restored.embedding):
+        for orig, rest in zip(precise_embedding, restored.embedding, strict=True):
             assert abs(orig - rest) < 1e-9
 
 
