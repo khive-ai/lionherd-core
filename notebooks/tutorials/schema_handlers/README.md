@@ -5,12 +5,14 @@ Master function call parsing and schema manipulation for tool-calling patterns (
 ## Overview
 
 These tutorials teach you to handle function calling patterns:
+
 - **Function Call Parsing**: Parse string representations of function calls
 - **Argument Mapping**: Map positional args to keyword args using signatures
 - **Argument Nesting**: Transform flat args into nested structures
 - **Dynamic Schema Selection**: Route to correct schema based on function name
 
 **Use Cases**:
+
 - MCP (Model Context Protocol) server implementations
 - OpenAI function/tool calling integration
 - LLM-based tool use (Claude, GPT-4, etc.)
@@ -413,8 +415,8 @@ def test_nest_arguments():
 - **API Reference**: [libs/schema_handlers](../../../docs/api/libs/schema_handlers/)
 - **Function Call Parsing**: [parse_function_call](../../../docs/api/libs/schema_handlers/parse_function_call.md)
 - **Argument Mapping**: [map_positional_args](../../../docs/api/libs/schema_handlers/map_positional_args.md)
-- **MCP Specification**: https://modelcontextprotocol.io/
-- **OpenAI Function Calling**: https://platform.openai.com/docs/guides/function-calling
+- **MCP Specification**: <https://modelcontextprotocol.io/>
+- **OpenAI Function Calling**: <https://platform.openai.com/docs/guides/function-calling>
 
 ## Contributing
 
