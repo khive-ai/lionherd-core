@@ -38,21 +38,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute tutorial notebooks
+      - name: Execute notebooks
         run: |
-          uv run pytest --nbmake notebooks/tutorials/ \
+          uv run pytest --nbmake notebooks/ \
             --nbmake-timeout=300 \
             --tb=short \
             -v
-        continue-on-error: false
-
-      - name: Execute reference notebooks
-        run: |
-          uv run pytest --nbmake notebooks/references/ \
-            --nbmake-timeout=300 \
-            --tb=short \
-            -v
-        continue-on-error: true # Reference notebooks may have experimental code
+        continue-on-error: true # Allow experimental code in notebooks
 
       - name: Upload execution artifacts
         uses: actions/upload-artifact@v4

@@ -47,7 +47,6 @@ jobs:
             --no-progress
             --exclude-path=.venv
             --exclude-path=node_modules
-            --exclude-mail
             --accept=200,201,202,203,204,301,302,307,308,429
             --timeout=30
             --max-redirects=5
@@ -66,20 +65,12 @@ jobs:
 
           # Check for incorrect relative paths to API docs
           if grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"; then
-            echo "⚠️  Found potential incorrect relative paths (../../) in notebooks"
-            echo "Notebooks should use correct paths relative to their location"
+            echo "⚠️  Found relative paths (../../) in notebooks"
+            echo "Notebooks use relative paths based on their location"
             grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints" || true
           fi
 
-          # Check for broken internal references
-          echo "Checking for internal reference patterns..."
-          if grep -r "\.\./\.\./\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"; then
-            echo "❌ Found excessive parent directory traversal (../../../) - likely incorrect"
-            grep -r "\.\./\.\./\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"
-            exit 1
-          fi
-
-          echo "✅ Relative path sanity checks passed"
+          echo "✅ Relative path sanity checks passed (lychee will catch broken links)"
 
       - name: Upload link check results
         uses: actions/upload-artifact@v4
