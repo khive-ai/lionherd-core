@@ -80,5 +80,6 @@ dev = [
   "trio>=0.31.0",
   "ipykernel>=7.1.0",
   "ipywidgets>=8.1.7",
+  "nbmake>=1.5.5",
 ]
 docs = ["mkdocs>=1.5.0", "mkdocs-material>=9.5.0", "mkdocs-autorefs>=1.0.0"]
