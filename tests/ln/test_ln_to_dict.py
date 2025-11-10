@@ -128,8 +128,9 @@ class TestToDictRecursive:
         result_depth2 = to_dict(nested, recursive=True, max_recursive_depth=2)
 
         assert isinstance(result_depth2["level1"], dict), "level1 parsed at depth=1"
-        assert isinstance(result_depth2["level1"]["level2"], str), \
+        assert isinstance(result_depth2["level1"]["level2"], str), (
             "level2 remains as JSON string (hit depth limit at depth=2)"
+        )
         assert "level3" in result_depth2["level1"]["level2"]
 
         # Test with max_recursive_depth=4
@@ -139,10 +140,10 @@ class TestToDictRecursive:
         result_depth4 = to_dict(nested, recursive=True, max_recursive_depth=4)
 
         assert isinstance(result_depth4["level1"], dict)
-        assert isinstance(result_depth4["level1"]["level2"], dict), \
-            "level2 parsed at depth=3"
-        assert isinstance(result_depth4["level1"]["level2"]["level3"], str), \
+        assert isinstance(result_depth4["level1"]["level2"], dict), "level2 parsed at depth=3"
+        assert isinstance(result_depth4["level1"]["level2"]["level3"], str), (
             "level3 remains as JSON string (hit depth limit at depth=4)"
+        )
         assert "value" in result_depth4["level1"]["level2"]["level3"]
 
         # Test with max_recursive_depth=6
@@ -153,8 +154,9 @@ class TestToDictRecursive:
 
         assert isinstance(result_depth6["level1"], dict)
         assert isinstance(result_depth6["level1"]["level2"], dict)
-        assert isinstance(result_depth6["level1"]["level2"]["level3"], dict), \
+        assert isinstance(result_depth6["level1"]["level2"]["level3"], dict), (
             "level3 fully parsed at depth=5"
+        )
         assert result_depth6["level1"]["level2"]["level3"]["value"] == "deepest"
 
     def test_recursive_depth_validation(self):
