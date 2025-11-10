@@ -24,33 +24,33 @@ pip install lionherd-core
 jupyter notebook fuzzy_validation.ipynb
 ```
 
-## Tutorials (11)
+## Tutorials (11 total: 7 available, 4 coming soon)
 
 ### Core Utilities (Start Here)
 
-| Tutorial | Time | What You'll Learn |
-|----------|------|-------------------|
-| [**Fuzzy Validation**](./fuzzy_validation.ipynb) | 15-20min | Validate data with field name variations using `fuzzy_validate_pydantic()` |
-| [**Advanced to_dict**](./advanced_to_dict.ipynb) | 15-20min | Convert complex types to dicts with `to_dict()` (Pydantic, dataclasses, custom) |
-| [**Content Deduplication**](./content_deduplication.ipynb) | 15-20min | Detect duplicates using `hash_dict()` (order-independent content hashing) |
-| [**Multi-Stage Pipeline**](./multistage_pipeline.ipynb) | 15-20min | Build data pipelines with `lcall()` (lazy callable invocation) |
+| Tutorial | Status | Time | What You'll Learn |
+|----------|--------|------|-------------------|
+| [**Fuzzy Validation**](./fuzzy_validation.ipynb) | ✅ Available | 15-20min | Validate data with field name variations using `fuzzy_validate_pydantic()` |
+| **Advanced to_dict** | 📋 Coming Soon | 15-20min | Convert complex types to dicts with `to_dict()` (Pydantic, dataclasses, custom) |
+| [**Content Deduplication**](./content_deduplication.ipynb) | ✅ Available | 15-20min | Detect duplicates using `hash_dict()` (order-independent content hashing) |
+| [**Multi-Stage Pipeline**](./multistage_pipeline.ipynb) | ✅ Available | 15-20min | Build data pipelines with `lcall()` (lazy callable invocation) |
 
 ### LLM Integration
 
-| Tutorial | Time | What You'll Learn |
-|----------|------|-------------------|
-| [**Fuzzy JSON Parsing**](./fuzzy_json_parsing.ipynb) | 20-30min | Parse malformed LLM JSON with markdown extraction and error correction |
-| [**LLM Complex Models**](./llm_complex_models.ipynb) | 15-20min | Extract structured data from LLM outputs into Pydantic models |
-| [**API Field Flattening**](./api_field_flattening.ipynb) | 20-30min | Normalize nested API responses with field flattening patterns |
+| Tutorial | Status | Time | What You'll Learn |
+|----------|--------|------|-------------------|
+| [**Fuzzy JSON Parsing**](./fuzzy_json_parsing.ipynb) | ✅ Available | 20-30min | Parse malformed LLM JSON with markdown extraction and error correction |
+| [**LLM Complex Models**](./llm_complex_models.ipynb) | ✅ Available | 15-20min | Extract structured data from LLM outputs into Pydantic models |
+| **API Field Flattening** | 📋 Coming Soon | 20-30min | Normalize nested API responses with field flattening patterns |
 
 ### Advanced Patterns
 
-| Tutorial | Time | What You'll Learn |
-|----------|------|-------------------|
-| [**Custom JSON Serialization**](./custom_json_serialization.ipynb) | 15-20min | Handle non-JSON types (datetime, Decimal, custom classes) |
-| [**Async Path Creation**](./async_path_creation.ipynb) | 15-20min | Create paths asynchronously with timeouts using `alcall()` |
-| [**Nested Cleaning**](./nested_cleaning.ipynb) | 15-20min | Sanitize nested dicts by removing null values and empty collections |
-| [**Data Migration**](./data_migration.ipynb) | 15-20min | Map legacy schemas to new schemas with field transformations |
+| Tutorial | Status | Time | What You'll Learn |
+|----------|--------|------|-------------------|
+| **Custom JSON Serialization** | 📋 Coming Soon | 15-20min | Handle non-JSON types (datetime, Decimal, custom classes) |
+| [**Async Path Creation**](./async_path_creation.ipynb) | ✅ Available | 15-20min | Create paths asynchronously with timeouts using `alcall()` |
+| **Nested Cleaning** | 📋 Coming Soon | 15-20min | Sanitize nested dicts by removing null values and empty collections |
+| [**Data Migration**](./data_migration.ipynb) | ✅ Available | 15-20min | Map legacy schemas to new schemas with field transformations |
 
 ## Learning Paths
 
