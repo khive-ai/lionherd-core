@@ -5,6 +5,7 @@ Master async/await patterns using lionherd-core's `libs.concurrency` module. Lea
 ## Overview
 
 These consolidated tutorials teach you to build resilient async systems using:
+
 - **TaskGroups**: Structured concurrency with automatic cleanup
 - **Timeout utilities**: `move_on_at`, `fail_at`, deadline propagation
 - **Resource management**: `shield()`, graceful shutdown patterns
@@ -28,11 +29,13 @@ jupyter notebook deadline_patterns.ipynb
 > **Note**: These tutorials consolidate 7+ original notebooks into 3 focused, comprehensive guides. Each tutorial combines multiple related patterns for efficient learning.
 
 ### 1. Deadline-Aware Processing Patterns
+
 **File**: [`deadline_patterns.ipynb`](./deadline_patterns.ipynb)
 **Time**: 20 minutes
 **Difficulty**: Intermediate
 
 Learn to process work within fixed time budgets:
+
 - Sequential deadline-aware processing (check time before each task)
 - Parallel worker pool pattern (multiple workers, shared queue)
 - Sentinel pattern for graceful shutdown
@@ -45,11 +48,13 @@ Learn to process work within fixed time budgets:
 ---
 
 ### 2. Task Coordination Patterns
+
 **File**: [`task_coordination.ipynb`](./task_coordination.ipynb)
 **Time**: 20-30 minutes
 **Difficulty**: Advanced
 
 Master coordinating concurrent workers with proper lifecycle management:
+
 - Fan-out/fan-in pattern (distribute work, collect results)
 - Graceful shutdown with `shield()` (cleanup despite cancellation)
 - Worker pool with two-phase shutdown
@@ -62,11 +67,13 @@ Master coordinating concurrent workers with proper lifecycle management:
 ---
 
 ### 3. Service Lifecycle Management
+
 **File**: [`service_lifecycle.ipynb`](./service_lifecycle.ipynb)
 **Time**: 25-35 minutes
 **Difficulty**: Advanced
 
 Build production-ready multi-component service managers:
+
 - Multi-service coordination with dependencies (Database → Cache → API)
 - Initialization protocol (`task_status.started()`)
 - Health monitoring with Event coordination
@@ -82,6 +89,7 @@ Build production-ready multi-component service managers:
 ## Learning Paths
 
 ### Path 1: Essential Patterns (1-2 hours)
+
 1. **Deadline Patterns** - Time-bounded processing basics
 2. **Task Coordination** - Worker pools and shutdown
 3. **Service Lifecycle** - Production service management
@@ -89,6 +97,7 @@ Build production-ready multi-component service managers:
 **Outcome**: Build production-ready async services with proper lifecycle management
 
 ### Path 2: Focused Skills (pick what you need)
+
 - **Need deadline management?** → Start with Deadline Patterns
 - **Need worker pools?** → Start with Task Coordination
 - **Need multi-service coordination?** → Start with Service Lifecycle
@@ -109,6 +118,7 @@ async with create_task_group() as tg:
 ```
 
 **Benefits**:
+
 - Automatic task cleanup (no orphaned tasks)
 - Exception propagation from children to parent
 - Guaranteed resource cleanup on exit
@@ -195,6 +205,7 @@ async with create_task_group() as tg:
 ### Error Handling
 
 All tutorials demonstrate:
+
 - Partial failure tolerance (don't stop on single task failure)
 - Error vs cancellation distinction
 - Graceful degradation
