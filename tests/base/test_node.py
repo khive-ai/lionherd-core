@@ -110,6 +110,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
+from pydantic import BaseModel
 
 from lionherd_core.base.element import Element
 from lionherd_core.base.node import NODE_REGISTRY, Node
@@ -442,16 +443,22 @@ def test_roundtrip_db_serialization():
 # Design aspect validated: Content field supports nested Elements with automatic
 # serialization/deserialization. This enables Node composition without explicit nesting APIs.
 #
-# Design philosophy: Maximum flexibility
-# - No type constraints on content (Any type)
-# - Nested Elements/Nodes handled automatically via field serializer/validator
-# - Plain data passes through unchanged
+# Design philosophy: Structured data only
+# - Content must be: Serializable, BaseModel, dict, or None
+# - Primitives REJECTED (str, int, float, bool, list, tuple, set, bytes)
+# - Rationale: Force structured, query-able, composable data (JSONB one-stop-shop)
+# - Use dict wrapper for primitives: content={'value': 42} or Element.metadata
+#
+# Why reject primitives:
+# - Node is composition layer - content must have key-value namespace
 # - Enables graph-of-graphs patterns (Node contains Graph, which contains Nodes)
+# - SQL JSONB queries require structured data, not raw primitives
+# - Forces pit-of-success: developers think in structured terms
 #
 # Serialization strategy:
 # - _serialize_content(): Detects Element instances → calls to_dict()
 # - _validate_content(): Detects dicts with lion_class → calls from_dict()
-# - Non-Element data: unchanged in both directions
+# - Structured data (dict/BaseModel): unchanged in both directions
 #
 # Why this matters: Composition is Ocean's preferred pattern over deep class hierarchies.
 # This design enables flexible data structures without hardcoding nesting types.
@@ -733,9 +740,18 @@ def test_node_with_complex_content():
 # Pydapter Integration Tests
 # ============================================================================
 #
-# Design aspect validated: Node uses shared adapter registry (_registry() override)
-# so adapters registered once on Node are available on all subclasses. This design
-# avoids redundant adapter registration while maintaining pydapter's extensibility.
+# Design aspect validated: Isolated adapter registry pattern (Rust-like explicit)
+#
+# Why isolated registries (NOT inherited):
+# - Base Node has toml/yaml adapters built-in for convenience
+# - Subclasses get ISOLATED registries (no inheritance from parent)
+# - Must explicitly register adapters on each subclass: MyNode.register_adapter(TomlAdapter)
+# - Prevents adapter pollution while keeping base Node convenient
+#
+# Rationale: Explicit over implicit. Forces conscious decision about which adapters
+# each subclass supports, preventing unexpected behavior from inherited adapters.
+#
+# Trade-off: More boilerplate (register per subclass) vs clarity and control.
 
 
 def test_node_adapt_to_toml():
@@ -978,463 +994,69 @@ def test_node_embedding_roundtrip():
     assert restored.embedding == original.embedding
 
 
-# ==================== created_at_format Tests ====================
-
-
-def test_node_created_at_format_datetime():
-    """Test Node to_dict with created_at_format='datetime' (default)."""
-    import datetime as dt
-
-    node = Node(content={"value": "test"})
-    data = node.to_dict(mode="python", created_at_format="datetime")
-
-    # Default: keep as datetime object
-    assert isinstance(data["created_at"], dt.datetime)
-    assert data["created_at"] == node.created_at
-
-
-def test_node_created_at_format_isoformat():
-    """Test Node to_dict with created_at_format='isoformat'."""
-    node = Node(content={"value": "test"})
-    data = node.to_dict(mode="python", created_at_format="isoformat")
-
-    # ISO format: string
-    assert isinstance(data["created_at"], str)
-    assert data["created_at"] == node.created_at.isoformat()
-
-
-def test_node_created_at_format_timestamp():
-    """Test Node to_dict with created_at_format='timestamp' (legacy)."""
-    node = Node(content={"value": "test"})
-    data = node.to_dict(mode="python", created_at_format="timestamp")
-
-    # Timestamp: float
-    assert isinstance(data["created_at"], float)
-    assert data["created_at"] == node.created_at.timestamp()
-
-
-def test_node_created_at_format_db_mode():
-    """Test Node to_dict with created_at_format in db mode."""
-    node = Node(content={"value": "test"})
-
-    # DB mode with isoformat
-    data = node.to_dict(mode="db", created_at_format="isoformat")
-    assert isinstance(data["created_at"], str)
-    assert "node_metadata" in data  # DB mode uses node_metadata
-
-
-def test_node_created_at_roundtrip_isoformat():
-    """Test Node created_at survives roundtrip via isoformat."""
-    original = Node(content={"value": "test"})
-
-    # Serialize with isoformat
-    data = original.to_dict(mode="db", created_at_format="isoformat")
-    assert isinstance(data["created_at"], str)
-
-    # Deserialize - Element validator handles ISO strings
-    restored = Node.from_dict(data)
-    assert restored.created_at == original.created_at
-
-
 # ============================================================================
-# Content Validation Edge Cases
+# Issue #49: Parametrize Node.content primitive rejection tests
 # ============================================================================
-#
-# Design aspect validated: Content field polymorphism edge cases, embedding
-# validation corner cases, and metadata handling robustness.
-#
-# These tests cover scenarios where content is not a standard Node, embedding
-# data comes from databases (JSON strings), and metadata has unexpected types.
-# Critical for production resilience when deserializing from external sources.
+# Refactored from 5 individual tests to single parametrized test covering
+# 9 primitive types (str, int, float, bool, list, tuple, set, frozenset, bytes)
 
 
-class CustomElement(Element):
-    """Custom Element that's not a Node - for testing content polymorphism."""
+@pytest.mark.parametrize(
+    "invalid_content,type_name",
+    [
+        ("primitive string", "str"),
+        (42, "int"),
+        (3.14, "float"),
+        (True, "bool"),
+        ([1, 2, 3], "list"),
+        ((1, 2, 3), "tuple"),
+        ({1, 2, 3}, "set"),
+        (frozenset([1, 2]), "frozenset"),
+        (b"bytes", "bytes"),
+    ],
+)
+def test_node_content_rejects_primitives(invalid_content, type_name):
+    """Test that primitive content types raise TypeError with helpful message.
 
-    value: int = 0
-
-
-class TestNodeContentValidationEdgeCases:
-    """
-    Test Node content validation edge cases and error handling.
-
-    Edge Cases:
-        - Content with non-Node Elements: Polymorphic content handling
-        - Embedding JSON parsing errors: Invalid vector data from databases
-        - Metadata edge cases: Complex nested structures and type mismatches
-        - Embedding type coercion: Integer vectors from external sources
-
-    Scenarios:
-        - Element in Node.content: Polymorphic serialization of non-Node Elements
-        - Invalid embedding JSON: Graceful error handling with clear messages
-        - Metadata with non-dict types: Robustness against malformed data
-        - JSON string embeddings: Database compatibility (PostgreSQL JSONB)
-
-    Invariants Tested:
-        - Content polymorphism: Any Element subclass as content
-        - Embedding validation: Type coercion and format parsing
-        - Metadata robustness: Handle edge case values gracefully
-        - Error messages: Clear diagnostic information for failures
+    Pattern:
+        Strict type enforcement for structured data
 
     Design Rationale:
-        These edge cases ensure Node handles real-world scenarios:
-        - Legacy data without proper metadata structure
-        - Database queries returning JSON-serialized vectors
-        - Custom Element types in graph-of-graphs patterns
-        - Malformed input from external systems (APIs, migrations)
+        Node.content constraint forces structured, query-able data.
+        Primitives must be wrapped in dict or stored in Element.metadata.
 
-        Trade-offs:
-        - Strictness vs Resilience: Reject clearly invalid data (empty embeddings)
-          but coerce recoverable data (int→float, JSON string→list)
-        - Performance vs Safety: JSON parsing overhead for database compatibility
-        - Type Safety vs Flexibility: Allow Any content but validate on access
+    Architectural Identity:
+        Node is the composition layer - content must be:
+        - dict: Unstructured but query-able (JSONB one-stop-shop)
+        - Serializable: Rich nested structures (graph-of-graphs)
+        - BaseModel: Pydantic models (typed + validated)
+        - None: Optional content
+
+    Rejected Types:
+        - str, int, float, bool: Not structured or query-able
+        - list, tuple, set, frozenset, bytes: Not key-value namespaces
+        - Use Element.metadata for simple key-value pairs instead
+
+    Error Message Requirements:
+        - Identifies type constraint
+        - Shows actual type received (parametrized type_name)
+        - Provides actionable guidance (wrap in dict or use Element.metadata)
+
+    Use Case:
+        Migration from unstructured APIs requires explicit structured conversion.
+        Forces pit-of-success: developers must think in structured terms.
+
+    Coverage:
+        All 9 primitive types rejected with clear error messages including:
+        - Type name in error ("Got str", "Got int", etc.)
+        - Migration guidance: content={'value': ...}
+
+    Expected:
+        TypeError with guidance to use dict or Element.metadata
     """
-
-    def test_validate_content_with_element_not_node(self):
-        """Test content validator deserializes non-Node Element subclasses via lion_class.
-
-        Pattern:
-            Polymorphic content deserialization for Element subtypes
-
-        Edge Case:
-            Content is an Element subclass that's not a Node (CustomElement)
-
-        Design Rationale:
-            Graph-of-graphs patterns require storing arbitrary Elements in Node.content.
-            Example: Workflow node contains metadata Element with execution history.
-
-        Validation Strategy:
-            1. Detect dict with lion_class metadata
-            2. Route to Element.from_dict() (not Node-specific)
-            3. Deserialize to correct Element subclass via polymorphism
-
-        Use Case:
-            Heterogeneous graph where nodes contain different Element types:
-            - DocumentNode.content = TextElement
-            - WorkflowNode.content = ExecutionMetadata (Element subclass)
-            - TaskNode.content = nested Node
-
-        Expected:
-            Content deserializes as CustomElement, not base Element or Node
-        """
-        # Create a non-Node Element with lion_class metadata
-        elem = CustomElement(value=42)
-        elem_dict = elem.to_dict()
-
-        # Content is an Element dict with lion_class but NOT a Node
-        # Validator should use Element.from_dict to restore correct type
-        node = Node(content=elem_dict)
-
-        # Content should be deserialized as CustomElement (not Node)
-        assert isinstance(node.content, CustomElement)
-        assert isinstance(node.content, Element)
-        assert not isinstance(node.content, Node)
-        assert node.content.value == 42
-
-    def test_embedding_invalid_json_string(self):
-        """Test malformed embedding JSON raises clear ValueError.
-
-        Pattern:
-            Defensive validation with actionable error messages
-
-        Edge Case:
-            Database returns corrupted JSON string for embedding field
-
-        Design Rationale:
-            JSON string parsing is common failure mode when deserializing from databases.
-            Clear error messages enable fast debugging in production.
-
-        Error Message Requirements:
-            - Identifies field: "embedding"
-            - Identifies format: "JSON string"
-            - Identifies action: "Failed to parse"
-
-        Use Case:
-            PostgreSQL JSONB column corrupted during migration or manual edit
-
-        Expected:
-            ValueError with "Failed to parse embedding JSON string" message
-        """
-        # Pass invalid JSON string as embedding
-        with pytest.raises(ValueError, match="Failed to parse embedding JSON string"):
-            Node(content={"value": "test"}, embedding="not valid json [[[")
-
-    def test_embedding_malformed_json_string(self):
-        """Test incomplete embedding JSON raises clear ValueError.
-
-        Pattern:
-            Defensive validation for truncated data
-
-        Edge Case:
-            JSON string truncated during network transfer or database query limit
-
-        Expected:
-            ValueError with "Failed to parse embedding JSON string" message
-        """
-        with pytest.raises(ValueError, match="Failed to parse embedding JSON string"):
-            Node(content={"value": "test"}, embedding='{"incomplete": ')
-
-    def test_from_dict_with_non_dict_metadata(self):
-        """Test non-dict metadata disables polymorphism but doesn't crash.
-
-        Pattern:
-            Graceful degradation for malformed input
-
-        Edge Case:
-            Metadata field is string/number instead of dict (legacy data or bug)
-
-        Design Rationale:
-            Prioritize resilience over strict validation. Node creation should succeed
-            even with malformed metadata, just without polymorphic deserialization.
-
-        Trade-off:
-            - Safety: Don't crash on unexpected data
-            - Capability Loss: No polymorphism without dict metadata (lion_class unavailable)
-
-        Use Case:
-            Importing nodes from external systems that don't follow Lion conventions
-
-        Expected:
-            Node created successfully, metadata stored as-is, no polymorphism
-        """
-        # Create data with metadata as string (not dict)
-        data = {"content": {"value": "test"}, "metadata": "not a dict"}
-
-        # Should handle non-dict metadata (lion_class = None)
-        node = Node.from_dict(data)
-
-        # Should still create node, just no polymorphism
-        assert isinstance(node, Node)
-        assert node.content == {"value": "test"}
-
-    def test_from_dict_with_metadata_as_list(self):
-        """Test metadata as list raises validation error.
-
-        Pattern:
-            Strict validation for clearly wrong types
-
-        Edge Case:
-            Metadata field is list instead of dict (data corruption or API mismatch)
-
-        Design Rationale:
-            Lists as metadata have no recovery path (can't extract lion_class).
-            Better to fail fast with clear error than silently create invalid state.
-
-        Contrast with test_from_dict_with_non_dict_metadata:
-            - String metadata: Degrades gracefully (just stored as-is)
-            - List metadata: No graceful degradation (reject immediately)
-
-        Expected:
-            ValidationError or TypeError from Pydantic
-        """
-        data = {"content": {"value": "test"}, "metadata": ["list", "not", "dict"]}
-
-        # Pydantic will reject list as metadata
-        with pytest.raises((ValueError, TypeError)):
-            Node.from_dict(data)
-
-    def test_adapt_async_kwargs_defaults_skipped(self):
-        """Test adapter kwargs.setdefault is tested via integration tests.
-
-        Pattern:
-            Skip tests that duplicate coverage in other test suites
-
-        Rationale:
-            Adapter kwargs.setdefault() is pydapter internals tested by pydapter's
-            own test suite. Integration tests in this file validate end-to-end
-            adapter behavior (test_node_adapt_to_toml, test_node_adapt_from_yaml).
-
-        Expected:
-            Test skipped with clear reason
-        """
-        pytest.skip("Adapter kwargs.setdefault tested by integration tests")
-
-    def test_embedding_json_string_with_ints(self):
-        """Test embedding JSON string with integers coerces to floats.
-
-        Pattern:
-            Type coercion for database compatibility
-
-        Edge Case:
-            Database stores embedding as JSON "[1, 2, 3]" (integer array)
-
-        Design Rationale:
-            Embeddings are mathematically float vectors, but databases/APIs may
-            serialize as integers for compactness. Coercion enables seamless
-            integration without manual type conversion at every query site.
-
-        Use Case:
-            PostgreSQL JSONB storing [1, 2, 3] retrieves as JSON string,
-            validator parses to [1.0, 2.0, 3.0] automatically
-
-        Complexity:
-            O(n) coercion where n = embedding dimension (typically 768-4096)
-
-        Expected:
-            All values coerced to float, original ints preserved as 1.0, 2.0, 3.0
-        """
-        import orjson
-
-        embedding = [1, 2, 3]
-        json_str = orjson.dumps(embedding).decode()
-
-        node = Node(content={"value": "test"}, embedding=json_str)
-
-        # Should parse and coerce to floats
-        assert node.embedding == [1.0, 2.0, 3.0]
-        assert all(isinstance(x, float) for x in node.embedding)
-
-    def test_embedding_json_string_with_mixed_numbers(self):
-        """Test embedding JSON string with mixed int/float values.
-
-        Pattern:
-            Type coercion with mixed numeric types
-
-        Edge Case:
-            Embedding vector has both integers and floats (sparse vector encoding)
-
-        Expected:
-            All values parsed correctly, integers coerced to floats
-        """
-        import orjson
-
-        embedding = [1, 2.5, 3, 4.7]
-        json_str = orjson.dumps(embedding).decode()
-
-        node = Node(content={"value": "test"}, embedding=json_str)
-
-        # Should parse correctly
-        assert node.embedding == [1.0, 2.5, 3.0, 4.7]
-
-    def test_content_with_element_dict_no_lion_class(self):
-        """Test content dict without lion_class remains as plain dict.
-
-        Pattern:
-            Graceful degradation when polymorphic metadata absent
-
-        Edge Case:
-            Content is dict that looks like Element but lacks lion_class
-            (legacy data, external systems, manual construction)
-
-        Design Rationale:
-            Without lion_class, cannot determine target type for deserialization.
-            Better to preserve as plain dict than guess or crash.
-
-        Trade-off:
-            - Safety: Don't crash, don't guess types
-            - Type Loss: Lose Element identity (acceptable for legacy data)
-
-        Use Case:
-            Migrating nodes from non-Lion systems where content is arbitrary JSON
-
-        Expected:
-            Content remains as dict, not converted to Element
-        """
-        # Dict with metadata but no lion_class
-        content_dict = {"key": "value", "metadata": {"custom": "data"}}
-
-        node = Node(content=content_dict)
-
-        # Should remain as dict (not converted to Element)
-        assert isinstance(node.content, dict)
-        assert node.content == content_dict
-
-    def test_content_with_nested_node_in_node_registry(self):
-        """Test content with custom Node subclass deserializes correctly.
-
-        Pattern:
-            Nested polymorphic deserialization via registry
-
-        Edge Case:
-            Custom Node subclass (not predefined) in content field
-
-        Design Rationale:
-            Registry pattern enables zero-config subclass polymorphism.
-            Custom Node subclasses automatically registered via __pydantic_init_subclass__.
-
-        Validation Flow:
-            1. CustomNode defined → auto-registered in NODE_REGISTRY
-            2. CustomNode.to_dict() → includes lion_class="CustomNode"
-            3. Node(content=custom_dict) → content validator detects lion_class
-            4. Element.from_dict(custom_dict) → routes to CustomNode
-            5. Result: content is CustomNode instance, not base Node
-
-        Use Case:
-            Domain-specific Node subclasses (PersonNode, DocumentNode) nested
-            in generic workflow nodes for type-safe deserialization
-
-        Expected:
-            Content deserializes as CustomNode with custom_field preserved
-        """
-
-        class CustomNode(Node):
-            """Custom Node subclass."""
-
-            custom_field: str = "test"
-
-        # Create custom node
-        custom = CustomNode(custom_field="value")
-        custom_dict = custom.to_dict()
-
-        # Create outer node with custom node as content
-        outer = Node(content=custom_dict)
-
-        # Content should be deserialized as CustomNode
-        assert isinstance(outer.content, CustomNode)
-        assert outer.content.custom_field == "value"
-
-    def test_primitive_content_raises_type_error(self):
-        """Test that primitive content types raise TypeError with helpful message.
-
-        Pattern:
-            Strict type enforcement for structured data
-
-        Design Rationale:
-            Node.content constraint forces structured, query-able data.
-            Primitives must be wrapped in dict or stored in Element.metadata.
-
-        Architectural Identity:
-            Node is the composition layer - content must be:
-            - dict: Unstructured but query-able (JSONB one-stop-shop)
-            - Serializable: Rich nested structures (graph-of-graphs)
-            - BaseModel: Pydantic models (typed + validated)
-            - None: Optional content
-
-        Rejected Types:
-            - str, int, float, bool: Not structured or query-able
-            - list, tuple: Not key-value namespaces
-            - Use Element.metadata for simple key-value pairs instead
-
-        Error Message Requirements:
-            - Identifies type constraint
-            - Shows actual type received
-            - Provides actionable guidance (wrap in dict or use Element.metadata)
-
-        Use Case:
-            Migration from unstructured APIs requires explicit structured conversion.
-            Forces pit-of-success: developers must think in structured terms.
-
-        Expected:
-            TypeError with guidance to use dict or Element.metadata
-        """
-        # Test primitive string rejection
-        with pytest.raises(
-            TypeError, match="content must be Serializable, BaseModel, dict, or None"
-        ):
-            Node(content="primitive string")
-
-        # Test primitive int rejection with type in error message
-        with pytest.raises(TypeError, match="Got int"):
-            Node(content=42)
-
-        # Test primitive float rejection
-        with pytest.raises(TypeError, match="Got float"):
-            Node(content=3.14)
-
-        # Test primitive bool rejection
-        with pytest.raises(TypeError, match="Got bool"):
-            Node(content=True)
-
-        # Test list rejection (not a namespace)
-        with pytest.raises(TypeError, match="Got list"):
-            Node(content=[1, 2, 3])
+    # Validate error message contains type name and migration guidance
+    with pytest.raises(
+        TypeError,
+        match=rf"content must be Serializable, BaseModel, dict, or None\. Got {type_name}\.",
+    ):
+        Node(content=invalid_content)
