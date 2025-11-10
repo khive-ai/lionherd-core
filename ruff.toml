@@ -75,6 +75,9 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 # Config files can have broad exceptions
 "conftest.py" = ["F401", "F811"]
 
+# Tutorial notebooks demonstrating manual resource management
+"notebooks/tutorials/concurrency/resource_leak_detection.ipynb" = ["SIM115"]
+
 [lint.isort]
 # isort configuration (replaces tool.isort in pyproject.toml)
 known-first-party = ["lionherd"]

@@ -51,10 +51,10 @@ def _parse_str(
 
     # JSON path
     if fuzzy_parse:
-        # If the caller supplied a fuzzy parser in scope, use it; otherwise fallback.
-        # We intentionally do not import anything heavy here.
+        # fuzzy_json() accepts only a string parameter, no kwargs
+        # Passing kwargs causes TypeError, which was silently suppressed
         with contextlib.suppress(NameError):
-            return fuzzy_json(s, **kwargs)  # type: ignore[name-defined]
+            return fuzzy_json(s)  # type: ignore[name-defined]
     # orjson.loads() doesn't accept kwargs like parse_float, object_hook, etc.
     return orjson.loads(s)
 
