@@ -994,8 +994,6 @@ def test_node_embedding_roundtrip():
     assert restored.embedding == original.embedding
 
 
-
-
 # ============================================================================
 # Issue #49: Parametrize Node.content primitive rejection tests
 # ============================================================================
