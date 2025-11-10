@@ -124,8 +124,7 @@ Arbitrary metadata. Auto-converts non-dict objects via `to_dict()`.
 
 #### `from_dict()`
 
-Deserialize from dictionary with **polymorphic type restoration** via
-`NODE_REGISTRY`.
+Deserialize from dictionary with **polymorphic type restoration** and optional **content deserialization** for round-trip transformations.
 
 **Signature:**
 
@@ -135,6 +134,7 @@ def from_dict(
     cls,
     data: dict[str, Any],
     meta_key: str | None = None,
+    content_deserializer: Callable[[Any], Any] | None = None,
     **kwargs: Any,
 ) -> Node: ...
 ```
@@ -144,6 +144,9 @@ def from_dict(
 - `data` (dict[str, Any]): Serialized node dictionary (from `to_dict()`)
 - `meta_key` (str, optional): Restore metadata from this key (db mode
   compatibility). Default: `'metadata'`
+- `content_deserializer` (Callable[[Any], Any], optional): Custom function to deserialize content field.
+  Applied to content field before model_validate. Enables round-trip serialization with custom transformations.
+  Must be symmetric inverse of content_serializer used in to_dict(). Default: None
 - `**kwargs` (Any): Forwarded to Pydantic's `model_validate()`
 
 **Returns:**
@@ -156,31 +159,47 @@ def from_dict(
 ```python
 from lionherd_core.base import Node
 
-# Define custom node type
+# Polymorphic deserialization
 class PersonNode(Node):
     name: str
     age: int
 
-# Serialize
 person = PersonNode(name="Alice", age=30, content={"bio": "text"})
 data = person.to_dict()
-# {'id': '...', 'name': 'Alice', 'age': 30, 'content': 'bio text',
-#  'metadata': {'lion_class': '...PersonNode'}}
-
-# Polymorphic deserialization via base Node.from_dict()
 restored = Node.from_dict(data)
 type(restored).__name__  # 'PersonNode' (correct subclass)
 restored.name  # 'Alice'
 
-# DB mode deserialization (node_metadata key)
-db_data = {
-    'id': '...',
-    'name': 'Bob',
-    'age': 25,
-    'node_metadata': {'lion_class': '...PersonNode'}
-}
-restored = Node.from_dict(db_data, meta_key='node_metadata')
-type(restored).__name__  # 'PersonNode'
+# Round-trip with compression
+import json, zlib, base64
+
+def compress(content):
+    json_bytes = json.dumps(content).encode()
+    compressed = zlib.compress(json_bytes)
+    return {"compressed": base64.b64encode(compressed).decode()}
+
+def decompress(content):
+    compressed = base64.b64decode(content["compressed"])
+    json_bytes = zlib.decompress(compressed)
+    return json.loads(json_bytes)
+
+node = Node(content={"large": "data" * 100})
+data = node.to_dict(content_serializer=compress)
+restored = Node.from_dict(data, content_deserializer=decompress)
+# Original content restored transparently
+
+# Round-trip with encryption
+def encrypt(content):
+    # Production: use cryptography.fernet or similar
+    return {"encrypted": encrypt_data(content)}
+
+def decrypt(content):
+    return decrypt_data(content["encrypted"])
+
+node = Node(content={"sensitive": "data"})
+data = node.to_dict(content_serializer=encrypt)
+restored = Node.from_dict(data, content_deserializer=decrypt)
+# Sensitive content encrypted at rest, decrypted on access
 ```
 
 **See Also:**
@@ -427,21 +446,46 @@ data = node.to_dict(
 
 **See Also:**
 
-- `from_dict()`: Deserialize from dictionary
+- `from_dict()`: Deserialize from dictionary with `content_deserializer` for round-trip support
 
 **Notes:**
 
-**Content Serializer Use Cases:**
+**Content Serializer Use Cases (Round-Trip Patterns):**
 
-1. **Compression/Encryption**: Transform content during export
-2. **External Storage**: Replace content with reference to external storage system
-3. **Format Conversion**: Convert content to specific format for API responses
-4. **Type Coercion**: Force content to specific serialization format
+1. **Compression**: Transform large content for storage efficiency
+   - Serializer: `json.dumps() → zlib.compress() → base64.encode()`
+   - Deserializer: `base64.decode() → zlib.decompress() → json.loads()`
+   - Use case: Store 100KB documents as 10KB compressed data
 
-**Important**: `content_serializer` is **one-way** (serialization only). Deserialization
-must handle the transformed format manually. If serializer returns primitive types (str, int, etc.),
-deserialization will fail due to Node's structured content validation. Always return dict for
-deserialization compatibility.
+2. **Encryption**: Protect sensitive content at rest
+   - Serializer: `encrypt(content) → {"encrypted": "..."}`
+   - Deserializer: `decrypt(content["encrypted"]) → original`
+   - Use case: HIPAA/GDPR compliance for PII storage
+
+3. **External Storage**: Store large content externally (S3, CDN)
+   - Serializer: `store_to_s3(content) → {"ref": "s3://..."}`
+   - Deserializer: `fetch_from_s3(ref) → original`
+   - Use case: Keep database lightweight, store videos/datasets externally
+
+4. **Format Conversion**: API-specific serialization
+   - Serializer: `to_api_format(content) → {"data": ..., "version": "v1"}`
+   - Deserializer: `from_api_format(data) → original`
+   - Use case: Transform content for external API consumption
+
+**Round-Trip Pattern:**
+
+```python
+# Serialize
+data = node.to_dict(content_serializer=transform_fn)
+
+# Deserialize (requires symmetric inverse)
+restored = Node.from_dict(data, content_deserializer=inverse_fn)
+
+# restored.content == original.content ✓
+```
+
+**Important**: Always provide symmetric `content_deserializer` to `from_dict()` for round-trip correctness.
+Without deserializer, content remains in transformed format after deserialization.
 
 ### Special Methods (Inherited from Element)
 

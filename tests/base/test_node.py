@@ -1876,3 +1876,423 @@ def test_node_from_dict_with_non_dict_metadata():
     assert type(node) is Node
     # Note: Pydantic converts non-dict metadata to default {} after from_dict
     assert isinstance(node.metadata, dict)
+
+
+# ==============================================================================
+# content_deserializer Tests (Round-Trip Serialization)
+# ==============================================================================
+
+
+def test_node_content_deserializer_basic_roundtrip():
+    """Test basic round-trip serialization with content_deserializer.
+
+    Pattern:
+        Symmetric transformation: to_dict(serializer) + from_dict(deserializer) = original
+
+    Design Rationale:
+        content_serializer enables custom transformations (compression, encryption, etc).
+        content_deserializer completes the round-trip, restoring original content.
+        Both parameters must be symmetric inverses for round-trip correctness.
+
+    Use Case:
+        Store Node with custom content format, then restore original content on load.
+        Example: API client serializes for transport, server deserializes on receipt.
+
+    Coverage:
+        Lines 251-263: content_deserializer validation and application
+
+    Expected:
+        Original content restored after serialization + deserialization cycle
+    """
+    # Original node
+    original = Node(content={"key": "value", "nested": {"data": 123}})
+
+    # Serialize with custom serializer
+    def custom_serializer(content):
+        return {"transformed": True, "original": content}
+
+    data = original.to_dict(content_serializer=custom_serializer)
+    assert data["content"] == {
+        "transformed": True,
+        "original": {"key": "value", "nested": {"data": 123}},
+    }
+
+    # Deserialize with inverse deserializer
+    def custom_deserializer(content):
+        return content["original"]
+
+    restored = Node.from_dict(data, content_deserializer=custom_deserializer)
+
+    # Verify round-trip: restored content matches original
+    assert restored.content == original.content
+    assert restored.id == original.id
+
+
+def test_node_content_deserializer_compression_roundtrip():
+    """Test round-trip with compression/decompression.
+
+    Pattern:
+        Real-world transformation pattern: compress for storage, decompress for use
+
+    Design Rationale:
+        Large content (documents, embeddings) bloats database rows.
+        Compression reduces storage costs and improves query performance.
+        Round-trip enables transparent compression without code changes.
+
+    Real-World Scenario:
+        Store 100KB document as 10KB compressed data in PostgreSQL JSONB column.
+        Application code works with original uncompressed content transparently.
+
+    Implementation:
+        Serializer: json.dumps(content) → zlib.compress → base64.encode → dict
+        Deserializer: dict → base64.decode → zlib.decompress → json.loads
+
+    Coverage:
+        Lines 251-263: content_deserializer with complex transformation
+
+    Expected:
+        Compressed storage, transparent decompression, original content restored
+    """
+    import base64
+    import json
+    import zlib
+
+    # Original node with large content
+    original = Node(content={"document": "large data" * 100, "metadata": {"size": "large"}})
+
+    # Compression serializer
+    def compress_content(content):
+        json_bytes = json.dumps(content).encode()
+        compressed = zlib.compress(json_bytes, level=9)
+        encoded = base64.b64encode(compressed).decode()
+        return {"compressed": encoded, "format": "zlib+base64+json"}
+
+    # Decompression deserializer (symmetric inverse)
+    def decompress_content(content):
+        if content.get("format") != "zlib+base64+json":
+            raise ValueError("Unknown compression format")
+        encoded = content["compressed"]
+        compressed = base64.b64decode(encoded)
+        json_bytes = zlib.decompress(compressed)
+        return json.loads(json_bytes)
+
+    # Serialize with compression
+    data = original.to_dict(mode="db", content_serializer=compress_content)
+
+    # Verify content is compressed (should be much smaller)
+    compressed_size = len(data["content"]["compressed"])
+    original_size = len(json.dumps(original.content))
+    # Compression should reduce size significantly
+    assert compressed_size < original_size
+
+    # Deserialize with decompression
+    restored = Node.from_dict(data, content_deserializer=decompress_content)
+
+    # Verify round-trip: original content restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_encryption_roundtrip():
+    """Test round-trip with encryption/decryption.
+
+    Pattern:
+        Security transformation: encrypt sensitive content for storage
+
+    Design Rationale:
+        Sensitive data (PII, credentials, health records) must be encrypted at rest.
+        Application code should work with plaintext transparently.
+        Encryption/decryption happens at serialization boundaries automatically.
+
+    Real-World Scenario:
+        Store encrypted patient records in database (HIPAA compliance).
+        Application retrieves and decrypts transparently on access.
+
+    Implementation:
+        Simplified encryption (demo only - use proper crypto in production):
+        - Serializer: XOR with key → base64 encode
+        - Deserializer: base64 decode → XOR with key
+
+    Coverage:
+        Lines 251-263: content_deserializer with encryption workflow
+
+    Expected:
+        Encrypted storage, transparent decryption, original content restored
+
+    Note:
+        This uses toy encryption for testing. Production should use proper
+        cryptography libraries (cryptography.fernet, NaCl, etc).
+    """
+    import base64
+
+    # Toy encryption (XOR with key) - DO NOT USE IN PRODUCTION
+    def toy_encrypt(content_dict, key=42):
+        json_str = str(content_dict)
+        encrypted_bytes = bytes(ord(c) ^ key for c in json_str)
+        return {"encrypted": base64.b64encode(encrypted_bytes).decode(), "algorithm": "toy_xor"}
+
+    def toy_decrypt(encrypted_dict, key=42):
+        if encrypted_dict.get("algorithm") != "toy_xor":
+            raise ValueError("Unknown encryption algorithm")
+        encrypted_bytes = base64.b64decode(encrypted_dict["encrypted"])
+        decrypted_str = "".join(chr(b ^ key) for b in encrypted_bytes)
+        # Safely evaluate the dict string
+        import ast
+
+        return ast.literal_eval(decrypted_str)
+
+    # Original node with sensitive content
+    original = Node(
+        content={"patient_id": "12345", "diagnosis": "confidential", "ssn": "***-**-****"}
+    )
+
+    # Serialize with encryption
+    data = original.to_dict(content_serializer=toy_encrypt)
+
+    # Verify content is encrypted (not plaintext)
+    assert "encrypted" in data["content"]
+    assert "patient_id" not in str(data["content"]["encrypted"])  # Sensitive data not visible
+
+    # Deserialize with decryption
+    restored = Node.from_dict(data, content_deserializer=toy_decrypt)
+
+    # Verify round-trip: original sensitive content restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_external_storage_roundtrip():
+    """Test round-trip with external storage references.
+
+    Pattern:
+        Large content stored externally (S3, CDN), Node stores reference only
+
+    Design Rationale:
+        Very large content (videos, datasets, large documents) shouldn't be in database.
+        Store content externally, keep lightweight reference in Node.
+        Transparent fetch on deserialization provides seamless access.
+
+    Real-World Scenario:
+        Store 100MB video in S3, Node contains {"ref": "s3://bucket/video.mp4", "size": 100MB}.
+        On deserialization, fetch video from S3 transparently.
+
+    Implementation:
+        Serializer: Store content → external storage → return reference dict
+        Deserializer: Fetch content from external storage using reference
+
+    Coverage:
+        Lines 251-263: content_deserializer with external storage fetch
+
+    Expected:
+        Reference stored in database, original content fetched on deserialization
+
+    Note:
+        This simulates external storage with in-memory dict for testing.
+        Production would use boto3 (S3), Azure SDK, GCS client, etc.
+    """
+    # Simulate external storage (S3, database, etc)
+    EXTERNAL_STORAGE = {}
+
+    def store_external(content):
+        """Store content externally, return reference."""
+        import hashlib
+        import json
+
+        # Generate reference ID from content hash
+        content_hash = hashlib.sha256(json.dumps(content).encode()).hexdigest()[:16]
+        ref_id = f"ext://{content_hash}"
+
+        # Store in external storage
+        EXTERNAL_STORAGE[ref_id] = content
+
+        # Return reference for Node
+        return {"ref": ref_id, "size": len(json.dumps(content)), "type": "external"}
+
+    def fetch_external(ref_dict):
+        """Fetch content from external storage using reference."""
+        if ref_dict.get("type") != "external":
+            raise ValueError("Not an external storage reference")
+
+        ref_id = ref_dict["ref"]
+        if ref_id not in EXTERNAL_STORAGE:
+            raise ValueError(f"External content not found: {ref_id}")
+
+        return EXTERNAL_STORAGE[ref_id]
+
+    # Original node with large content
+    original = Node(content={"dataset": [i for i in range(1000)], "metadata": {"rows": 1000}})
+
+    # Serialize with external storage
+    data = original.to_dict(content_serializer=store_external)
+
+    # Verify only reference stored (not full content)
+    assert "ref" in data["content"]
+    assert data["content"]["type"] == "external"
+    assert data["content"]["ref"].startswith("ext://")
+    # Verify full content NOT in serialized data
+    assert "dataset" not in str(data["content"])
+
+    # Deserialize with external fetch
+    restored = Node.from_dict(data, content_deserializer=fetch_external)
+
+    # Verify round-trip: original content fetched and restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_not_callable_raises():
+    """Test content_deserializer fails fast if not callable.
+
+    Pattern:
+        Fail-fast validation prevents runtime errors downstream
+
+    Design Rationale:
+        Invalid deserializer (string, int, dict) would cause cryptic errors later.
+        Fail immediately with clear error message during from_dict call.
+
+    Coverage:
+        Lines 253-256: content_deserializer callable validation
+
+    Expected:
+        TypeError raised with clear message about callable requirement
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"key": "value"},
+    }
+
+    # Test with non-callable (string)
+    with pytest.raises(TypeError, match="content_deserializer must be callable"):
+        Node.from_dict(data, content_deserializer="not_callable")
+
+    # Test with non-callable (dict)
+    with pytest.raises(TypeError, match="content_deserializer must be callable"):
+        Node.from_dict(data, content_deserializer={"not": "callable"})
+
+
+def test_node_content_deserializer_broken_deserializer_fails():
+    """Test content_deserializer fails gracefully when deserializer raises exception.
+
+    Pattern:
+        Fail-fast with clear error message when deserializer implementation broken
+
+    Design Rationale:
+        Broken deserializer (wrong format, corrupt data, missing keys) should fail
+        with clear error pointing to deserializer, not obscure pydantic validation error.
+
+    Error Handling Strategy:
+        Catch deserializer exceptions, wrap with ValueError explaining what failed
+
+    Coverage:
+        Lines 259-263: content_deserializer exception handling
+
+    Expected:
+        ValueError raised with message "content_deserializer failed: <original error>"
+        Original exception preserved via raise...from for debugging
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"compressed": "data"},
+    }
+
+    # Deserializer that raises exception
+    def broken_deserializer(content):
+        raise RuntimeError("Decompression failed: corrupt data")
+
+    # Should fail with clear error message
+    with pytest.raises(ValueError, match="content_deserializer failed: Decompression failed"):
+        Node.from_dict(data, content_deserializer=broken_deserializer)
+
+
+def test_node_content_deserializer_with_none_content():
+    """Test content_deserializer handles None content gracefully.
+
+    Pattern:
+        Defensive programming for missing content field
+
+    Design Rationale:
+        content_deserializer only applies if "content" key exists in data dict.
+        If content is missing or None, skip deserializer (no transformation needed).
+
+    Edge Case:
+        Node with content=None is valid (uncommon but allowed).
+        Deserializer should not be called if content field missing.
+
+    Coverage:
+        Line 259: if "content" in data check (skips deserializer for None)
+
+    Expected:
+        Node created with None content, deserializer never called
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        # No "content" field
+    }
+
+    deserializer_called = False
+
+    def tracking_deserializer(content):
+        nonlocal deserializer_called
+        deserializer_called = True
+        return content
+
+    # Deserialize with None content
+    node = Node.from_dict(data, content_deserializer=tracking_deserializer)
+
+    # Verify deserializer never called (content field missing)
+    assert deserializer_called is False
+    assert node.content is None
+
+
+def test_node_content_deserializer_symmetric_with_embedding_format():
+    """Test content_deserializer works with other Node.from_dict parameters.
+
+    Pattern:
+        Feature composition: content_deserializer + meta_key integration
+
+    Design Rationale:
+        content_deserializer should compose cleanly with existing Node.from_dict parameters:
+        - meta_key (custom metadata field name)
+        - Polymorphic deserialization (lion_class routing)
+
+        All parameters work together without conflicts.
+
+    Use Case:
+        Database stores Node with:
+        - Custom metadata key ("node_meta" not "metadata")
+        - Compressed content
+        - Polymorphic type information (lion_class)
+
+        All features should work together in single from_dict call.
+
+    Coverage:
+        Lines 251-291: content_deserializer integration with full from_dict workflow
+
+    Expected:
+        All parameters applied correctly, original content and metadata restored
+    """
+    import json
+
+    # Compression helpers
+    def simple_compress(content):
+        return {"json": json.dumps(content)}
+
+    def simple_decompress(content):
+        return json.loads(content["json"])
+
+    # Create original with metadata
+    original = Node(content={"key": "value"}, metadata={"custom": "metadata"})
+
+    # Serialize with custom meta_key and compression
+    data = original.to_dict(mode="db", meta_key="node_meta", content_serializer=simple_compress)
+
+    # Verify custom meta_key used
+    assert "node_meta" in data
+    assert "metadata" not in data
+    # Verify compression applied
+    assert "json" in data["content"]
+
+    # Deserialize with symmetric parameters
+    restored = Node.from_dict(data, meta_key="node_meta", content_deserializer=simple_decompress)
+
+    # Verify all features work together
+    assert restored.content == original.content
+    assert restored.metadata["custom"] == "metadata"
+    assert restored.id == original.id

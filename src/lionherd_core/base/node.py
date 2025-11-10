@@ -215,10 +215,52 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         )
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], meta_key: str | None = None, **kwargs: Any) -> Node:
-        """Deserialize with polymorphic type restoration via NODE_REGISTRY."""
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        meta_key: str | None = None,
+        content_deserializer: Callable[[Any], Any] | None = None,
+        **kwargs: Any,
+    ) -> Node:
+        """Deserialize with polymorphic type restoration and optional content deserialization.
+
+        Args:
+            data: Dictionary to deserialize
+            meta_key: Custom metadata field name (default: "metadata" or "node_metadata")
+            content_deserializer: Optional callable to deserialize content field.
+                Applied to content field before model_validate. Enables round-trip
+                serialization with custom transformations (compression, encryption, etc.).
+            **kwargs: Additional arguments passed to model_validate()
+
+        Returns:
+            Deserialized Node instance
+
+        Examples:
+            # Round-trip with compression
+            compressed_data = node.to_dict(content_serializer=compress)
+            restored = Node.from_dict(compressed_data, content_deserializer=decompress)
+
+            # Round-trip with encryption
+            encrypted_data = node.to_dict(content_serializer=encrypt)
+            restored = Node.from_dict(encrypted_data, content_deserializer=decrypt)
+        """
         # Make a copy to avoid mutating input
         data = data.copy()
+
+        # Apply content_deserializer if provided
+        if content_deserializer is not None:
+            # Fail-fast validation
+            if not callable(content_deserializer):
+                raise TypeError(
+                    f"content_deserializer must be callable, got {type(content_deserializer).__name__}"
+                )
+
+            # Apply deserializer to content field
+            if "content" in data:
+                try:
+                    data["content"] = content_deserializer(data["content"])
+                except Exception as e:
+                    raise ValueError(f"content_deserializer failed: {e}") from e
 
         # Restore metadata from custom key if specified
         if meta_key and meta_key in data:
@@ -244,7 +286,9 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
                 lion_class.split(".")[-1]
             )
             if target_cls is not None and target_cls is not cls:
-                return target_cls.from_dict(data, **kwargs)
+                return target_cls.from_dict(
+                    data, content_deserializer=content_deserializer, **kwargs
+                )
 
         return cls.model_validate(data, **kwargs)
 
