@@ -11,6 +11,7 @@ import anyio.to_thread
 
 P = ParamSpec("P")
 R = TypeVar("R")
+T = TypeVar("T")
 
 __all__ = ("current_time", "is_coro_func", "run_sync", "sleep")
 
