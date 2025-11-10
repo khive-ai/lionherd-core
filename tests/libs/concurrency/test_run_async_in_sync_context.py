@@ -1,9 +1,9 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for run_async_in_sync_context (event loop handling via threading).
+"""Tests for run_async (event loop handling via threading).
 
-This module tests the run_async_in_sync_context utility function that was
+This module tests the run_async utility function that was
 extracted from duplicated code in EdgeCondition.__call__() and Graph.find_path()
 (issue #51).
 
@@ -29,7 +29,7 @@ import asyncio
 
 import pytest
 
-from lionherd_core.libs.concurrency import run_async_in_sync_context
+from lionherd_core.libs.concurrency import run_async
 
 
 # Test coroutines with various return types
@@ -59,36 +59,36 @@ async def failing_coro() -> None:
 
 
 class TestRunAsyncInSyncContextNoLoop:
-    """Tests for run_async_in_sync_context when NO event loop is running."""
+    """Tests for run_async when NO event loop is running."""
 
     def test_simple_return_value(self):
         """Should return correct value when no loop."""
-        result = run_async_in_sync_context(simple_coro())
+        result = run_async(simple_coro())
         assert result == 42
 
     def test_string_return_value(self):
         """Should correctly return string values."""
-        result = run_async_in_sync_context(string_coro())
+        result = run_async(string_coro())
         assert result == "test_value"
 
     def test_dict_return_value(self):
         """Should correctly return dict values."""
-        result = run_async_in_sync_context(dict_coro())
+        result = run_async(dict_coro())
         assert result == {"key": "value", "count": 123}
 
     def test_with_arguments(self):
         """Should handle coroutines with arguments."""
-        result = run_async_in_sync_context(coro_with_args(5, multiplier=3))
+        result = run_async(coro_with_args(5, multiplier=3))
         assert result == 15
 
     def test_exception_propagation(self):
         """Should propagate exceptions from coroutine."""
         with pytest.raises(ValueError, match="Test exception"):
-            run_async_in_sync_context(failing_coro())
+            run_async(failing_coro())
 
 
 class TestRunAsyncInSyncContextWithLoop:
-    """Tests for run_async_in_sync_context when event loop IS running.
+    """Tests for run_async when event loop IS running.
 
     The threading-based implementation creates a separate event loop in a new
     thread, so it works correctly even when called from within an async context.
@@ -97,32 +97,32 @@ class TestRunAsyncInSyncContextWithLoop:
     @pytest.mark.asyncio
     async def test_simple_return_value(self):
         """Should work correctly even when event loop exists."""
-        result = run_async_in_sync_context(simple_coro())
+        result = run_async(simple_coro())
         assert result == 42
 
     @pytest.mark.asyncio
     async def test_string_return_value(self):
         """Should correctly return string values with event loop."""
-        result = run_async_in_sync_context(string_coro())
+        result = run_async(string_coro())
         assert result == "test_value"
 
     @pytest.mark.asyncio
     async def test_dict_return_value(self):
         """Should correctly return dict values with event loop."""
-        result = run_async_in_sync_context(dict_coro())
+        result = run_async(dict_coro())
         assert result == {"key": "value", "count": 123}
 
     @pytest.mark.asyncio
     async def test_with_arguments(self):
         """Should handle coroutines with arguments in event loop."""
-        result = run_async_in_sync_context(coro_with_args(7, multiplier=4))
+        result = run_async(coro_with_args(7, multiplier=4))
         assert result == 28
 
     @pytest.mark.asyncio
     async def test_exception_propagation(self):
         """Should propagate exceptions from coroutine in event loop."""
         with pytest.raises(ValueError, match="Test exception"):
-            run_async_in_sync_context(failing_coro())
+            run_async(failing_coro())
 
 
 class TestRunAsyncInSyncContextIntegration:
@@ -139,7 +139,7 @@ class TestRunAsyncInSyncContextIntegration:
         async def _run():
             return await condition_apply(10, 5)
 
-        result = run_async_in_sync_context(_run())
+        result = run_async(_run())
         assert result is True
 
     def test_graph_find_path_pattern(self):
@@ -150,7 +150,7 @@ class TestRunAsyncInSyncContextIntegration:
             return False
 
         # Pattern from Graph.find_path
-        result = run_async_in_sync_context(check_condition())
+        result = run_async(check_condition())
         assert result is False
 
     def test_multiple_sequential_calls(self):
@@ -161,7 +161,7 @@ class TestRunAsyncInSyncContextIntegration:
             async def numbered_coro():
                 return i * 10
 
-            results.append(run_async_in_sync_context(numbered_coro()))
+            results.append(run_async(numbered_coro()))
 
         assert results == [0, 10, 20, 30, 40]
 
@@ -172,7 +172,7 @@ class TestRunAsyncInSyncContextThreading:
     def test_works_without_patching_asyncio(self):
         """Threading approach doesn't require patching asyncio internals."""
         # This test verifies the function works without any mocking or patching
-        result = run_async_in_sync_context(simple_coro())
+        result = run_async(simple_coro())
         assert result == 42
 
     @pytest.mark.asyncio
@@ -185,13 +185,13 @@ class TestRunAsyncInSyncContextThreading:
         captured_loop_id = None
 
         async def capture_loop_id():
-            """Capture the event loop ID inside run_async_in_sync_context."""
+            """Capture the event loop ID inside run_async."""
             nonlocal captured_loop_id
             loop = asyncio.get_running_loop()
             captured_loop_id = id(loop)
             return 123
 
-        result = run_async_in_sync_context(capture_loop_id())
+        result = run_async(capture_loop_id())
 
         # Verify the function returned correctly
         assert result == 123
