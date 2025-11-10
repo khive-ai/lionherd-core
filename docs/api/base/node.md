@@ -355,12 +355,99 @@ async def adapt_from_async(
 
 Same parameters and behavior as sync versions, but support async I/O adapters.
 
+### Serialization
+
+#### `to_dict()`
+
+Serialize Node to dictionary with optional custom content serialization.
+
+**Signature:**
+
+```python
+def to_dict(
+    self,
+    mode: Literal["python", "json", "db"] = "python",
+    created_at_format: Literal["datetime", "isoformat", "timestamp"] | None = None,
+    meta_key: str | None = None,
+    embedding_format: Literal["pgvector", "jsonb", "list"] | None = None,
+    content_serializer: Callable[[Any], Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]: ...
+```
+
+**Parameters:**
+
+- `mode` (str, optional): Serialization mode ('python', 'json', or 'db'). Default: 'python'
+- `created_at_format` (str, optional): Format for created_at field. Default: auto-selected by mode
+- `meta_key` (str, optional): Rename metadata field. Default: 'node_metadata' for db mode
+- `embedding_format` (str, optional): Format for embedding serialization ('pgvector', 'jsonb', or 'list'). Default: 'list'
+- `content_serializer` (Callable[[Any], Any], optional): Custom function to serialize content field.
+  If provided, content is excluded from model_dump and replaced with `content_serializer(self.content)` result.
+  Default: None (use default field serialization)
+- `**kwargs` (Any): Additional arguments passed to model_dump()
+
+**Returns:**
+
+- dict[str, Any]: Serialized Node dictionary
+
+**Examples:**
+
+```python
+from lionherd_core.base import Node
+
+# Default serialization
+node = Node(content={"key": "value"})
+data = node.to_dict()
+# {'id': '...', 'content': {'key': 'value'}, ...}
+
+# Custom content serialization
+def compress_content(content):
+    import json
+    return {"compressed": json.dumps(content)}
+
+node = Node(content={"large": "data"})
+data = node.to_dict(content_serializer=compress_content)
+# {'id': '...', 'content': {'compressed': '{"large": "data"}'}, ...}
+
+# Lambda serializer
+node = Node(content={"key": "value"})
+data = node.to_dict(content_serializer=lambda c: str(c))
+# {'id': '...', 'content': "{'key': 'value'}", ...}
+
+# Combine with embedding_format
+node = Node(content={"data": "value"}, embedding=[0.1, 0.2, 0.3])
+data = node.to_dict(
+    mode="db",
+    content_serializer=lambda c: {"ref": "external://12345"},
+    embedding_format="pgvector"
+)
+# {'id': '...', 'content': {'ref': 'external://12345'},
+#  'embedding': '[0.1,0.2,0.3]', 'node_metadata': {...}}
+```
+
+**See Also:**
+
+- `from_dict()`: Deserialize from dictionary
+
+**Notes:**
+
+**Content Serializer Use Cases:**
+
+1. **Compression/Encryption**: Transform content during export
+2. **External Storage**: Replace content with reference to external storage system
+3. **Format Conversion**: Convert content to specific format for API responses
+4. **Type Coercion**: Force content to specific serialization format
+
+**Important**: `content_serializer` is **one-way** (serialization only). Deserialization
+must handle the transformed format manually. If serializer returns primitive types (str, int, etc.),
+deserialization will fail due to Node's structured content validation. Always return dict for
+deserialization compatibility.
+
 ### Special Methods (Inherited from Element)
 
-Node inherits all Element methods. See [Element API documentation](element.md)
-for details:
+Node inherits Element methods with Node-specific behavior for `to_dict()` (documented above).
+See [Element API documentation](element.md) for other methods:
 
-- `to_dict(mode='python'|'json'|'db', **kwargs)`: Serialize to dictionary
 - `to_json(pretty=False, **kwargs)`: Serialize to JSON string
 - `from_json(json_str, **kwargs)`: Deserialize from JSON string
 - `class_name(full=False)`: Get class name without generic parameters
@@ -628,18 +715,73 @@ node = Node(content={"value": "test"})
 
 # Python mode - native types
 python_dict = node.to_dict(mode="python")
-# {'id': UUID('...'), 'created_at': datetime(...), 'content': 'test',
+# {'id': UUID('...'), 'created_at': datetime(...), 'content': {'value': 'test'},
 #  'metadata': {...}}
 
 # JSON mode - JSON-safe types
 json_dict = node.to_dict(mode="json")
-# {'id': '...', 'created_at': '2025-11-08T...', 'content': 'test',
+# {'id': '...', 'created_at': '2025-11-08T...', 'content': {'value': 'test'},
 #  'metadata': {...}}
 
 # DB mode - database format with node_metadata
 db_dict = node.to_dict(mode="db")
-# {'id': '...', 'created_at': '...', 'content': 'test',
+# {'id': '...', 'created_at': '...', 'content': {'value': 'test'},
 #  'node_metadata': {..., 'lion_class': '...'}}
+```
+
+### Custom Content Serialization
+
+```python
+from lionherd_core.base import Node
+
+# Example 1: External storage reference
+def create_external_ref(content):
+    """Replace large content with external storage reference."""
+    # Store content externally (S3, database, etc.)
+    ref_id = store_externally(content)
+    return {"ref": f"s3://bucket/{ref_id}", "size": len(str(content))}
+
+node = Node(content={"large": "data" * 1000})
+data = node.to_dict(mode="db", content_serializer=create_external_ref)
+# {'content': {'ref': 's3://bucket/abc123', 'size': 4000}, ...}
+
+# Example 2: Compression
+def compress_content(content):
+    """Compress content for storage."""
+    import json
+    import zlib
+    import base64
+
+    json_bytes = json.dumps(content).encode()
+    compressed = zlib.compress(json_bytes)
+    encoded = base64.b64encode(compressed).decode()
+    return {"compressed": encoded, "format": "zlib+base64"}
+
+node = Node(content={"large": "dataset"})
+data = node.to_dict(content_serializer=compress_content)
+# {'content': {'compressed': '...', 'format': 'zlib+base64'}, ...}
+
+# Example 3: Type coercion for API
+def api_format(content):
+    """Format content for API response."""
+    return {
+        "data": content,
+        "timestamp": datetime.now().isoformat(),
+        "version": "v1"
+    }
+
+node = Node(content={"key": "value"})
+api_data = node.to_dict(mode="json", content_serializer=api_format)
+# {'content': {'data': {'key': 'value'}, 'timestamp': '...', 'version': 'v1'}, ...}
+
+# Example 4: Combine with embedding_format
+node = Node(content={"doc": "text"}, embedding=[0.1, 0.2, 0.3])
+data = node.to_dict(
+    mode="db",
+    content_serializer=lambda c: {"summary": c.get("doc", "")[:50]},
+    embedding_format="pgvector"
+)
+# {'content': {'summary': 'text'}, 'embedding': '[0.1,0.2,0.3]', ...}
 ```
 
 ### Common Pitfalls
