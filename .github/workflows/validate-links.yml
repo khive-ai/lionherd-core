@@ -1,0 +1,90 @@
+name: Validate Links
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "notebooks/**/*.ipynb"
+      - "notebooks/**/*.md"
+      - "docs/**/*.md"
+      - "README.md"
+      - ".github/workflows/validate-links.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =============================================================================
+  # Check for broken links in notebooks and documentation
+  # =============================================================================
+  check-links:
+    name: Check Links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract links from notebooks
+        run: |
+          # Convert notebooks to markdown for link checking
+          mkdir -p /tmp/nb-markdown
+          find notebooks -name "*.ipynb" -type f | while read nb; do
+            # Extract markdown cells and links using jq
+            if command -v jq &> /dev/null; then
+              jq -r '.cells[] | select(.cell_type=="markdown") | .source | join("")' "$nb" > "/tmp/nb-markdown/$(basename "$nb" .ipynb).md" 2>/dev/null || true
+            fi
+          done
+
+      - name: Validate links with lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # Check markdown files and extracted notebook content
+          args: >-
+            --verbose
+            --no-progress
+            --exclude-path=.venv
+            --exclude-path=node_modules
+            --exclude-mail
+            --accept=200,201,202,203,204,301,302,307,308,429
+            --timeout=30
+            --max-redirects=5
+            --max-retries=3
+            --retry-wait-time=5
+            notebooks/**/*.md
+            /tmp/nb-markdown/*.md
+            docs/**/*.md
+            README.md
+          fail: true
+          jobSummary: true
+
+      - name: Check relative paths in notebooks
+        run: |
+          echo "Checking for common relative path issues in notebooks..."
+
+          # Check for incorrect relative paths to API docs
+          if grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"; then
+            echo "⚠️  Found potential incorrect relative paths (../../) in notebooks"
+            echo "Notebooks should use correct paths relative to their location"
+            grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints" || true
+          fi
+
+          # Check for broken internal references
+          echo "Checking for internal reference patterns..."
+          if grep -r "\.\./\.\./\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"; then
+            echo "❌ Found excessive parent directory traversal (../../../) - likely incorrect"
+            grep -r "\.\./\.\./\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"
+            exit 1
+          fi
+
+          echo "✅ Relative path sanity checks passed"
+
+      - name: Upload link check results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: link-check-results
+          path: |
+            lychee-out.md

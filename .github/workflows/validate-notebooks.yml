@@ -1,0 +1,64 @@
+name: Validate Notebooks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "notebooks/**/*.ipynb"
+      - ".github/workflows/validate-notebooks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =============================================================================
+  # Execute notebooks to catch execution errors
+  # =============================================================================
+  execute-notebooks:
+    name: Execute Notebooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --group dev --all-extras
+
+      - name: Execute tutorial notebooks
+        run: |
+          uv run pytest --nbmake notebooks/tutorials/ \
+            --nbmake-timeout=300 \
+            --tb=short \
+            -v
+        continue-on-error: false
+
+      - name: Execute reference notebooks
+        run: |
+          uv run pytest --nbmake notebooks/references/ \
+            --nbmake-timeout=300 \
+            --tb=short \
+            -v
+        continue-on-error: true # Reference notebooks may have experimental code
+
+      - name: Upload execution artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notebook-execution-results
+          path: |
+            .pytest_cache/
+            **/*.nbconvert.ipynb
