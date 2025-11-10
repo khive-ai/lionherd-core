@@ -5,6 +5,7 @@ Master string similarity algorithms and fuzzy matching patterns for user input v
 ## Overview
 
 These tutorials teach you to use lionherd-core's string similarity utilities:
+
 - **Similarity Algorithms**: Jaro-Winkler, Levenshtein, Soundex, Hamming
 - **Fuzzy Matching**: Handle typos, abbreviations, and phonetic similarities
 - **Deduplication**: Identify near-duplicate strings using similarity thresholds
@@ -73,24 +74,28 @@ string_similarity("Smith", "Smyth", algo="soundex")  # 1.0
 ### When to Use Each Algorithm
 
 **Jaro-Winkler** (Default recommendation):
+
 - ✅ User input with typos ("deplpy" → "deploy")
 - ✅ Command matching ("lis" → "list")
 - ✅ Field name variations ("usr_name" → "user_name")
 - ❌ Significantly different lengths (biased toward prefixes)
 
 **Levenshtein** (Edit distance):
+
 - ✅ Spell checking
 - ✅ Text diff/similarity
 - ✅ Any string length combination
 - ❌ Phonetic similarities ("Smith" vs "Smyth" = low similarity)
 
 **Soundex** (Phonetic):
+
 - ✅ Name matching ("Catherine" ↔ "Kathryn")
 - ✅ Search with pronunciation variants
 - ✅ Data entry where spelling varies
 - ❌ Non-phonetic typos ("Smit" vs "Smith" = different codes)
 
 **Hamming** (Bit-level):
+
 - ✅ Fixed-length codes/IDs
 - ✅ DNA sequences
 - ✅ Binary data comparison
@@ -250,6 +255,7 @@ results = phonetic_search("Smith", names)
 Where n, m = string lengths.
 
 **Optimization tips**:
+
 - **Pre-encode** Soundex codes for large datasets (avoid re-encoding)
 - **Short-circuit** on length differences (if |len(s1) - len(s2)| > threshold, skip)
 - **Index** by first character or prefix to reduce comparison count
