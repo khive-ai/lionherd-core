@@ -5,6 +5,7 @@ Master lionherd-core's core utilities (`ln` module) for data transformation, val
 ## Overview
 
 These tutorials teach you to use lionherd-core's most frequently used utilities:
+
 - **Type Conversion**: `to_dict()`, `to_list()` for flexible data transformation
 - **Fuzzy Validation**: `fuzzy_validate()`, `fuzzy_match()` for resilient data validation
 - **Async Utilities**: `lcall()`, `alcall()` for callable invocation patterns
@@ -55,6 +56,7 @@ jupyter notebook fuzzy_validation.ipynb
 ## Learning Paths
 
 ### Path 1: Essential ln Utilities (1 hour)
+
 1. **Fuzzy Validation** - Handle field name variations
 2. **Advanced to_dict** - Type conversion fundamentals
 3. **Content Deduplication** - Hash-based duplicate detection
@@ -62,6 +64,7 @@ jupyter notebook fuzzy_validation.ipynb
 **Outcome**: Use core ln utilities for data transformation and validation
 
 ### Path 2: LLM Integration Focus (1.5 hours)
+
 1. **Fuzzy JSON Parsing** - Parse LLM outputs with error tolerance
 2. **LLM Complex Models** - Extract structured data from unstructured LLM responses
 3. **API Field Flattening** - Normalize nested data from various sources
@@ -69,6 +72,7 @@ jupyter notebook fuzzy_validation.ipynb
 **Outcome**: Build resilient LLM integration pipelines
 
 ### Path 3: Advanced Data Processing (1.5 hours)
+
 1. **Multi-Stage Pipeline** - Build composable data pipelines
 2. **Nested Cleaning** - Sanitize complex nested structures
 3. **Data Migration** - Handle schema evolution and mapping
@@ -155,12 +159,10 @@ from lionherd_core.ln import fuzzy_validate_pydantic
 # LLM response with markdown wrapping and formatting errors
 llm_output = """
 Here's the data:
-```json
 {
     taskName: 'Deploy',  // Single quotes, unquoted key
     priority: "HIGH",
 }
-```
 """
 
 # Extracts, corrects, and validates despite errors
