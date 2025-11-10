@@ -140,6 +140,13 @@ class NestedNode(Node):
     label: str = "nested"
 
 
+# Module-level Element subclass (not Node) for testing Element.from_dict fallback
+class CustomElementForTest(Element):
+    """Element subclass for testing non-Node Element deserialization."""
+
+    custom_field: str = "test"
+
+
 # ============================================================================
 # Basic Node Tests
 # ============================================================================
@@ -995,6 +1002,195 @@ def test_node_embedding_roundtrip():
 
 
 # ============================================================================
+# Embedding Format Tests (PR #113)
+# ============================================================================
+#
+# Design aspect validated: embedding_format parameter enables PostgreSQL-optimized
+# serialization formats (pgvector, jsonb) while maintaining backward compatibility
+# (list format). Format selection uses Pydantic SerializationInfo.context pattern.
+
+
+def test_node_embedding_format_pgvector():
+    """Test embedding_format='pgvector' produces compact JSON string for PostgreSQL.
+
+    Pattern:
+        Database-optimized serialization for pgvector extension
+
+    Design Rationale:
+        PostgreSQL pgvector requires compact JSON format for vector casting:
+        SELECT embedding::vector FROM nodes WHERE ...
+        Compact format: "[0.1,0.2,0.3]" (no spaces) via orjson
+
+    Use Case:
+        Vector similarity search in PostgreSQL with pgvector extension
+
+    Expected:
+        Embedding serialized as compact JSON string (orjson format)
+    """
+    node = Node(content={"test": "data"}, embedding=[0.1, 0.2, 0.3])
+    data = node.to_dict(mode="db", embedding_format="pgvector")
+
+    # Verify pgvector format
+    assert isinstance(data["embedding"], str)
+    assert data["embedding"] == "[0.1,0.2,0.3]"  # Compact, no spaces
+
+    # Verify parseable
+    import orjson
+
+    parsed = orjson.loads(data["embedding"])
+    assert parsed == [0.1, 0.2, 0.3]
+
+
+def test_node_embedding_format_jsonb():
+    """Test embedding_format='jsonb' produces standard JSON string with spaces.
+
+    Pattern:
+        Standard JSON serialization for JSONB storage
+
+    Design Rationale:
+        PostgreSQL JSONB columns accept standard JSON format with spaces.
+        Uses Python json library (not orjson) for standard formatting.
+        Format: "[0.1, 0.2, 0.3]" (with spaces)
+
+    Use Case:
+        Storing embeddings in PostgreSQL JSONB columns without pgvector
+
+    Expected:
+        Embedding serialized as standard JSON string with spaces
+    """
+    node = Node(content={"test": "data"}, embedding=[0.1, 0.2, 0.3])
+    data = node.to_dict(mode="db", embedding_format="jsonb")
+
+    # Verify jsonb format
+    assert isinstance(data["embedding"], str)
+    assert data["embedding"] == "[0.1, 0.2, 0.3]"  # Standard JSON with spaces
+
+    # Verify parseable
+    import json
+
+    parsed = json.loads(data["embedding"])
+    assert parsed == [0.1, 0.2, 0.3]
+
+
+def test_node_embedding_format_list_default():
+    """Test embedding_format='list' and default (None) preserve list format.
+
+    Pattern:
+        Backward compatibility with existing serialization behavior
+
+    Design Rationale:
+        Default format="list" maintains backward compatibility with code that
+        expects Python list from to_dict(). Explicit None also returns list.
+        No string coercion unless explicitly requested (pgvector/jsonb).
+
+    Use Case:
+        In-memory operations, JSON APIs, non-PostgreSQL databases
+
+    Expected:
+        Embedding remains Python list (not string)
+    """
+    node = Node(content={"test": "data"}, embedding=[0.1, 0.2, 0.3])
+
+    # Explicit format="list"
+    data_explicit = node.to_dict(mode="db", embedding_format="list")
+    assert isinstance(data_explicit["embedding"], list)
+    assert data_explicit["embedding"] == [0.1, 0.2, 0.3]
+
+    # Default (no format specified)
+    data_default = node.to_dict(mode="db")
+    assert isinstance(data_default["embedding"], list)
+    assert data_default["embedding"] == [0.1, 0.2, 0.3]
+
+
+def test_node_embedding_format_python_mode_ignores_format():
+    """Test embedding_format only applies in json/db modes, not python mode.
+
+    Pattern:
+        Mode-specific serialization behavior
+
+    Design Rationale:
+        Python mode preserves Python types (no string coercion).
+        embedding_format parameter only affects json/db modes where
+        serialization to strings makes sense. In python mode, format
+        is ignored and list is always returned.
+
+    Use Case:
+        In-memory operations where Python types are preserved
+
+    Expected:
+        embedding_format ignored, list returned in python mode
+    """
+    node = Node(content={"test": "data"}, embedding=[0.1, 0.2, 0.3])
+
+    # Python mode should ignore format and return list
+    data = node.to_dict(mode="python", embedding_format="pgvector")
+    assert isinstance(data["embedding"], list)
+    assert data["embedding"] == [0.1, 0.2, 0.3]
+
+    # Verify not string (format ignored)
+    assert not isinstance(data["embedding"], str)
+
+
+def test_node_embedding_format_none_embedding():
+    """Test embedding_format handles None embedding gracefully.
+
+    Pattern:
+        Null safety in serialization
+
+    Design Rationale:
+        Node.embedding is optional (None by default). Serialization must
+        handle None without errors regardless of format specified.
+        None is not converted to string "null" or empty list.
+
+    Use Case:
+        Nodes without embeddings (text-only, metadata-only nodes)
+
+    Expected:
+        None embedding serialized as None, not string or list
+    """
+    node = Node(content={"test": "data"}, embedding=None)
+
+    # All formats should return None
+    for fmt in ["pgvector", "jsonb", "list"]:
+        data = node.to_dict(mode="db", embedding_format=fmt)
+        assert data["embedding"] is None
+
+
+def test_node_embedding_format_combination_with_content():
+    """Test embedding_format works correctly with content serialization.
+
+    Pattern:
+        Multi-field serialization independence
+
+    Design Rationale:
+        embedding_format only affects embedding field, not content field.
+        Content serialization (nested Elements, dicts) should work
+        independently without interference from embedding format.
+
+    Use Case:
+        Nodes with both structured content and embeddings for hybrid search
+
+    Expected:
+        Both content and embedding serialized correctly with independent formats
+    """
+    # Create node with both content and embedding
+    inner_node = Node(content={"inner": "value"})
+    node = Node(content={"data": "value", "nested": inner_node}, embedding=[0.1, 0.2, 0.3])
+
+    data = node.to_dict(mode="db", embedding_format="pgvector")
+
+    # Verify content serialization (nested Element → dict)
+    assert isinstance(data["content"], dict)
+    assert data["content"]["data"] == "value"
+    assert isinstance(data["content"]["nested"], dict)
+    assert data["content"]["nested"]["content"]["inner"] == "value"
+
+    # Verify embedding serialization (pgvector format)
+    assert isinstance(data["embedding"], str)
+    assert data["embedding"] == "[0.1,0.2,0.3]"
+
+
+# ============================================================================
 # Issue #49: Parametrize Node.content primitive rejection tests
 # ============================================================================
 # Refactored from 5 individual tests to single parametrized test covering
@@ -1060,3 +1256,1043 @@ def test_node_content_rejects_primitives(invalid_content, type_name):
         match=rf"content must be Serializable, BaseModel, dict, or None\. Got {type_name}\.",
     ):
         Node(content=invalid_content)
+
+
+# ============================================================================
+# Content Serializer Tests (PR #113)
+# ============================================================================
+#
+# Design aspect validated: content_serializer parameter enables custom content
+# transformation during serialization (compression, encryption, external storage).
+#
+# Pattern:
+#   One-way transformation: Node.content → serialized format during to_dict()
+#   Node instance unchanged (transformation only affects serialization output)
+#   Fail-fast validation: callable check + test call before model_dump
+#
+# Design Rationale:
+#   Large content nodes (embeddings, documents) need external storage strategies.
+#   content_serializer enables reference patterns without modifying Node behavior.
+#   Validation catches broken serializers early (test call on self.content).
+#
+# Integration:
+#   Compatible with all modes (python/json/db)
+#   Works with embedding_format parameter (independent transformations)
+#   Excludes content from model_dump, replaces with serializer result
+#
+# Use Cases:
+#   - Compression: Store large content externally, replace with reference
+#   - Encryption: Encrypt content before database storage
+#   - External storage: Replace content with S3/GCS URI + metadata
+
+
+def test_node_content_serializer_basic():
+    """Test content_serializer parameter enables custom content transformation.
+
+    Pattern:
+        One-way content transformation during serialization
+
+    Design Rationale:
+        Enables compression, encryption, external storage references without
+        modifying Node behavior. Fail-fast validation prevents runtime errors.
+
+    Use Case:
+        Store large content externally, replace with reference:
+        content_serializer=lambda c: {"ref": "s3://bucket/id", "size": len(str(c))}
+
+    Expected:
+        Content replaced with serializer result, original excluded
+    """
+    node = Node(content={"key": "value"})
+
+    def custom_serializer(content):
+        return {"serialized": str(content)}
+
+    data = node.to_dict(content_serializer=custom_serializer)
+
+    # Verify serialized content
+    assert data["content"] == {"serialized": "{'key': 'value'}"}
+
+    # Verify original excluded
+    assert "key" not in data["content"]
+
+
+def test_node_content_serializer_compression_example():
+    """Test content_serializer with compression use case.
+
+    Pattern:
+        Compression + base64 encoding for large content storage
+
+    Design Rationale:
+        Large content (documents, embeddings) bloats database rows.
+        Compression reduces storage costs and query performance impact.
+
+    Real-World Scenario:
+        Node with 100KB document compressed to 10KB reference:
+        - Original: {"text": "large document..."}
+        - Compressed: {"compressed": "eJy...base64...", "size": 10240}
+
+    Expected:
+        Content replaced with compressed base64 string + metadata
+    """
+    import base64
+    import json
+    import zlib
+
+    node = Node(content={"large": "data" * 100})
+
+    def compress_serializer(content):
+        json_bytes = json.dumps(content).encode("utf-8")
+        compressed = zlib.compress(json_bytes)
+        encoded = base64.b64encode(compressed).decode("utf-8")
+        return {"compressed": encoded, "size": len(compressed)}
+
+    data = node.to_dict(content_serializer=compress_serializer)
+
+    # Verify compression metadata
+    assert "compressed" in data["content"]
+    assert "size" in data["content"]
+    assert isinstance(data["content"]["compressed"], str)
+    assert isinstance(data["content"]["size"], int)
+
+
+def test_node_content_serializer_lambda():
+    """Test content_serializer accepts lambda functions.
+
+    Pattern:
+        Inline lambda for simple transformations
+
+    Design Rationale:
+        Lambda functions enable concise serialization without def statements.
+        Useful for simple transformations (str, repr, hash).
+
+    Use Case:
+        Quick content fingerprinting: lambda c: {"hash": hash(str(c))}
+
+    Expected:
+        Lambda serializer works identically to def functions
+    """
+    node = Node(content={"test": "data"})
+
+    # Lambda serializer
+    data = node.to_dict(content_serializer=lambda c: str(c))
+
+    # Verify lambda executed
+    assert data["content"] == "{'test': 'data'}"
+
+
+def test_node_content_serializer_non_callable_raises_typeerror():
+    """Test content_serializer rejects non-callable with clear error.
+
+    Pattern:
+        Fail-fast validation before model_dump
+
+    Design Rationale:
+        Callable check prevents cryptic runtime errors during serialization.
+        Clear error message guides developer to correct usage.
+
+    Error Contract:
+        TypeError with message: "content_serializer must be callable, got {type}"
+
+    Expected:
+        TypeError raised immediately, before model_dump execution
+    """
+    node = Node(content={"test": "data"})
+
+    with pytest.raises(TypeError, match=r"content_serializer must be callable, got str"):
+        node.to_dict(content_serializer="not_callable")
+
+
+def test_node_content_serializer_broken_serializer_fails_fast():
+    """Test content_serializer fails fast on broken serializer.
+
+    Pattern:
+        Test call validation before model_dump
+
+    Design Rationale:
+        Test call with self.content catches broken serializers early.
+        Prevents partial serialization with missing content field.
+
+    Error Contract:
+        ValueError with message: "content_serializer failed on test call: {original_error}"
+
+    Real-World Scenario:
+        Serializer depends on missing library or incorrect assumptions:
+        lambda c: external_api.compress(c)  # external_api not imported
+
+    Expected:
+        ValueError raised with original exception context
+    """
+    node = Node(content={"test": "data"})
+
+    def broken_serializer(content):
+        raise RuntimeError("Serializer broken")
+
+    with pytest.raises(ValueError, match=r"content_serializer failed on test call"):
+        node.to_dict(content_serializer=broken_serializer)
+
+
+def test_node_content_serializer_excludes_content_from_model_dump():
+    """Test content_serializer excludes original content from model_dump.
+
+    Pattern:
+        Exclude original → Replace with serialized
+
+    Design Rationale:
+        Two-phase serialization: exclude content from model_dump, inject serialized.
+        Ensures no content duplication or partial serialization.
+
+    Implementation Validation:
+        1. Inject {"content"} into exclude parameter
+        2. Call super().to_dict(..., exclude={..., "content"})
+        3. Inject result["content"] = serializer(self.content)
+
+    Expected:
+        Original content NOT in result, serialized content IS in result
+    """
+    node = Node(content={"original": "data"})
+
+    def custom_serializer(content):
+        return {"replaced": "data"}
+
+    data = node.to_dict(content_serializer=custom_serializer)
+
+    # Verify original excluded
+    assert "original" not in data["content"]
+
+    # Verify serialized present
+    assert data["content"] == {"replaced": "data"}
+
+
+def test_node_content_serializer_combination_with_embedding_format():
+    """Test content_serializer works with embedding_format parameter.
+
+    Pattern:
+        Independent transformations (content + embedding)
+
+    Design Rationale:
+        content_serializer and embedding_format are orthogonal parameters.
+        Both inject context into model_dump, must not interfere.
+
+    Real-World Scenario:
+        Node with large content + large embedding both need optimization:
+        - content_serializer: Store content externally (S3 reference)
+        - embedding_format: Compress embedding (pgvector format)
+
+    Expected:
+        Both transformations applied independently, no interference
+    """
+    node = Node(content={"test": "data"}, embedding=[0.1, 0.2, 0.3])
+
+    def content_serializer(content):
+        return {"ref": "s3://bucket/content-id"}
+
+    data = node.to_dict(
+        mode="db",
+        content_serializer=content_serializer,
+        embedding_format="pgvector",
+    )
+
+    # Verify content serialized
+    assert data["content"] == {"ref": "s3://bucket/content-id"}
+
+    # Verify embedding formatted (pgvector is compact JSON string)
+    assert isinstance(data["embedding"], str)
+    assert "[" in data["embedding"]  # JSON array format
+
+
+def test_node_content_serializer_mode_python():
+    """Test content_serializer works with mode='python'.
+
+    Pattern:
+        Serialization mode independence
+
+    Design Rationale:
+        content_serializer transformation applies uniformly across all modes.
+        Mode affects other fields (created_at, embedding), not serializer logic.
+
+    Expected:
+        content_serializer executes identically in python mode
+    """
+    node = Node(content={"test": "data"})
+
+    def serializer(content):
+        return {"mode": "python", "data": str(content)}
+
+    data = node.to_dict(mode="python", content_serializer=serializer)
+
+    assert data["content"] == {"mode": "python", "data": "{'test': 'data'}"}
+
+
+def test_node_content_serializer_mode_json():
+    """Test content_serializer works with mode='json'.
+
+    Pattern:
+        Serialization mode independence
+
+    Design Rationale:
+        content_serializer transformation applies uniformly across all modes.
+        JSON mode affects datetime/UUID serialization, not content logic.
+
+    Expected:
+        content_serializer executes identically in json mode
+    """
+    node = Node(content={"test": "data"})
+
+    def serializer(content):
+        return {"mode": "json", "data": str(content)}
+
+    data = node.to_dict(mode="json", content_serializer=serializer)
+
+    assert data["content"] == {"mode": "json", "data": "{'test': 'data'}"}
+
+
+def test_node_content_serializer_mode_db():
+    """Test content_serializer works with mode='db'.
+
+    Pattern:
+        Database mode compatibility with node_metadata
+
+    Design Rationale:
+        DB mode uses node_metadata instead of metadata.
+        content_serializer must work correctly with metadata field renaming.
+
+    Real-World Scenario:
+        Storing Node in database with external content storage:
+        - node_metadata: {"lion_class": "Node"}
+        - content: {"ref": "s3://bucket/id"}
+        - embedding: "[0.1, 0.2, 0.3]" (pgvector format)
+
+    Expected:
+        content_serializer executes correctly with node_metadata present
+    """
+    node = Node(content={"test": "data"})
+
+    def serializer(content):
+        return {"mode": "db", "data": str(content)}
+
+    data = node.to_dict(mode="db", content_serializer=serializer)
+
+    # Verify content serialized
+    assert data["content"] == {"mode": "db", "data": "{'test': 'data'}"}
+
+    # Verify db mode field present
+    assert "node_metadata" in data
+
+
+def test_node_content_serializer_with_none_content():
+    """Test content_serializer handles None content gracefully.
+
+    Pattern:
+        Null-safe transformation
+
+    Design Rationale:
+        Node.content defaults to None. Serializer must handle null case.
+        Test call validation ensures serializer doesn't crash on None.
+
+    Error Handling:
+        If serializer doesn't handle None, fail-fast test call catches it.
+
+    Expected:
+        Serializer receives None, returns serialized null representation
+    """
+    node = Node(content=None)
+
+    def null_safe_serializer(content):
+        return {"is_none": content is None}
+
+    data = node.to_dict(content_serializer=null_safe_serializer)
+
+    assert data["content"] == {"is_none": True}
+
+
+def test_node_content_serializer_backward_compatible():
+    """Test to_dict without content_serializer preserves default behavior.
+
+    Pattern:
+        Backward compatibility (no breaking changes)
+
+    Design Rationale:
+        content_serializer is optional parameter (default: None).
+        Existing code calling to_dict() without parameter must work unchanged.
+
+    Migration Strategy:
+        Zero-impact addition - all existing code continues working.
+        New feature enabled only when explicitly requested.
+
+    Expected:
+        content unchanged when content_serializer not provided
+    """
+    node = Node(content={"test": "data"})
+
+    # Call to_dict without content_serializer
+    data = node.to_dict()
+
+    # Verify content unchanged (default behavior)
+    assert data["content"] == {"test": "data"}
+
+
+# ============================================================================
+# Coverage Completion Tests (PR #113)
+# ============================================================================
+#
+# Design aspect validated: Edge cases and fallback paths for 100% coverage
+# These tests exercise error handling, alternative code paths, and async operations
+# that are not covered by mainline happy-path tests above.
+
+
+def test_node_content_element_not_in_registry():
+    """Test content validation handles Element subclasses not in NODE_REGISTRY.
+
+    Pattern:
+        Polymorphic deserialization for non-Node Element types
+
+    Design Rationale:
+        Graph-of-graphs pattern requires storing arbitrary Elements.
+        Custom Element subclasses (not Node) should deserialize via Element.from_dict(),
+        not NODE_REGISTRY lookup. This enables composition of Elements that aren't Nodes.
+
+    Use Case:
+        Workflow node contains custom ExecutionMetadata (Element subclass)
+        that doesn't inherit from Node. Content must deserialize correctly
+        even though ExecutionMetadata isn't in NODE_REGISTRY.
+
+    Coverage:
+        Line 113: return Element.from_dict(value)
+
+    Expected:
+        Content deserialized as custom Element via Element.from_dict() fallback
+    """
+    # Use module-level Element subclass (NOT Node, so not in NODE_REGISTRY)
+    custom = CustomElementForTest(custom_field="value")
+    custom_dict = custom.to_dict()
+
+    # Verify lion_class present but NOT in NODE_REGISTRY
+    lion_class = custom_dict.get("metadata", {}).get("lion_class")
+    assert lion_class is not None
+    assert "CustomElementForTest" in lion_class
+    # CustomElementForTest is Element, not Node, so not auto-registered in NODE_REGISTRY
+    assert lion_class not in NODE_REGISTRY
+    assert "CustomElementForTest" not in NODE_REGISTRY
+
+    # Use as Node content - should trigger line 113 (Element.from_dict fallback)
+    node = Node(content=custom_dict)
+
+    # Verify content deserialized as CustomElementForTest (via Element.from_dict)
+    assert isinstance(node.content, CustomElementForTest)
+    assert node.content.custom_field == "value"
+
+
+def test_node_embedding_invalid_json_string():
+    """Test Node embedding rejects invalid JSON strings with clear error.
+
+    Pattern:
+        Fail-fast validation with actionable error messages
+
+    Design Rationale:
+        Database queries sometimes return malformed JSON strings due to data corruption
+        or encoding issues. _validate_embedding must detect and report parse failures
+        clearly rather than silently failing or returning corrupt data.
+
+    Error Contract:
+        ValueError with message: "Failed to parse embedding JSON string: {error}"
+
+    Use Case:
+        PostgreSQL query returns corrupted JSONB: "[0.1, 0.2, [[["
+        Validator must reject and provide clear error for debugging.
+
+    Coverage:
+        Lines 129-130: Exception handling for orjson.loads() failure
+
+    Expected:
+        ValueError raised immediately with parse error context
+    """
+    with pytest.raises(ValueError, match=r"Failed to parse embedding JSON string"):
+        Node(content={"test": "data"}, embedding="invalid json [[[")
+
+
+def test_node_content_serializer_exclude_dict_format():
+    """Test to_dict handles exclude parameter as dict format correctly.
+
+    Pattern:
+        Pydantic exclude parameter format flexibility
+
+    Design Rationale:
+        Pydantic model_dump() accepts exclude in multiple formats:
+        - Set format: exclude={"field1", "field2"}
+        - Dict format: exclude={"field1": True, "field2": {"nested": True}}
+
+        When content_serializer is used, implementation must inject "content"
+        into exclude parameter. Dict format requires special handling (copy dict,
+        add "content": True) vs set format (union with {"content"}).
+
+    Use Case:
+        Advanced serialization with nested field exclusion:
+        exclude={"metadata": {"internal_field": True}}
+        Must work correctly with content_serializer.
+
+    Coverage:
+        Lines 189-194: Dict exclude format handling in to_dict
+
+    Expected:
+        content excluded and replaced with serialized value, other fields unaffected
+    """
+    node = Node(content={"test": "data"}, metadata={"custom": "value"})
+
+    def serializer(content):
+        return {"serialized": str(content)}
+
+    # Use dict exclude format (not set)
+    data = node.to_dict(
+        content_serializer=serializer,
+        exclude={"metadata": {"custom": True}},  # Dict format
+    )
+
+    # Verify content serialized (dict exclude format handled correctly)
+    assert data["content"] == {"serialized": "{'test': 'data'}"}
+
+    # Verify dict exclude format applied (custom metadata excluded)
+    assert "custom" not in data.get("metadata", {})
+
+
+def test_node_content_serializer_exclude_other_type():
+    """Test to_dict handles exclude parameter as non-set/dict type.
+
+    Pattern:
+        Defensive programming for edge-case exclude formats
+
+    Design Rationale:
+        When content_serializer is used, implementation must handle all exclude formats:
+        - Set format: exclude={"field1", "field2"} → union with {"content"}
+        - Dict format: exclude={"field1": True} → copy and add "content": True
+        - Other types (None, string, etc.) → fallback to {"content"}
+
+        Line 194 else branch handles unexpected exclude types by replacing with {"content"}.
+
+    Use Case:
+        API misuse or dynamic exclude parameter with unexpected type.
+        Must not crash, instead use safe fallback.
+
+    Coverage:
+        Line 194: exclude = {"content"} (else branch fallback)
+
+    Expected:
+        content excluded and replaced with serialized value, safe fallback behavior
+    """
+    node = Node(content={"test": "data"}, metadata={"custom": "value"})
+
+    def serializer(content):
+        return {"serialized": str(content)}
+
+    # Use None as exclude (neither set nor dict)
+    data = node.to_dict(
+        content_serializer=serializer,
+        exclude=None,  # Neither set nor dict → triggers line 194
+    )
+
+    # Verify content serialized (fallback exclude format handled)
+    assert data["content"] == {"serialized": "{'test': 'data'}"}
+
+    # Verify other fields present (only content excluded)
+    assert "metadata" in data
+
+
+def test_node_from_dict_with_meta_key():
+    """Test from_dict supports custom metadata key via meta_key parameter.
+
+    Pattern:
+        Database schema flexibility for metadata field naming
+
+    Design Rationale:
+        Different databases/APIs may use different field names for metadata:
+        - Standard: "metadata" or "node_metadata"
+        - Custom: "meta", "properties", "attributes", etc.
+
+        meta_key parameter enables deserialization from arbitrary metadata field names
+        without requiring data transformation before Node.from_dict().
+
+    Use Case:
+        Legacy database schema uses "properties" field for metadata.
+        Migration path: from_dict(data, meta_key="properties")
+
+    Coverage:
+        Line 225: data["metadata"] = data.pop(meta_key)
+
+    Expected:
+        Metadata restored from custom key name, normalized to "metadata"
+    """
+    # Create data with custom metadata key
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"test": "data"},
+        "custom_meta": {"custom_key": "custom_value"},
+    }
+
+    # Deserialize with custom meta_key
+    node = Node.from_dict(data, meta_key="custom_meta")
+
+    # Verify metadata restored from custom key
+    assert node.metadata["custom_key"] == "custom_value"
+    # Verify custom_meta consumed (not in final dict)
+    assert "custom_meta" not in node.to_dict()
+
+
+def test_node_from_dict_with_non_dict_metadata():
+    """Test from_dict handles non-dict metadata gracefully.
+
+    Pattern:
+        Defensive programming for malformed input data
+
+    Design Rationale:
+        Metadata field should be dict, but corrupted data or API bugs may provide
+        non-dict values (string, list, None). Implementation must handle gracefully
+        without crashing, setting lion_class = None to skip polymorphic routing.
+
+    Error Handling Strategy:
+        Non-dict metadata → Skip lion_class extraction (line 240) → Deserialize as base Node
+
+    Use Case:
+        Database corruption or API bug returns metadata: "corrupted_string"
+        Should deserialize without crash, treating as base Node.
+
+    Coverage:
+        Line 240: lion_class = None (else branch for non-dict metadata)
+
+    Expected:
+        Node created without polymorphic routing (proves lion_class = None executed)
+        Note: Pydantic validation converts non-dict metadata to {} after from_dict logic
+    """
+    # Create data with non-dict metadata
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "content": {"test": "data"},
+        "metadata": "string_metadata",  # Not dict - triggers line 240
+    }
+
+    # Should not crash, deserialize as base Node (no polymorphic routing)
+    node = Node.from_dict(data)
+
+    # Verify base Node created (no polymorphic routing = line 240 executed)
+    assert type(node) is Node
+    # Note: Pydantic converts non-dict metadata to default {} after from_dict
+    assert isinstance(node.metadata, dict)
+
+
+# ==============================================================================
+# content_deserializer Tests (Round-Trip Serialization)
+# ==============================================================================
+
+
+def test_node_content_deserializer_basic_roundtrip():
+    """Test basic round-trip serialization with content_deserializer.
+
+    Pattern:
+        Symmetric transformation: to_dict(serializer) + from_dict(deserializer) = original
+
+    Design Rationale:
+        content_serializer enables custom transformations (compression, encryption, etc).
+        content_deserializer completes the round-trip, restoring original content.
+        Both parameters must be symmetric inverses for round-trip correctness.
+
+    Use Case:
+        Store Node with custom content format, then restore original content on load.
+        Example: API client serializes for transport, server deserializes on receipt.
+
+    Coverage:
+        Lines 251-263: content_deserializer validation and application
+
+    Expected:
+        Original content restored after serialization + deserialization cycle
+    """
+    # Original node
+    original = Node(content={"key": "value", "nested": {"data": 123}})
+
+    # Serialize with custom serializer
+    def custom_serializer(content):
+        return {"transformed": True, "original": content}
+
+    data = original.to_dict(content_serializer=custom_serializer)
+    assert data["content"] == {
+        "transformed": True,
+        "original": {"key": "value", "nested": {"data": 123}},
+    }
+
+    # Deserialize with inverse deserializer
+    def custom_deserializer(content):
+        return content["original"]
+
+    restored = Node.from_dict(data, content_deserializer=custom_deserializer)
+
+    # Verify round-trip: restored content matches original
+    assert restored.content == original.content
+    assert restored.id == original.id
+
+
+def test_node_content_deserializer_compression_roundtrip():
+    """Test round-trip with compression/decompression.
+
+    Pattern:
+        Real-world transformation pattern: compress for storage, decompress for use
+
+    Design Rationale:
+        Large content (documents, embeddings) bloats database rows.
+        Compression reduces storage costs and improves query performance.
+        Round-trip enables transparent compression without code changes.
+
+    Real-World Scenario:
+        Store 100KB document as 10KB compressed data in PostgreSQL JSONB column.
+        Application code works with original uncompressed content transparently.
+
+    Implementation:
+        Serializer: json.dumps(content) → zlib.compress → base64.encode → dict
+        Deserializer: dict → base64.decode → zlib.decompress → json.loads
+
+    Coverage:
+        Lines 251-263: content_deserializer with complex transformation
+
+    Expected:
+        Compressed storage, transparent decompression, original content restored
+    """
+    import base64
+    import json
+    import zlib
+
+    # Original node with large content
+    original = Node(content={"document": "large data" * 100, "metadata": {"size": "large"}})
+
+    # Compression serializer
+    def compress_content(content):
+        json_bytes = json.dumps(content).encode()
+        compressed = zlib.compress(json_bytes, level=9)
+        encoded = base64.b64encode(compressed).decode()
+        return {"compressed": encoded, "format": "zlib+base64+json"}
+
+    # Decompression deserializer (symmetric inverse)
+    def decompress_content(content):
+        if content.get("format") != "zlib+base64+json":
+            raise ValueError("Unknown compression format")
+        encoded = content["compressed"]
+        compressed = base64.b64decode(encoded)
+        json_bytes = zlib.decompress(compressed)
+        return json.loads(json_bytes)
+
+    # Serialize with compression
+    data = original.to_dict(mode="db", content_serializer=compress_content)
+
+    # Verify content is compressed (should be much smaller)
+    compressed_size = len(data["content"]["compressed"])
+    original_size = len(json.dumps(original.content))
+    # Compression should reduce size significantly
+    assert compressed_size < original_size
+
+    # Deserialize with decompression
+    restored = Node.from_dict(data, content_deserializer=decompress_content)
+
+    # Verify round-trip: original content restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_encryption_roundtrip():
+    """Test round-trip with encryption/decryption.
+
+    Pattern:
+        Security transformation: encrypt sensitive content for storage
+
+    Design Rationale:
+        Sensitive data (PII, credentials, health records) must be encrypted at rest.
+        Application code should work with plaintext transparently.
+        Encryption/decryption happens at serialization boundaries automatically.
+
+    Real-World Scenario:
+        Store encrypted patient records in database (HIPAA compliance).
+        Application retrieves and decrypts transparently on access.
+
+    Implementation:
+        Simplified encryption (demo only - use proper crypto in production):
+        - Serializer: XOR with key → base64 encode
+        - Deserializer: base64 decode → XOR with key
+
+    Coverage:
+        Lines 251-263: content_deserializer with encryption workflow
+
+    Expected:
+        Encrypted storage, transparent decryption, original content restored
+
+    Note:
+        This uses toy encryption for testing. Production should use proper
+        cryptography libraries (cryptography.fernet, NaCl, etc).
+    """
+    import base64
+
+    # Toy encryption (XOR with key) - DO NOT USE IN PRODUCTION
+    def toy_encrypt(content_dict, key=42):
+        json_str = str(content_dict)
+        encrypted_bytes = bytes(ord(c) ^ key for c in json_str)
+        return {"encrypted": base64.b64encode(encrypted_bytes).decode(), "algorithm": "toy_xor"}
+
+    def toy_decrypt(encrypted_dict, key=42):
+        if encrypted_dict.get("algorithm") != "toy_xor":
+            raise ValueError("Unknown encryption algorithm")
+        encrypted_bytes = base64.b64decode(encrypted_dict["encrypted"])
+        decrypted_str = "".join(chr(b ^ key) for b in encrypted_bytes)
+        # Safely evaluate the dict string
+        import ast
+
+        return ast.literal_eval(decrypted_str)
+
+    # Original node with sensitive content
+    original = Node(
+        content={"patient_id": "12345", "diagnosis": "confidential", "ssn": "***-**-****"}
+    )
+
+    # Serialize with encryption
+    data = original.to_dict(content_serializer=toy_encrypt)
+
+    # Verify content is encrypted (not plaintext)
+    assert "encrypted" in data["content"]
+    assert "patient_id" not in str(data["content"]["encrypted"])  # Sensitive data not visible
+
+    # Deserialize with decryption
+    restored = Node.from_dict(data, content_deserializer=toy_decrypt)
+
+    # Verify round-trip: original sensitive content restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_external_storage_roundtrip():
+    """Test round-trip with external storage references.
+
+    Pattern:
+        Large content stored externally (S3, CDN), Node stores reference only
+
+    Design Rationale:
+        Very large content (videos, datasets, large documents) shouldn't be in database.
+        Store content externally, keep lightweight reference in Node.
+        Transparent fetch on deserialization provides seamless access.
+
+    Real-World Scenario:
+        Store 100MB video in S3, Node contains {"ref": "s3://bucket/video.mp4", "size": 100MB}.
+        On deserialization, fetch video from S3 transparently.
+
+    Implementation:
+        Serializer: Store content → external storage → return reference dict
+        Deserializer: Fetch content from external storage using reference
+
+    Coverage:
+        Lines 251-263: content_deserializer with external storage fetch
+
+    Expected:
+        Reference stored in database, original content fetched on deserialization
+
+    Note:
+        This simulates external storage with in-memory dict for testing.
+        Production would use boto3 (S3), Azure SDK, GCS client, etc.
+    """
+    # Simulate external storage (S3, database, etc)
+    EXTERNAL_STORAGE = {}
+
+    def store_external(content):
+        """Store content externally, return reference."""
+        import hashlib
+        import json
+
+        # Generate reference ID from content hash
+        content_hash = hashlib.sha256(json.dumps(content).encode()).hexdigest()[:16]
+        ref_id = f"ext://{content_hash}"
+
+        # Store in external storage
+        EXTERNAL_STORAGE[ref_id] = content
+
+        # Return reference for Node
+        return {"ref": ref_id, "size": len(json.dumps(content)), "type": "external"}
+
+    def fetch_external(ref_dict):
+        """Fetch content from external storage using reference."""
+        if ref_dict.get("type") != "external":
+            raise ValueError("Not an external storage reference")
+
+        ref_id = ref_dict["ref"]
+        if ref_id not in EXTERNAL_STORAGE:
+            raise ValueError(f"External content not found: {ref_id}")
+
+        return EXTERNAL_STORAGE[ref_id]
+
+    # Original node with large content
+    original = Node(content={"dataset": [i for i in range(1000)], "metadata": {"rows": 1000}})
+
+    # Serialize with external storage
+    data = original.to_dict(content_serializer=store_external)
+
+    # Verify only reference stored (not full content)
+    assert "ref" in data["content"]
+    assert data["content"]["type"] == "external"
+    assert data["content"]["ref"].startswith("ext://")
+    # Verify full content NOT in serialized data
+    assert "dataset" not in str(data["content"])
+
+    # Deserialize with external fetch
+    restored = Node.from_dict(data, content_deserializer=fetch_external)
+
+    # Verify round-trip: original content fetched and restored
+    assert restored.content == original.content
+
+
+def test_node_content_deserializer_not_callable_raises():
+    """Test content_deserializer fails fast if not callable.
+
+    Pattern:
+        Fail-fast validation prevents runtime errors downstream
+
+    Design Rationale:
+        Invalid deserializer (string, int, dict) would cause cryptic errors later.
+        Fail immediately with clear error message during from_dict call.
+
+    Coverage:
+        Lines 253-256: content_deserializer callable validation
+
+    Expected:
+        TypeError raised with clear message about callable requirement
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"key": "value"},
+    }
+
+    # Test with non-callable (string)
+    with pytest.raises(TypeError, match="content_deserializer must be callable"):
+        Node.from_dict(data, content_deserializer="not_callable")
+
+    # Test with non-callable (dict)
+    with pytest.raises(TypeError, match="content_deserializer must be callable"):
+        Node.from_dict(data, content_deserializer={"not": "callable"})
+
+
+def test_node_content_deserializer_broken_deserializer_fails():
+    """Test content_deserializer fails gracefully when deserializer raises exception.
+
+    Pattern:
+        Fail-fast with clear error message when deserializer implementation broken
+
+    Design Rationale:
+        Broken deserializer (wrong format, corrupt data, missing keys) should fail
+        with clear error pointing to deserializer, not obscure pydantic validation error.
+
+    Error Handling Strategy:
+        Catch deserializer exceptions, wrap with ValueError explaining what failed
+
+    Coverage:
+        Lines 259-263: content_deserializer exception handling
+
+    Expected:
+        ValueError raised with message "content_deserializer failed: <original error>"
+        Original exception preserved via raise...from for debugging
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"compressed": "data"},
+    }
+
+    # Deserializer that raises exception
+    def broken_deserializer(content):
+        raise RuntimeError("Decompression failed: corrupt data")
+
+    # Should fail with clear error message
+    with pytest.raises(ValueError, match="content_deserializer failed: Decompression failed"):
+        Node.from_dict(data, content_deserializer=broken_deserializer)
+
+
+def test_node_content_deserializer_with_none_content():
+    """Test content_deserializer handles None content gracefully.
+
+    Pattern:
+        Defensive programming for missing content field
+
+    Design Rationale:
+        content_deserializer only applies if "content" key exists in data dict.
+        If content is missing or None, skip deserializer (no transformation needed).
+
+    Edge Case:
+        Node with content=None is valid (uncommon but allowed).
+        Deserializer should not be called if content field missing.
+
+    Coverage:
+        Line 259: if "content" in data check (skips deserializer for None)
+
+    Expected:
+        Node created with None content, deserializer never called
+    """
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        # No "content" field
+    }
+
+    deserializer_called = False
+
+    def tracking_deserializer(content):
+        nonlocal deserializer_called
+        deserializer_called = True
+        return content
+
+    # Deserialize with None content
+    node = Node.from_dict(data, content_deserializer=tracking_deserializer)
+
+    # Verify deserializer never called (content field missing)
+    assert deserializer_called is False
+    assert node.content is None
+
+
+def test_node_content_deserializer_symmetric_with_embedding_format():
+    """Test content_deserializer works with other Node.from_dict parameters.
+
+    Pattern:
+        Feature composition: content_deserializer + meta_key integration
+
+    Design Rationale:
+        content_deserializer should compose cleanly with existing Node.from_dict parameters:
+        - meta_key (custom metadata field name)
+        - Polymorphic deserialization (lion_class routing)
+
+        All parameters work together without conflicts.
+
+    Use Case:
+        Database stores Node with:
+        - Custom metadata key ("node_meta" not "metadata")
+        - Compressed content
+        - Polymorphic type information (lion_class)
+
+        All features should work together in single from_dict call.
+
+    Coverage:
+        Lines 251-291: content_deserializer integration with full from_dict workflow
+
+    Expected:
+        All parameters applied correctly, original content and metadata restored
+    """
+    import json
+
+    # Compression helpers
+    def simple_compress(content):
+        return {"json": json.dumps(content)}
+
+    def simple_decompress(content):
+        return json.loads(content["json"])
+
+    # Create original with metadata
+    original = Node(content={"key": "value"}, metadata={"custom": "metadata"})
+
+    # Serialize with custom meta_key and compression
+    data = original.to_dict(mode="db", meta_key="node_meta", content_serializer=simple_compress)
+
+    # Verify custom meta_key used
+    assert "node_meta" in data
+    assert "metadata" not in data
+    # Verify compression applied
+    assert "json" in data["content"]
+
+    # Deserialize with symmetric parameters
+    restored = Node.from_dict(data, meta_key="node_meta", content_deserializer=simple_decompress)
+
+    # Verify all features work together
+    assert restored.content == original.content
+    assert restored.metadata["custom"] == "metadata"
+    assert restored.id == original.id
