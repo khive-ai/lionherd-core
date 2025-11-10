@@ -140,6 +140,13 @@ class NestedNode(Node):
     label: str = "nested"
 
 
+# Module-level Element subclass (not Node) for testing Element.from_dict fallback
+class CustomElementForTest(Element):
+    """Element subclass for testing non-Node Element deserialization."""
+
+    custom_field: str = "test"
+
+
 # ============================================================================
 # Basic Node Tests
 # ============================================================================
@@ -1623,3 +1630,371 @@ def test_node_content_serializer_backward_compatible():
 
     # Verify content unchanged (default behavior)
     assert data["content"] == {"test": "data"}
+
+
+# ============================================================================
+# Coverage Completion Tests (PR #113)
+# ============================================================================
+#
+# Design aspect validated: Edge cases and fallback paths for 100% coverage
+# These tests exercise error handling, alternative code paths, and async operations
+# that are not covered by mainline happy-path tests above.
+
+
+def test_node_content_element_not_in_registry():
+    """Test content validation handles Element subclasses not in NODE_REGISTRY.
+
+    Pattern:
+        Polymorphic deserialization for non-Node Element types
+
+    Design Rationale:
+        Graph-of-graphs pattern requires storing arbitrary Elements.
+        Custom Element subclasses (not Node) should deserialize via Element.from_dict(),
+        not NODE_REGISTRY lookup. This enables composition of Elements that aren't Nodes.
+
+    Use Case:
+        Workflow node contains custom ExecutionMetadata (Element subclass)
+        that doesn't inherit from Node. Content must deserialize correctly
+        even though ExecutionMetadata isn't in NODE_REGISTRY.
+
+    Coverage:
+        Line 113: return Element.from_dict(value)
+
+    Expected:
+        Content deserialized as custom Element via Element.from_dict() fallback
+    """
+    # Use module-level Element subclass (NOT Node, so not in NODE_REGISTRY)
+    custom = CustomElementForTest(custom_field="value")
+    custom_dict = custom.to_dict()
+
+    # Verify lion_class present but NOT in NODE_REGISTRY
+    lion_class = custom_dict.get("metadata", {}).get("lion_class")
+    assert lion_class is not None
+    assert "CustomElementForTest" in lion_class
+    # CustomElementForTest is Element, not Node, so not auto-registered in NODE_REGISTRY
+    assert lion_class not in NODE_REGISTRY
+    assert "CustomElementForTest" not in NODE_REGISTRY
+
+    # Use as Node content - should trigger line 113 (Element.from_dict fallback)
+    node = Node(content=custom_dict)
+
+    # Verify content deserialized as CustomElementForTest (via Element.from_dict)
+    assert isinstance(node.content, CustomElementForTest)
+    assert node.content.custom_field == "value"
+
+
+def test_node_embedding_invalid_json_string():
+    """Test Node embedding rejects invalid JSON strings with clear error.
+
+    Pattern:
+        Fail-fast validation with actionable error messages
+
+    Design Rationale:
+        Database queries sometimes return malformed JSON strings due to data corruption
+        or encoding issues. _validate_embedding must detect and report parse failures
+        clearly rather than silently failing or returning corrupt data.
+
+    Error Contract:
+        ValueError with message: "Failed to parse embedding JSON string: {error}"
+
+    Use Case:
+        PostgreSQL query returns corrupted JSONB: "[0.1, 0.2, [[["
+        Validator must reject and provide clear error for debugging.
+
+    Coverage:
+        Lines 129-130: Exception handling for orjson.loads() failure
+
+    Expected:
+        ValueError raised immediately with parse error context
+    """
+    with pytest.raises(ValueError, match=r"Failed to parse embedding JSON string"):
+        Node(content={"test": "data"}, embedding="invalid json [[[")
+
+
+def test_node_content_serializer_exclude_dict_format():
+    """Test to_dict handles exclude parameter as dict format correctly.
+
+    Pattern:
+        Pydantic exclude parameter format flexibility
+
+    Design Rationale:
+        Pydantic model_dump() accepts exclude in multiple formats:
+        - Set format: exclude={"field1", "field2"}
+        - Dict format: exclude={"field1": True, "field2": {"nested": True}}
+
+        When content_serializer is used, implementation must inject "content"
+        into exclude parameter. Dict format requires special handling (copy dict,
+        add "content": True) vs set format (union with {"content"}).
+
+    Use Case:
+        Advanced serialization with nested field exclusion:
+        exclude={"metadata": {"internal_field": True}}
+        Must work correctly with content_serializer.
+
+    Coverage:
+        Lines 189-194: Dict exclude format handling in to_dict
+
+    Expected:
+        content excluded and replaced with serialized value, other fields unaffected
+    """
+    node = Node(content={"test": "data"}, metadata={"custom": "value"})
+
+    def serializer(content):
+        return {"serialized": str(content)}
+
+    # Use dict exclude format (not set)
+    data = node.to_dict(
+        content_serializer=serializer,
+        exclude={"metadata": {"custom": True}},  # Dict format
+    )
+
+    # Verify content serialized (dict exclude format handled correctly)
+    assert data["content"] == {"serialized": "{'test': 'data'}"}
+
+    # Verify dict exclude format applied (custom metadata excluded)
+    assert "custom" not in data.get("metadata", {})
+
+
+def test_node_content_serializer_exclude_other_type():
+    """Test to_dict handles exclude parameter as non-set/dict type.
+
+    Pattern:
+        Defensive programming for edge-case exclude formats
+
+    Design Rationale:
+        When content_serializer is used, implementation must handle all exclude formats:
+        - Set format: exclude={"field1", "field2"} → union with {"content"}
+        - Dict format: exclude={"field1": True} → copy and add "content": True
+        - Other types (None, string, etc.) → fallback to {"content"}
+
+        Line 194 else branch handles unexpected exclude types by replacing with {"content"}.
+
+    Use Case:
+        API misuse or dynamic exclude parameter with unexpected type.
+        Must not crash, instead use safe fallback.
+
+    Coverage:
+        Line 194: exclude = {"content"} (else branch fallback)
+
+    Expected:
+        content excluded and replaced with serialized value, safe fallback behavior
+    """
+    node = Node(content={"test": "data"}, metadata={"custom": "value"})
+
+    def serializer(content):
+        return {"serialized": str(content)}
+
+    # Use None as exclude (neither set nor dict)
+    data = node.to_dict(
+        content_serializer=serializer,
+        exclude=None,  # Neither set nor dict → triggers line 194
+    )
+
+    # Verify content serialized (fallback exclude format handled)
+    assert data["content"] == {"serialized": "{'test': 'data'}"}
+
+    # Verify other fields present (only content excluded)
+    assert "metadata" in data
+
+
+def test_node_from_dict_with_meta_key():
+    """Test from_dict supports custom metadata key via meta_key parameter.
+
+    Pattern:
+        Database schema flexibility for metadata field naming
+
+    Design Rationale:
+        Different databases/APIs may use different field names for metadata:
+        - Standard: "metadata" or "node_metadata"
+        - Custom: "meta", "properties", "attributes", etc.
+
+        meta_key parameter enables deserialization from arbitrary metadata field names
+        without requiring data transformation before Node.from_dict().
+
+    Use Case:
+        Legacy database schema uses "properties" field for metadata.
+        Migration path: from_dict(data, meta_key="properties")
+
+    Coverage:
+        Line 225: data["metadata"] = data.pop(meta_key)
+
+    Expected:
+        Metadata restored from custom key name, normalized to "metadata"
+    """
+    # Create data with custom metadata key
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "content": {"test": "data"},
+        "custom_meta": {"custom_key": "custom_value"},
+    }
+
+    # Deserialize with custom meta_key
+    node = Node.from_dict(data, meta_key="custom_meta")
+
+    # Verify metadata restored from custom key
+    assert node.metadata["custom_key"] == "custom_value"
+    # Verify custom_meta consumed (not in final dict)
+    assert "custom_meta" not in node.to_dict()
+
+
+def test_node_from_dict_with_non_dict_metadata():
+    """Test from_dict handles non-dict metadata gracefully.
+
+    Pattern:
+        Defensive programming for malformed input data
+
+    Design Rationale:
+        Metadata field should be dict, but corrupted data or API bugs may provide
+        non-dict values (string, list, None). Implementation must handle gracefully
+        without crashing, setting lion_class = None to skip polymorphic routing.
+
+    Error Handling Strategy:
+        Non-dict metadata → Skip lion_class extraction (line 240) → Deserialize as base Node
+
+    Use Case:
+        Database corruption or API bug returns metadata: "corrupted_string"
+        Should deserialize without crash, treating as base Node.
+
+    Coverage:
+        Line 240: lion_class = None (else branch for non-dict metadata)
+
+    Expected:
+        Node created without polymorphic routing (proves lion_class = None executed)
+        Note: Pydantic validation converts non-dict metadata to {} after from_dict logic
+    """
+    # Create data with non-dict metadata
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "content": {"test": "data"},
+        "metadata": "string_metadata",  # Not dict - triggers line 240
+    }
+
+    # Should not crash, deserialize as base Node (no polymorphic routing)
+    node = Node.from_dict(data)
+
+    # Verify base Node created (no polymorphic routing = line 240 executed)
+    assert type(node) is Node
+    # Note: Pydantic converts non-dict metadata to default {} after from_dict
+    assert isinstance(node.metadata, dict)
+
+
+@pytest.mark.asyncio
+async def test_node_adapt_to_async():
+    """Test Node async serialization via adapt_to_async with pydapter.
+
+    Pattern:
+        Async I/O operations for database/network serialization
+
+    Design Rationale:
+        Sync adapt_to() blocks event loop during I/O operations (database writes).
+        adapt_to_async() enables non-blocking serialization for async codebases.
+        Defaults to mode="db" for node_metadata compatibility.
+
+    Integration:
+        - Inherits from PydapterAsyncAdaptable
+        - Uses isolated adapter registry (must register async adapters explicitly)
+        - Concurrent operations via asyncio for bulk serialization
+
+    Use Case:
+        Async database write:
+        await node.adapt_to_async("postgresql", connection=conn)
+
+    Coverage:
+        Lines 265-267: adapt_to_async method implementation
+
+    Expected:
+        Async serialization delegates to parent class correctly
+    """
+    from pydapter.async_core import AsyncAdapter
+
+    # Create minimal async adapter for testing
+    class TestAsyncAdapter(AsyncAdapter):
+        """Minimal async adapter for testing Node.adapt_to_async."""
+
+        obj_key = "test_async"  # Define obj_key as class attribute
+
+        async def to_obj(self, *, adapt_meth="to_dict", adapt_kw=None, **kw):
+            """Async serialization."""
+            adapt_kw = adapt_kw or {}
+            result = getattr(self, adapt_meth)(**adapt_kw)
+            return str(result)
+
+        @classmethod
+        async def from_obj(cls, obj, *, adapt_meth="from_dict", **kw):
+            """Async deserialization."""
+            return cls(**{})
+
+    # Register test async adapter
+    Node.register_async_adapter(TestAsyncAdapter)
+
+    node = Node(content={"test": "data"}, metadata={"custom": "value"})
+
+    # Async adapt using test adapter (covers lines 265-267)
+    result = await node.adapt_to_async("test_async")
+
+    # Verify async serialization worked
+    assert isinstance(result, str)
+    assert "test" in result or "data" in result
+
+
+@pytest.mark.asyncio
+async def test_node_adapt_from_async():
+    """Test Node async deserialization via adapt_from_async with pydapter.
+
+    Pattern:
+        Async I/O operations for database/network deserialization
+
+    Design Rationale:
+        Sync adapt_from() blocks event loop during I/O operations (database reads).
+        adapt_from_async() enables non-blocking deserialization for async codebases.
+        Polymorphic routing via lion_class preserved in async path.
+
+    Integration:
+        - Class method (Node.adapt_from_async) enables polymorphic deserialization
+        - Uses isolated adapter registry (must register async adapters explicitly)
+        - Concurrent operations via asyncio for bulk deserialization
+
+    Use Case:
+        Async database read:
+        node = await Node.adapt_from_async(db_row, "postgresql")
+
+    Coverage:
+        Lines 274-275: adapt_from_async method implementation
+
+    Expected:
+        Async deserialization delegates to parent class correctly
+    """
+    from pydapter.async_core import AsyncAdapter
+
+    # Create minimal async adapter for testing
+    class TestAsyncFromAdapter(AsyncAdapter):
+        """Minimal async adapter for testing Node.adapt_from_async."""
+
+        obj_key = "test_async_from"  # Define obj_key as class attribute
+
+        async def to_obj(self, *, adapt_meth="to_dict", adapt_kw=None, **kw):
+            """Async serialization."""
+            adapt_kw = adapt_kw or {}
+            return str(getattr(self, adapt_meth)(**adapt_kw))
+
+        @classmethod
+        async def from_obj(cls, obj, *, adapt_meth="from_dict", **kw):
+            """Async deserialization."""
+            # obj is dict-like data for deserialization
+            if isinstance(obj, dict):
+                return cls.from_dict(obj)
+            # Simplified: create Node with content from string
+            return cls(content={"data": obj})
+
+    # Register test async adapter
+    Node.register_async_adapter(TestAsyncFromAdapter)
+
+    # Test data
+    test_data = {"content": {"test": "data"}, "metadata": {"custom": "value"}}
+
+    # Async adapt from test data (covers lines 274-275)
+    node = await Node.adapt_from_async(test_data, "test_async_from")
+
+    # Verify Node instance created
+    assert isinstance(node, Node)
+    assert node.content == {"test": "data"}
