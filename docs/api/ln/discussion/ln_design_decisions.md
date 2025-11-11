@@ -345,5 +345,3 @@ await alcall(urls, fetch, timeout=30, headers={"User-Agent": "bot"})
 ## See Also
 
 - [Performance Benchmarks](ln_performance.md): Detailed performance analysis
-- [Fuzzy Matching Tutorial](../tutorials/ln_fuzzy_matching.md): Usage examples
-- [JSON Serialization Tutorial](../tutorials/ln_json_serialization.md): Type handling guide

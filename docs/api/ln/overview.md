@@ -579,18 +579,10 @@ def is_import_installed(package_name: str) -> bool: ...
 
 **See**: [utils.md](utils.md) for detailed API reference
 
-## Tutorials
-
-**In-Depth Guides:**
-- [Async Operations](tutorials/ln_async_operations.md): Parallel execution patterns with alcall/bcall
-- [Fuzzy Matching](tutorials/ln_fuzzy_matching.md): Handle LLM output inconsistencies
-- [JSON Serialization](tutorials/ln_json_serialization.md): High-performance JSON with custom types
-- [Data Processing](tutorials/ln_data_processing.md): Transform and convert data structures
-- [General Utilities](tutorials/ln_utilities.md): Path creation, modules, datetime, binning
-
 ## Discussion
 
 **Design & Performance:**
+
 - [Design Decisions](discussion/ln_design_decisions.md): Rationale behind key design choices
 - [Performance](discussion/ln_performance.md): Benchmarks and optimization strategies
 

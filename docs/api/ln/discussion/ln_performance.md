@@ -19,10 +19,12 @@ This document provides performance benchmarks, optimization guidance, and trade-
 | Deserialize      | 1.8s        | 0.2s   | 9.0x    |
 
 **Memory usage** (1,000,000 item list):
+
 - stdlib json: ~180 MB peak
 - orjson: ~120 MB peak (33% reduction)
 
 **Implications**:
+
 - Use orjson for high-throughput APIs (>100 req/s)
 - Significant benefit for large response payloads (>1 MB)
 - Minimal overhead for small objects (<1 KB)
@@ -51,6 +53,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Cost**: Deterministic set sorting adds ~3x overhead.
 
 **Recommendation**: Only use `deterministic_sets=True` when:
+
 - Generating cache keys (need stability)
 - Testing (deterministic output)
 - Never in hot paths (APIs, tight loops)
@@ -70,11 +73,13 @@ This document provides performance benchmarks, optimization guidance, and trade-
 | None (unlimited)| 0.9s     | 1.2s     | 1111               |
 
 **Observations**:
+
 - Linear speedup up to ~50 concurrent (network-bound)
 - Diminishing returns beyond 100 concurrent (scheduler overhead)
 - Unlimited concurrency adds CPU overhead but fastest wall time
 
 **Recommendation**:
+
 - API calls: `max_concurrent=50` (balance throughput and resource usage)
 - Database queries: `max_concurrent=20` (respect connection pool limits)
 - File I/O: `max_concurrent=100` (async file handles are cheap)
@@ -93,6 +98,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Trade-off**: Larger batches = faster but more memory.
 
 **Recommendation**:
+
 - Streaming APIs: batch_size=100 (balance latency and memory)
 - ETL pipelines: batch_size=1000 (optimize throughput)
 - Memory-constrained: batch_size=50 (minimize memory)
@@ -110,6 +116,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Takeaway**: Retry configuration has minimal overhead on success path, but failures add significant latency.
 
 **Recommendation**:
+
 - Always use retry for external APIs (transient failures common)
 - Set `retry_timeout` to prevent indefinite hangs
 - Monitor retry rates (>5% indicates upstream issues)
@@ -143,6 +150,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Sweet spot**: 0.85 balances precision (97.9%) and recall (96.8%).
 
 **Tuning guidance**:
+
 - High precision (few false matches): threshold=0.90
 - High recall (catch all typos): threshold=0.80
 - Balanced (default): threshold=0.85
@@ -162,6 +170,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Cost of uniqueness**: 3.75x slowdown (hash computation + deduplication).
 
 **Recommendation**:
+
 - Use `unique=True` only when duplicates are common (>10% of data)
 - Consider set-based deduplication for large datasets (>100k elements)
 
@@ -176,6 +185,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 | Mixed (50/50)  | 5,012s       | 28.4s          | alcall |
 
 **Rule of thumb**:
+
 - CPU-bound: Use `lcall` (avoid async overhead)
 - I/O-bound: Use `alcall` (parallelism critical)
 - Mixed: Use `alcall` with `max_concurrent` tuning
@@ -208,6 +218,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Cost**: Each recursion level adds ~2.5x overhead.
 
 **Recommendation**:
+
 - Use `recursive=False` by default
 - Enable `recursive=True` only for deeply nested JSON strings
 - Set `max_recursive_depth` to prevent stack overflow
@@ -228,6 +239,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Takeaway**: File existence checks dominate (14x overhead).
 
 **Recommendation**:
+
 - Use `file_exist_ok=True` to skip checks in tight loops
 - Batch path creation before I/O operations
 
@@ -245,6 +257,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 **Trade-off**: Generators save 93% memory for 25% time cost.
 
 **Use cases**:
+
 - json_lines_iter: Streaming large datasets to disk
 - bcall: Processing results batch-by-batch
 - List comprehension: In-memory processing when memory permits
@@ -264,6 +277,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 ### Memory Optimization
 
 **Strategies**:
+
 - Use `bcall` instead of `alcall` for large datasets (batch processing)
 - Enable `json_lines_iter` for streaming (avoid loading all data)
 - Set `max_concurrent` to limit in-flight tasks (prevent memory spikes)
@@ -271,6 +285,7 @@ This document provides performance benchmarks, optimization guidance, and trade-
 ### Latency Optimization
 
 **Strategies**:
+
 - Increase `max_concurrent` for I/O-bound operations
 - Use `retry_timeout` to fail fast (prevent head-of-line blocking)
 - Batch operations with `bcall` (reduce per-item overhead)
@@ -293,5 +308,3 @@ When profiling ln module usage:
 ## See Also
 
 - [Design Decisions](ln_design_decisions.md): Rationale for performance trade-offs
-- [Async Operations Tutorial](../tutorials/ln_async_operations.md): Concurrency examples
-- [JSON Serialization Tutorial](../tutorials/ln_json_serialization.md): Type handling guide
