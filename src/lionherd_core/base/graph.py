@@ -210,9 +210,10 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         from ._utils import to_uuid
 
         nid = to_uuid(node_id)
-        if nid not in self.nodes:
-            raise ValueError(f"Node {nid} not found in graph")
-        return self.nodes.get(nid)
+        try:
+            return self.nodes[nid]
+        except KeyError:
+            raise ValueError(f"Node {nid} not found in graph") from None
 
     # ==================== Edge Operations ====================
 
@@ -246,10 +247,11 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         from ._utils import to_uuid
 
         eid = to_uuid(edge_id)
-        if eid not in self.edges:
-            raise ValueError(f"Edge {eid} not found in graph")
+        try:
+            edge = self.edges[eid]
+        except KeyError:
+            raise ValueError(f"Edge {eid} not found in graph") from None
 
-        edge = self.edges.get(eid)
         self._out_edges[edge.head].discard(eid)
         self._in_edges[edge.tail].discard(eid)
 
@@ -260,9 +262,10 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         from ._utils import to_uuid
 
         eid = to_uuid(edge_id)
-        if eid not in self.edges:
-            raise ValueError(f"Edge {eid} not found in graph")
-        return self.edges.get(eid)
+        try:
+            return self.edges[eid]
+        except KeyError:
+            raise ValueError(f"Edge {eid} not found in graph") from None
 
     # ==================== Graph Queries ====================
 
@@ -273,8 +276,8 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         nid = to_uuid(node_id)
         predecessors = []
         for edge_id in self._in_edges.get(nid, set()):
-            edge = self.edges.get(edge_id)
-            predecessors.append(self.nodes.get(edge.head))
+            edge = self.edges[edge_id]
+            predecessors.append(self.nodes[edge.head])
         return predecessors
 
     def get_successors(self, node_id: UUID | Node) -> list[Node]:
@@ -284,8 +287,8 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         nid = to_uuid(node_id)
         successors = []
         for edge_id in self._out_edges.get(nid, set()):
-            edge = self.edges.get(edge_id)
-            successors.append(self.nodes.get(edge.tail))
+            edge = self.edges[edge_id]
+            successors.append(self.nodes[edge.tail])
         return successors
 
     def get_node_edges(
@@ -312,21 +315,21 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
         if direction in {"in", "both"}:
             for edge_id in self._in_edges.get(nid, set()):
-                result.append(self.edges.get(edge_id))
+                result.append(self.edges[edge_id])
 
         if direction in {"out", "both"}:
             for edge_id in self._out_edges.get(nid, set()):
-                result.append(self.edges.get(edge_id))
+                result.append(self.edges[edge_id])
 
         return result
 
     def get_heads(self) -> list[Node]:
         """Get all nodes with no incoming edges (source nodes)."""
-        return [self.nodes.get(nid) for nid, in_edges in self._in_edges.items() if not in_edges]
+        return [self.nodes[nid] for nid, in_edges in self._in_edges.items() if not in_edges]
 
     def get_tails(self) -> list[Node]:
         """Get all nodes with no outgoing edges (sink nodes)."""
-        return [self.nodes.get(nid) for nid, out_edges in self._out_edges.items() if not out_edges]
+        return [self.nodes[nid] for nid, out_edges in self._out_edges.items() if not out_edges]
 
     # ==================== Graph Algorithms ====================
 
@@ -369,11 +372,11 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
         while queue:
             node_id = queue.popleft()
-            result.append(self.nodes.get(node_id))
+            result.append(self.nodes[node_id])
 
             # Reduce in-degree of neighbors
             for edge_id in self._out_edges[node_id]:
-                neighbor_id = self.edges.get(edge_id).tail
+                neighbor_id = self.edges[edge_id].tail
                 in_degree[neighbor_id] -= 1
                 if in_degree[neighbor_id] == 0:
                     queue.append(neighbor_id)
@@ -409,13 +412,13 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
                 node_id = end_id
                 while node_id in parent:
                     parent_id, edge_id = parent[node_id]
-                    path.append(self.edges.get(edge_id))
+                    path.append(self.edges[edge_id])
                     node_id = parent_id
                 return list(reversed(path))
 
             # Explore neighbors
             for edge_id in self._out_edges[current_id]:
-                edge: Edge = self.edges.get(edge_id)
+                edge: Edge = self.edges[edge_id]
                 neighbor_id = edge.tail
 
                 if neighbor_id not in visited:
