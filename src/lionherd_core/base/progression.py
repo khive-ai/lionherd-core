@@ -96,9 +96,25 @@ class Progression(Element):
         uid = to_uuid(item_id)
         self.order.remove(uid)
 
-    def pop(self, index: int = -1) -> UUID:
-        """Remove and return item at index."""
-        return self.order.pop(index)
+    def pop(self, index: int = -1, default: Any = ...) -> UUID | Any:
+        """Remove and return item at index with optional default.
+
+        Args:
+            index: Position to pop from (default: -1, last item)
+            default: Default value if index out of range (default: raise IndexError)
+
+        Returns:
+            UUID or default value
+
+        Raises:
+            IndexError: If index out of range and no default provided
+        """
+        try:
+            return self.order.pop(index)
+        except IndexError:
+            if default is ...:
+                raise
+            return default
 
     def popleft(self) -> UUID:
         """Remove and return first item (queue behavior)."""
@@ -111,12 +127,11 @@ class Progression(Element):
         self.order.clear()
 
     def extend(self, items: list[UUID | Element]) -> None:
-        """Extend progression with multiple items."""
+        """Extend progression with multiple items (batch operation)."""
         from ._utils import to_uuid
 
-        for item in items:
-            uid = to_uuid(item)
-            self.order.append(uid)
+        # Batch conversion and extension for better performance
+        self.order.extend(to_uuid(item) for item in items)
 
     # ==================== Query Operations ====================
 
@@ -173,6 +188,10 @@ class Progression(Element):
     def __reversed__(self):
         """Iterate over UUIDs in reverse order."""
         return reversed(self.order)
+
+    def __list__(self) -> list[UUID]:
+        """Return items as list in order."""
+        return list(self.order)
 
     def _validate_index(self, index: int, allow_end: bool = False) -> int:
         """Validate and normalize index (supports negative). Raises IndexError if out of bounds."""

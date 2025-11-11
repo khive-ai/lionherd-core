@@ -396,6 +396,22 @@ class TestProgressionCoreOperations:
         assert result == uid2
         assert prog.order == [uid1, uid3]
 
+    def test_pop_with_default(self):
+        """pop with default should return default on IndexError."""
+        uid1 = uuid4()
+        prog = Progression(order=[uid1])
+        default_value = uuid4()
+        # Pop out of range with default
+        result = prog.pop(10, default=default_value)
+        assert result == default_value
+        assert prog.order == [uid1]  # Unchanged
+
+    def test_pop_without_default_raises(self):
+        """pop without default should raise IndexError on invalid index."""
+        prog = Progression(order=[uuid4()])
+        with pytest.raises(IndexError):
+            prog.pop(10)
+
     def test_popleft_success(self):
         """popleft should remove and return first item."""
         uid1, uid2 = uuid4(), uuid4()
@@ -582,6 +598,21 @@ class TestProgressionQueryOperations:
         prog = Progression(order=[uid1, uid2, uid3])
         result = list(reversed(prog))
         assert result == [uid3, uid2, uid1]
+
+    def test__list__(self):
+        """__list__ should return items as list in order."""
+        uid1, uid2, uid3 = uuid4(), uuid4(), uuid4()
+        prog = Progression(order=[uid1, uid2, uid3])
+        result = prog.__list__()
+        assert result == [uid1, uid2, uid3]
+        assert isinstance(result, list)
+
+    def test__list__empty(self):
+        """__list__ should return empty list for empty progression."""
+        prog = Progression()
+        result = prog.__list__()
+        assert result == []
+        assert isinstance(result, list)
 
 
 class TestProgressionWorkflowOperations:
