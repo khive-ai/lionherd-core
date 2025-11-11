@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Protocol separation - `Adaptable`/`AsyncAdaptable` split from registry mutation (#147). Classes now explicitly compose capabilities:
+  - `Adaptable` / `AsyncAdaptable` - read-only adaptation (adapt_to/from)
+  - `AdapterRegisterable` / `AsyncAdapterRegisterable` - mutable registry (register_adapter)
+
+  **Migration**: Update `@implements()` declarations on custom classes inheriting from Node/Pile/Graph to include both protocols if registering adapters.
+
+### Added
+
+- **BREAKING**: `@implements()` strict runtime enforcement (#147). Classes MUST define protocol methods in class body (inheritance doesn't count). Enforces Rust-like explicit trait implementation. Raises `TypeError` on violation with clear error message.
+
 ## [1.0.0a4](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha4) - 2025-11-11
 
 ### Changed

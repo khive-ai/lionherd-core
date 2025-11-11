@@ -77,18 +77,29 @@ class TestImplementsDecorator:
         assert hasattr(Child, "__protocols__")
         assert Child.__protocols__ == Parent.__protocols__
 
-    def test_implements_with_inherited_methods_requires_override(self):
-        """@implements() enforces that methods are in class body, not inherited."""
+    def test_implements_raises_when_method_inherited_not_defined(self):
+        """@implements() should raise TypeError when method is inherited, not defined in class body."""
 
         class Parent:
             def to_dict(self, **kwargs):
                 return {"parent": "data"}
 
         # ❌ This violates @implements() semantics - method is inherited
-        # (Not caught at decorator time, but documented as anti-pattern)
-        @implements(Serializable)
-        class WrongChild(Parent):
-            pass  # to_dict inherited, not in body
+        with pytest.raises(
+            TypeError,
+            match=r"WrongChild declares @implements\(Serializable\) but does not define 'to_dict' in its class body",
+        ):
+
+            @implements(Serializable)
+            class WrongChild(Parent):
+                pass  # to_dict inherited, not in body - should raise!
+
+    def test_implements_allows_explicit_override(self):
+        """@implements() should allow methods defined in class body (even if calling super)."""
+
+        class Parent:
+            def to_dict(self, **kwargs):
+                return {"parent": "data"}
 
         # ✅ Correct: explicit override in class body
         @implements(Serializable)
@@ -98,17 +109,142 @@ class TestImplementsDecorator:
                 data["child"] = "additional"
                 return data
 
-        # Both have __protocols__ set
-        assert hasattr(WrongChild, "__protocols__")
+        # Should succeed without raising
         assert hasattr(CorrectChild, "__protocols__")
+        assert Serializable in CorrectChild.__protocols__
+
+    def test_implements_raises_when_property_inherited(self):
+        """@implements() should raise TypeError when property is inherited, not defined in class body."""
+
+        class Parent:
+            def __init__(self):
+                self._id = uuid4()
+
+            @property
+            def id(self) -> UUID:
+                return self._id
+
+        # ❌ Property inherited, not defined in Child
+        with pytest.raises(
+            TypeError,
+            match=r"WrongChild declares @implements\(ObservableProto\) but does not define 'id' in its class body",
+        ):
+
+            @implements(Observable)
+            class WrongChild(Parent):
+                pass
+
+    def test_implements_allows_property_in_class_body(self):
+        """@implements() should allow properties defined in class body."""
+
+        class Parent:
+            def __init__(self):
+                self._id = uuid4()
+
+            @property
+            def id(self) -> UUID:
+                return self._id
+
+        # ✅ Property explicitly defined in child
+        @implements(Observable)
+        class CorrectChild(Parent):
+            @property
+            def id(self) -> UUID:
+                return self._id
+
+        assert hasattr(CorrectChild, "__protocols__")
+        assert Observable in CorrectChild.__protocols__
+
+    def test_implements_raises_when_classmethod_inherited(self):
+        """@implements() should raise TypeError when classmethod is inherited."""
+        from lionherd_core.protocols import Deserializable
+
+        class Parent:
+            @classmethod
+            def from_dict(cls, data, **kwargs):
+                return cls()
+
+        # ❌ Classmethod inherited
+        with pytest.raises(
+            TypeError,
+            match=r"WrongChild declares @implements\(Deserializable\) but does not define 'from_dict' in its class body",
+        ):
+
+            @implements(Deserializable)
+            class WrongChild(Parent):
+                pass
+
+    def test_implements_allows_classmethod_in_class_body(self):
+        """@implements() should allow classmethods defined in class body."""
+        from lionherd_core.protocols import Deserializable
+
+        class Parent:
+            @classmethod
+            def from_dict(cls, data, **kwargs):
+                return cls()
+
+        # ✅ Classmethod explicitly defined
+        @implements(Deserializable)
+        class CorrectChild(Parent):
+            @classmethod
+            def from_dict(cls, data, **kwargs):
+                instance = super().from_dict(data, **kwargs)
+                return instance
+
+        assert hasattr(CorrectChild, "__protocols__")
+        assert Deserializable in CorrectChild.__protocols__
+
+    def test_implements_validates_all_protocol_methods(self):
+        """@implements() should validate ALL methods required by protocol."""
+
+        # ✅ All methods defined
+        @implements(Serializable)
+        class Complete:
+            def to_dict(self, **kwargs):
+                return {}
+
+        # ❌ Missing required method
+        with pytest.raises(
+            TypeError,
+            match=r"Incomplete declares @implements\(Serializable\) but does not define 'to_dict' in its class body",
+        ):
+
+            @implements(Serializable)
+            class Incomplete:
+                pass
+
+    def test_implements_validates_multiple_protocols(self):
+        """@implements() should validate all methods for multiple protocols."""
+
+        # ✅ All methods for both protocols defined
+        @implements(Observable, Serializable)
+        class CompleteMulti:
+            def __init__(self):
+                self._id = uuid4()
+
+            @property
+            def id(self) -> UUID:
+                return self._id
+
+            def to_dict(self, **kwargs):
+                return {"id": str(self.id)}
+
+        # ❌ Missing method from second protocol
+        with pytest.raises(TypeError, match=r"but does not define 'to_dict' in its class body"):
+
+            @implements(Observable, Serializable)
+            class IncompleteMult:
+                def __init__(self):
+                    self._id = uuid4()
+
+                @property
+                def id(self) -> UUID:
+                    return self._id
+
+                # Missing to_dict!
 
     def test_isinstance_checks_structure_not_decorator(self):
         """isinstance() checks method presence, not @implements() metadata."""
-
-        # Class with @implements but missing method
-        @implements(Observable)
-        class IncompleteClass:
-            pass  # Missing .id property
 
         # Class without @implements but has method
         class CompleteClass:
@@ -119,11 +255,15 @@ class TestImplementsDecorator:
             def id(self) -> UUID:
                 return self._id
 
+        # Class without @implements and missing method
+        class IncompleteClass:
+            pass  # Missing .id property
+
         incomplete = IncompleteClass()
         complete = CompleteClass()
 
         # isinstance() checks structure (method presence), not @implements()
-        assert not isinstance(incomplete, Observable)  # Missing .id despite @implements
+        assert not isinstance(incomplete, Observable)  # Missing .id, no @implements
         assert isinstance(complete, Observable)  # Has .id despite no @implements
 
     def test_implements_with_hashable_protocol(self):
@@ -159,3 +299,20 @@ class TestImplementsDecorator:
 
         assert hasattr(EmptyClass, "__protocols__")
         assert EmptyClass.__protocols__ == ()
+
+    def test_implements_validates_pydantic_fields_via_annotations(self):
+        """@implements() should recognize Pydantic fields via __annotations__."""
+        from pydantic import BaseModel
+
+        # ✅ Pydantic field in __annotations__ satisfies Observable protocol
+        @implements(Observable)
+        class PydanticObservable(BaseModel):
+            id: UUID  # Field annotation (no @property needed)
+
+        # Should succeed without raising
+        assert hasattr(PydanticObservable, "__protocols__")
+        assert Observable in PydanticObservable.__protocols__
+
+        # Verify it actually works
+        instance = PydanticObservable(id=uuid4())
+        assert isinstance(instance.id, UUID)
