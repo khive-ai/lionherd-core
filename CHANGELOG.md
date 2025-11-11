@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Pile.__bool__` protocol for empty checks (#159). `if pile:` is False when empty.
-- `Pile` dict-like iteration protocol (#159): `keys()`, `values()`, `items()` for parity with `dict`.
+- `Pile` dict-like iteration protocol (#159): `keys()` and `items()` methods for dict-like access.
 - `Progression.__bool__` protocol for empty checks (#156). Empty progressions are falsy.
 - `Flow` referential integrity validation via `@model_validator` (#156).
 - **BREAKING**: `@implements()` strict runtime enforcement (#147). Classes MUST define protocol methods in class body (inheritance doesn't count). Enforces Rust-like explicit trait implementation. Raises `TypeError` on violation with clear error message.
