@@ -235,7 +235,8 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             item: Element to add
 
         Raises:
-            ValueError: If item already exists or type validation fails
+            ExistsError: If item with same ID already exists
+            TypeError: If item type not allowed (when item_type set)
         """
         self._validate_type(item)
 
@@ -256,7 +257,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             Removed item
 
         Raises:
-            ValueError: If item not found
+            NotFoundError: If item not found
         """
 
         uid = to_uuid(item_id)
@@ -285,7 +286,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             Item or default
 
         Raises:
-            ValueError: If item not found and no default
+            NotFoundError: If item not found and no default
         """
 
         uid = to_uuid(item_id)
@@ -305,7 +306,8 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             item: Updated item (must have same ID)
 
         Raises:
-            ValueError: If item not found or type validation fails
+            NotFoundError: If item not found
+            TypeError: If item type not allowed (when item_type set)
         """
         self._validate_type(item)
 
@@ -384,7 +386,8 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         Raises:
             TypeError: If key type is not supported
-            ValueError: If item not found
+            NotFoundError: If item not found (UUID/str access)
+            ValueError: If no items match filter or slice is empty
         """
         # Type 1: UUID/str - Get by ID
         if isinstance(key, (UUID, str)):

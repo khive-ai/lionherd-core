@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
 
+from ..errors import ExistsError, NotFoundError
 from ..protocols import Serializable, implements
 from ._utils import extract_types, synchronized
 from .element import Element
@@ -126,17 +127,26 @@ class Flow(Element, Generic[E, P]):
         if isinstance(progression_id, str) and progression_id in self._progression_names:
             uid = self._progression_names[progression_id]
             del self._progression_names[progression_id]
-            return self.progressions.remove(uid)
+            try:
+                return self.progressions.remove(uid)
+            except NotFoundError:
+                raise ValueError(f"Progression {uid} not found in flow") from None
 
         # Convert to UUID for type-safe removal
         from ._utils import to_uuid
 
         uid = to_uuid(progression_id)
-        prog: P = self.progressions[uid]
+        try:
+            prog: P = self.progressions[uid]
+        except NotFoundError:
+            raise ValueError(f"Progression {uid} not found in flow") from None
 
         if prog.name and prog.name in self._progression_names:
             del self._progression_names[prog.name]
-        return self.progressions.remove(uid)
+        try:
+            return self.progressions.remove(uid)
+        except NotFoundError:
+            raise ValueError(f"Progression {uid} not found in flow") from None
 
     @synchronized
     def get_progression(self, key: UUID | str | P) -> P:
@@ -168,7 +178,10 @@ class Flow(Element, Generic[E, P]):
     ) -> None:
         """Add item to items pile and optionally to progressions. Raises ValueError if exists."""
         # Add to items pile
-        self.items.add(item)
+        try:
+            self.items.add(item)
+        except ExistsError:
+            raise ValueError(f"Item {item.id} already exists in flow") from None
 
         # Add to specified progressions
         if progression_ids is not None:
@@ -196,7 +209,10 @@ class Flow(Element, Generic[E, P]):
                     progression.remove(uid)
 
         # Remove from items pile
-        return self.items.remove(uid)
+        try:
+            return self.items.remove(uid)
+        except NotFoundError:
+            raise ValueError(f"Item {uid} not found in flow") from None
 
     def __repr__(self) -> str:
         name_str = f", name='{self.name}'" if self.name else ""
