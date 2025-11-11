@@ -267,9 +267,30 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         self._progression.remove(uid)
         return item
 
-    def pop(self, item_id: UUID | str | Element) -> T:
-        """Alias for remove() - pop item from pile."""
-        return self.remove(item_id)
+    @synchronized
+    def pop(self, item_id: UUID | str | Element, default: Any = ...) -> T | Any:
+        """Remove and return item from pile with optional default.
+
+        Args:
+            item_id: Item ID or Element instance
+            default: Default value if not found (default: raise ValueError)
+
+        Returns:
+            Removed item or default
+
+        Raises:
+            ValueError: If item not found and no default provided
+        """
+        uid = to_uuid(item_id)
+
+        if uid not in self._items:
+            if default is ...:
+                raise ValueError(f"Item {uid} not found in pile")
+            return default
+
+        item = self._items.pop(uid)
+        self._progression.remove(uid)
+        return item
 
     @synchronized
     def get(self, item_id: UUID | str | Element, default: Any = ...) -> T | Any:
