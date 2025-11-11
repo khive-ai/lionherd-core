@@ -14,12 +14,43 @@ concurrency:
 
 jobs:
   # =============================================================================
-  # Execute tutorial notebooks with strict validation (must pass)
+  # Discover notebooks for parallel execution
+  # =============================================================================
+  discover-notebooks:
+    name: Discover Notebooks
+    runs-on: ubuntu-latest
+    outputs:
+      tutorials: ${{ steps.find-tutorials.outputs.notebooks }}
+      references: ${{ steps.find-references.outputs.notebooks }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find tutorial notebooks
+        id: find-tutorials
+        run: |
+          NOTEBOOKS=$(find notebooks/tutorials -name "*.ipynb" -type f | jq -R -s -c 'split("\n")[:-1]')
+          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
+          echo "Found $(echo $NOTEBOOKS | jq '. | length') tutorial notebooks"
+
+      - name: Find reference notebooks
+        id: find-references
+        run: |
+          NOTEBOOKS=$(find notebooks/references -name "*.ipynb" -type f | jq -R -s -c 'split("\n")[:-1]')
+          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
+          echo "Found $(echo $NOTEBOOKS | jq '. | length') reference notebooks"
+
+  # =============================================================================
+  # Execute tutorial notebooks in parallel (strict validation)
   # =============================================================================
   execute-tutorials:
-    name: Execute Tutorials (Strict)
+    name: Tutorial - ${{ matrix.notebook }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: discover-notebooks
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false # Continue running other notebooks even if one fails
+      matrix:
+        notebook: ${{ fromJson(needs.discover-notebooks.outputs.tutorials) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -38,29 +69,34 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute tutorial notebooks
+      - name: Execute notebook
         run: |
-          uv run pytest --nbmake notebooks/tutorials/ \
+          uv run pytest --nbmake "${{ matrix.notebook }}" \
             --nbmake-timeout=300 \
             --tb=short \
             -v
 
-      - name: Upload tutorial execution artifacts
+      - name: Upload execution artifacts
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: tutorial-execution-failures
+          name: tutorial-failure-${{ hashFiles(matrix.notebook) }}
           path: |
             .pytest_cache/
             **/*.nbconvert.ipynb
 
   # =============================================================================
-  # Execute reference notebooks with lenient validation (experimental)
+  # Execute reference notebooks in parallel (strict validation)
   # =============================================================================
   execute-references:
-    name: Execute References (Experimental)
+    name: Reference - ${{ matrix.notebook }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: discover-notebooks
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook: ${{ fromJson(needs.discover-notebooks.outputs.references) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -79,19 +115,18 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute reference notebooks
+      - name: Execute notebook
         run: |
-          uv run pytest --nbmake notebooks/references/ \
+          uv run pytest --nbmake "${{ matrix.notebook }}" \
             --nbmake-timeout=300 \
             --tb=short \
             -v
-        continue-on-error: true # References may contain experimental code
 
-      - name: Upload reference execution artifacts
+      - name: Upload execution artifacts
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
-          name: reference-execution-results
+          name: reference-failure-${{ hashFiles(matrix.notebook) }}
           path: |
             .pytest_cache/
             **/*.nbconvert.ipynb
