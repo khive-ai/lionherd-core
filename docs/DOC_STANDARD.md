@@ -305,8 +305,7 @@ This class implements the following protocols
 - **Containable**: Membership testing via `__contains__()` (if applicable)
 - **Allowable**: Allowed values via `allowed()` (if applicable)
 
-See [Protocols Guide](../user_guide/protocols.md) for detailed
-protocol documentation.
+<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
 ```
 
 ### Async Documentation
@@ -421,7 +420,6 @@ docs/
 │   └── ...
 ├── user_guide/
 │   ├── quickstart.md
-│   ├── protocols.md
 │   ├── serialization.md
 │   ├── async_patterns.md
 │   └── ...
@@ -614,7 +612,6 @@ nav:
   - Home: index.md
   - User Guide:
       - Quickstart: user_guide/quickstart.md
-      - Protocols: user_guide/protocols.md
       - Serialization: user_guide/serialization.md
   - API Reference:
       - Base: api/base/element.md

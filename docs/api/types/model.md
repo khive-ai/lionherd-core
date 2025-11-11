@@ -446,7 +446,7 @@ HashableModel implements three core protocols:
 
 **Usage**: Safe for use in sets and as dict keys due to frozen configuration.
 
-See [Protocols Guide](../../user_guide/protocols.md) for detailed protocol documentation.
+<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
 
 ## Usage Patterns
 

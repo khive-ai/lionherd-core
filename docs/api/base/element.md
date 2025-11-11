@@ -628,7 +628,7 @@ Register event handlers for observing element state changes.
 
 **Usage**: Safe for use in sets and as dict keys with stable identity.
 
-See [Protocols Guide](../../user_guide/protocols.md) for detailed protocol documentation.
+<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
 
 ## Usage Patterns
 

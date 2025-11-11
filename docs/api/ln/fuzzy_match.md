@@ -608,7 +608,7 @@ Users can override with `similarity_algo` for specific needs.
 ## See Also
 
 - **Related Modules**:
-  - [String Similarity](../../libs/string_handlers.md): Underlying similarity algorithms
+  <!-- TODO: Add link to String Similarity documentation when available (issue #115) -->
   - [Spec](../types/spec.md): Pydantic model validation with fuzzy key support
   - [Operable](../types/operable.md): Structured LLM outputs with validation
 - **Related Types**:

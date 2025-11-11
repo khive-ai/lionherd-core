@@ -555,8 +555,7 @@ Node implements six core protocols (three from Element + three additional):
 - `adapt_to_async(obj_key, **kwargs)`: Async external format conversion
 - `adapt_from_async(obj, obj_key, **kwargs)`: Async deserialization
 
-See [Protocols Guide](../../user_guide/protocols.md) for detailed protocol
-documentation.
+<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
 
 ## NODE_REGISTRY
 

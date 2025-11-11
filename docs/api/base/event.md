@@ -831,8 +831,9 @@ fresh = event.as_fresh_event()  # New instance with PENDING status
 
 ## Examples
 
-See [notebooks/references/event.ipynb](../../notebooks/references/event.ipynb)
-for 10 executable examples demonstrating:
+<!-- TODO: Add link to event.ipynb notebook when available (issue #115) -->
+
+Comprehensive examples demonstrating:
 
 1. Construction + Basic Invocation
 2. Status Lifecycle Transitions
