@@ -723,6 +723,7 @@ class TestEdgeOperations:
 # Methods tested: get_node(), get_edge(), remove_edge()
 # Pattern scope: All Pile[key] usage in Graph (15 sites total)
 
+
 class TestPileKeyErrorHandling:
     """Test error handling for Pile[key] pattern introduced in PR #117."""
 
