@@ -7,7 +7,7 @@ import threading
 from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import Field, PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from ..errors import ExistsError, NotFoundError
 from ..protocols import Serializable, implements
@@ -50,14 +50,98 @@ class Flow(Element, Generic[E, P]):
     _progression_names: dict[str, UUID] = PrivateAttr(default_factory=dict)
     _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
+    def __init__(
+        self,
+        items: list[E] | Pile[E] | Element | None = None,
+        progressions: list[P] | Pile[P] | None = None,
+        name: str | None = None,
+        item_type: type[E] | set[type] | list[type] | None = None,
+        strict_type: bool = False,
+        **data,
+    ):
+        """Initialize Flow with optional items and type validation.
+
+        Field validator handles dict/list conversion. Model validator validates
+        referential integrity after construction.
+
+        Args:
+            items: Initial items (Element, list[Element], Pile, or list[dict])
+            progressions: Initial progressions (Progression, list, Pile, or list[dict])
+            name: Flow name
+            item_type: Type(s) for validation (passed to items Pile)
+            strict_type: Enforce exact type match (passed to items Pile)
+            **data: Additional Element fields
+        """
+        # Extract and normalize item_type
+        item_type = extract_types(item_type) if item_type else None
+
+        # Handle items - create configured Pile if needed
+        if isinstance(items, Pile):
+            data["items"] = items
+        elif isinstance(items, dict):
+            # Dict from deserialization - let field validator handle it
+            data["items"] = items
+        elif isinstance(items, list) and items and isinstance(items[0], dict):
+            # List of dicts from deserialization - let field validator handle it
+            data["items"] = items
+        elif items is not None or item_type is not None or strict_type:
+            # Normalize to list
+            if isinstance(items, Element):
+                items = [items]
+
+            # Create Pile with items and type validation (item_type/strict_type are frozen)
+            # Even if items=None, create Pile if item_type/strict_type specified
+            data["items"] = Pile(items=items, item_type=item_type, strict_type=strict_type)
+
+        # Handle progressions - let field validator convert dict/list to Pile
+        if progressions is not None:
+            data["progressions"] = progressions
+
+        if name is not None:
+            data["name"] = name
+
+        super().__init__(**data)
+
     @field_validator("items", "progressions", mode="wrap")
     @classmethod
-    def _validate_piles(cls, v: Any, handler: Any) -> Any:
-        """Convert dict to Pile during deserialization."""
+    def _validate_piles(cls, v: Any, handler: Any, info) -> Any:
+        """Handle Pile, dict, and list inputs - convert to Pile as needed."""
+        if isinstance(v, Pile):
+            # Already a Pile from __init__, use it directly
+            return v
         if isinstance(v, dict):
+            # Dict from deserialization, convert to Pile
             return Pile.from_dict(v)
-        # Let Pydantic handle it
+        if isinstance(v, list):
+            # List input (can be list[Element] or list[dict]), convert to Pile
+            pile = Pile()
+            for item in v:
+                if isinstance(item, dict):
+                    pile.add(Element.from_dict(item))
+                else:
+                    pile.add(item)
+            return pile
+        # Let Pydantic handle other cases (default_factory)
         return handler(v)
+
+    @model_validator(mode="after")
+    def _validate_referential_integrity(self) -> Flow:
+        """Validate that all progression UUIDs exist in items pile.
+
+        Runs after model construction (both __init__ and deserialization).
+        Uses set operations for O(1) membership checks.
+        """
+        item_ids = set(self.items.keys())
+
+        # Validate each progression
+        for prog in self.progressions:
+            missing_ids = set(list(prog)) - item_ids
+            if missing_ids:
+                raise NotFoundError(
+                    f"Progression '{prog.name}' contains UUIDs not in items pile: {missing_ids}"
+                )
+
+        return self
 
     def model_post_init(self, __context: Any) -> None:
         """Rebuild _progression_names index after deserialization."""
@@ -68,17 +152,7 @@ class Flow(Element, Generic[E, P]):
                 self._progression_names[progression.name] = progression.id
 
     def _check_item_exists(self, item_id: UUID) -> E:
-        """Verify item exists, re-raising NotFoundError with flow context.
-
-        Args:
-            item_id: Item UUID to check
-
-        Returns:
-            Item if found
-
-        Raises:
-            NotFoundError: With flow context and preserved metadata
-        """
+        """Verify item exists, re-raising NotFoundError with flow context."""
         try:
             return self.items[item_id]
         except NotFoundError as e:
@@ -90,17 +164,7 @@ class Flow(Element, Generic[E, P]):
             )
 
     def _check_progression_exists(self, progression_id: UUID) -> P:
-        """Verify progression exists, re-raising NotFoundError with flow context.
-
-        Args:
-            progression_id: Progression UUID to check
-
-        Returns:
-            Progression if found
-
-        Raises:
-            NotFoundError: With flow context and preserved metadata
-        """
+        """Verify progression exists, re-raising NotFoundError with flow context."""
         try:
             return self.progressions[progression_id]
         except NotFoundError as e:
@@ -110,41 +174,6 @@ class Flow(Element, Generic[E, P]):
                 retryable=e.retryable,
                 cause=e,
             )
-
-    def __init__(
-        self,
-        items: list[E] | None = None,
-        name: str | None = None,
-        item_type: type[E] | set[type] | list[type] | None = None,
-        strict_type: bool = False,
-        **data,
-    ):
-        """Initialize Flow with optional items and type validation.
-
-        Args:
-            items: Initial items to add to items pile
-            name: Flow name
-            item_type: Type(s) for validation
-            strict_type: Enforce exact type match (no subclasses)
-            **data: Additional Element fields
-        """
-        # Let Pydantic create default piles, then populate
-        super().__init__(name=name, **data)
-
-        # Normalize item_type to set and extract types from unions
-        if item_type is not None:
-            item_type = extract_types(item_type)
-
-        # Set item_type and strict_type on items pile if provided
-        if item_type:
-            self.items.item_type = item_type
-        if strict_type:
-            self.items.strict_type = strict_type
-
-        # Add items after initialization (only if items is a list, not during deserialization)
-        if items and isinstance(items, list):
-            for item in items:
-                self.items.add(item)
 
     # ==================== Progression Management ====================
 
@@ -207,37 +236,47 @@ class Flow(Element, Generic[E, P]):
     def add_item(
         self,
         item: E,
-        progression_ids: list[UUID | str] | UUID | str | None = None,
+        progressions: list[UUID | str] | UUID | str | None = None,
     ) -> None:
-        """Add item to items pile and optionally to progressions. Raises ExistsError if exists."""
+        """Add item to items pile and optionally to progressions.
+
+        Args:
+            item: Item to add
+            progressions: Progression ID(s) or name(s) to add item to
+
+        Raises:
+            ExistsError: If item already exists
+        """
         # Add to items pile (let ExistsError bubble)
         self.items.add(item)
 
         # Add to specified progressions
-        if progression_ids is not None:
-            # Normalize to list
-            ids = [progression_ids] if not isinstance(progression_ids, list) else progression_ids
+        if progressions is not None:
+            # Normalize to list - treat string/UUID as single value, convert other iterables
+            ids = [progressions] if isinstance(progressions, (str, UUID)) else list(progressions)
 
             for prog_id in ids:
                 progression = self.get_progression(prog_id)
                 progression.append(item)
 
-    def remove_item(
-        self,
-        item_id: UUID | str | Element,
-        remove_from_progressions: bool = True,
-    ) -> E:
-        """Remove item from items pile and optionally from progressions. Raises NotFoundError if not found."""
+    def remove_item(self, item_id: UUID | str | Element) -> E:
+        """Remove item from items pile and all progressions.
+
+        Args:
+            item_id: Item ID, UUID string, or Element instance
+
+        Returns:
+            Removed item
+
+        Raises:
+            NotFoundError: If item not found in pile
+        """
         uid = self._coerce_id(item_id)
 
-        # Verify item exists first
-        self._check_item_exists(uid)
-
-        # Remove from progressions first
-        if remove_from_progressions:
-            for progression in self.progressions:
-                if uid in progression:
-                    progression.remove(uid)
+        # Remove from all progressions first
+        for progression in self.progressions:
+            if uid in progression:
+                progression.remove(uid)
 
         # Remove from items pile
         return self.items.remove(uid)

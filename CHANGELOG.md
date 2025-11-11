@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING**: `Pile.item_type` and `Pile.strict_type` are now frozen fields (#156). Type configuration must be set at initialization and cannot be mutated afterward. Prevents runtime type confusion.
+- **BREAKING**: `Pile.include()` and `Pile.exclude()` return value semantics changed (#157). Now return guaranteed state (True = in pile) rather than action taken (True = was added).
+- **BREAKING**: `Pile.items` changed from property to method (#159). Returns `Iterator[tuple[UUID, T]]`.
+- **BREAKING**: `Progression.__init__` removed—all normalization moved to `@field_validator` (#156). Validation is stricter: invalid items raise `ValidationError` instead of being silently dropped.
+- **BREAKING**: `Flow.__init__` signature redesigned to accept `progressions` parameter and create configured `Pile` upfront (#156). Respects frozen `item_type`/`strict_type`.
+- **BREAKING**: `Flow` now validates referential integrity at construction (#156). All UUIDs in progressions must exist in items pile.
+- **BREAKING**: `Flow.add_item()` parameter renamed: `progression_ids` → `progressions`.
+- **BREAKING**: `Flow.remove_item()` parameter removed: `remove_from_progressions` no longer supported. Always removes item from all progressions.
 - **Progression exceptions**: Migrate `IndexError` → `NotFoundError` for semantic consistency
   - `pop()` without default raises `NotFoundError` instead of `IndexError`
   - `popleft()` on empty raises `NotFoundError` instead of `IndexError`
@@ -23,9 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   **Migration**: Update `@implements()` declarations on custom classes inheriting from Node/Pile/Graph to include both protocols if registering adapters.
 
+### Removed
+
+- **BREAKING**: Async Pile methods removed: `add_async()`, `remove_async()`, `get_async()`. Use sync methods (Pile operations are O(1) CPU-bound, not I/O).
+- **BREAKING**: `Pile.__list__()` and `Pile.to_list()` removed. Use built-in `list(pile)`.
+
 ### Added
 
+- `Pile.__bool__` protocol for empty checks (#159). `if pile:` is False when empty.
+- `Pile` dict-like iteration protocol (#159): `keys()` and `items()` methods for dict-like access.
+- `Progression.__bool__` protocol for empty checks (#156). Empty progressions are falsy.
+- `Flow` referential integrity validation via `@model_validator` (#156).
 - **BREAKING**: `@implements()` strict runtime enforcement (#147). Classes MUST define protocol methods in class body (inheritance doesn't count). Enforces Rust-like explicit trait implementation. Raises `TypeError` on violation with clear error message.
+
+### Fixed
+
+- **Flow**: `item_type`/`strict_type` now correctly applied to items `Pile` (#156). Previous design created default Pile then mutated frozen fields.
 
 ## [1.0.0a4](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha4) - 2025-11-11
 
