@@ -35,12 +35,12 @@ jupyter notebook mcp_tool_pipeline.ipynb
 
 | Tutorial | Time | What You'll Learn |
 |----------|------|-------------------|
-| [**MCP Tool Pipeline**](./mcp_tool_pipeline.ipynb) | 20-30min | Parse function calls, map args, nest parameters for MCP tools |
-| [**Dynamic Schema Selection**](./dynamic_schema_selection.ipynb) | 15-25min | Select and apply schemas dynamically using schema dictionaries |
+| [**MCP Tool Pipeline**](./mcp_tool_pipeline.ipynb) | 20-30 min | Parse function calls, map args, nest parameters for MCP tools |
+| [**Dynamic Schema Selection**](./dynamic_schema_selection.ipynb) | 15-25 min | Select and apply schemas dynamically using schema dictionaries |
 
 ## Learning Path
 
-**Recommended order** (45 minutes total):
+**Recommended order** (45 min total):
 
 1. **MCP Tool Pipeline** - Understand parse → map → nest → validate flow
 2. **Dynamic Schema Selection** - Learn schema dictionary pattern for routing
