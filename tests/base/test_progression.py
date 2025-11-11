@@ -177,7 +177,7 @@ class TestProgressionValidation:
             UUID strings converted via UUID(str) constructor.
             Invalid UUIDs raise ValueError (fails fast, no partial state).
 
-        Design rationale:
+        Design Intent:
             Permissive input: Simplifies API usage (accept Elements or UUIDs)
             Strict validation: No silent failures, errors propagate
             JSON-friendly: Handles UUID string deserialization from to_dict/from_dict
