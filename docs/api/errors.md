@@ -373,13 +373,13 @@ Operation timeout. **Retryable** by default.
 
 ```python
 from lionherd_core.errors import TimeoutError
-import anyio
+from lionherd_core import concurrency
 
-# Async timeout - anyio raises cancellation exceptions, not TimeoutError
+# Async timeout
 try:
-    async with anyio.fail_after(30):
+    async with concurrency.fail_after(30):
         result = await long_operation()
-except anyio.get_cancelled_exc_class() as e:
+except concurrency.get_cancelled_exc_class() as e:
     raise TimeoutError(
         "Operation timed out after 30s",
         details={"timeout": 30, "operation": "long_operation"}
@@ -387,10 +387,10 @@ except anyio.get_cancelled_exc_class() as e:
 
 # Lock timeout
 try:
-    async with anyio.fail_after(5):
+    async with concurrency.fail_after(5):
         async with lock:
             await critical_section()
-except anyio.get_cancelled_exc_class() as e:
+except concurrency.get_cancelled_exc_class() as e:
     raise TimeoutError(
         "Failed to acquire lock",
         details={"timeout": 5, "lock": "critical_section"}
@@ -422,7 +422,7 @@ The `.retryable` flag indicates whether an operation can be retried after this e
 
 ```python
 from lionherd_core.errors import LionherdError, ExecutionError
-import anyio
+from lionherd_core import concurrency
 
 async def retry_operation(operation, max_attempts=3):
     """Retry operation if error is retryable."""
@@ -436,7 +436,7 @@ async def retry_operation(operation, max_attempts=3):
             # Exponential backoff for retryable errors
             delay = 2 ** attempt
             print(f"Attempt {attempt + 1} failed (retryable), retrying in {delay}s...")
-            await anyio.sleep(delay)
+            await concurrency.sleep(delay)
 
 # Usage
 try:
@@ -649,7 +649,7 @@ Use `.retryable` flag to decide retry strategy.
 
 ```python
 from lionherd_core.errors import LionherdError
-import anyio
+from lionherd_core import concurrency
 
 async def resilient_operation(operation, max_attempts=3):
     """Execute operation with retry logic for transient failures."""
@@ -674,7 +674,7 @@ async def resilient_operation(operation, max_attempts=3):
             delay = 2 ** attempt
             print(f"Attempt {attempt + 1} failed: {e.message}")
             print(f"Error is retryable, waiting {delay}s before retry...")
-            await anyio.sleep(delay)
+            await concurrency.sleep(delay)
 
     # Should never reach here
     raise last_error
