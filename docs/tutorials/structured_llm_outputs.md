@@ -7,6 +7,7 @@ Learn how to reliably extract structured data from LLM text responses using lion
 ## The Problem
 
 LLMs produce text, but applications need structured data. JSON parsing fails when LLMs:
+
 - Add explanatory text around JSON
 - Use inconsistent formatting
 - Make typos in field names
@@ -24,6 +25,7 @@ OUT{result: [var1, var2, ...]}
 ```
 
 **Key benefits**:
+
 - Tolerates typos (Jaro-Winkler fuzzy matching)
 - Handles malformed tags
 - Extracts structured data from mixed text/markup
@@ -122,7 +124,8 @@ for task in task_list.tasks:
 ```
 
 **Output**:
-```
+
+```text
 Total tasks: 3
 Total hours: 14.0
 - [high] Implement authentication (8.0h)
@@ -194,24 +197,27 @@ for attempt in range(max_retries):
 ## When to Use LNDL
 
 **Use LNDL when**:
+
 - LLM outputs need structure (API calls, database inserts)
 - Reliability > speed (10-50ms overhead acceptable)
 - LLM produces mixed text + structured data
 
 **Don't use when**:
+
 - LLM only returns pure JSON (use `orjson` directly)
 - Performance critical (<10ms budget)
 - Simple string extraction (regex sufficient)
 
 ## Next Steps
 
-- **Notebooks**: See `notebooks/tutorials/lndl/lndl_basics.ipynb` for interactive examples
 - **API Reference**: `docs/api/lndl/parser.md` for full API details
-- **Advanced**: Nested models, custom validators, streaming parsing in `docs/api/ln/tutorials/`
+- **API Reference**: `docs/api/types/operable.md` for Operable and Spec documentation
 
 ## Real-World Use Case
 
 ```python
+from typing import Any
+
 # LLM agent system: extract tool calls from LLM response
 class ToolCall(BaseModel):
     tool: str
@@ -222,10 +228,12 @@ class AgentResponse(BaseModel):
     tool_calls: list[ToolCall]
 
 # Parse LLM response → execute tools → return results
+# llm = YourLLMClient()  # Initialize your LLM client
 response = llm.generate(prompt)
 parsed = parse_lndl_fuzzy(response, Operable([Spec(AgentResponse, "result")]))
 
 for call in parsed.result.tool_calls:
+    # def execute_tool(name: str, args: dict) -> Any: ...  # Your tool execution logic
     result = execute_tool(call.tool, call.args)
     # ... continue agent loop
 ```

@@ -39,8 +39,8 @@ Fetch data from 100 external APIs, process each item, and store results. Require
 ```python
 from pydantic import BaseModel
 import httpx
-import asyncio
 from typing import Any
+from lionherd_core.libs.concurrency import sleep
 
 class DataItem(BaseModel):
     """Raw data from API."""
@@ -57,7 +57,7 @@ class ProcessedItem(BaseModel):
 # Simulated external API (with random failures)
 async def fetch_from_api(item_id: str) -> DataItem:
     """Fetch data from external API (may fail randomly)."""
-    await asyncio.sleep(0.1)  # Simulate network latency
+    await sleep(0.1)  # Simulate network latency
 
     # Simulate failures (20% failure rate)
     import random
@@ -70,7 +70,8 @@ async def fetch_from_api(item_id: str) -> DataItem:
 ### 2. Resilient Fetcher with Retry Logic
 
 ```python
-from lionherd_core.libs.concurrency import alcall
+from lionherd_core.ln import alcall
+from lionherd_core.libs.concurrency import fail_after, sleep
 
 async def fetch_with_retry(
     item_id: str,
@@ -81,17 +82,15 @@ async def fetch_with_retry(
     for attempt in range(max_retries):
         try:
             # Apply timeout to each attempt
-            return await asyncio.wait_for(
-                fetch_from_api(item_id),
-                timeout=timeout
-            )
-        except (httpx.HTTPError, asyncio.TimeoutError) as e:
+            async with fail_after(timeout):
+                return await fetch_from_api(item_id)
+        except (httpx.HTTPError, TimeoutError) as e:
             if attempt == max_retries - 1:
                 # Final attempt failed
                 print(f"Failed {item_id} after {max_retries} attempts: {e}")
                 return None
             # Exponential backoff
-            await asyncio.sleep(2 ** attempt)
+            await sleep(2 ** attempt)
 
 async def fetch_all_items(item_ids: list[str]) -> list[DataItem]:
     """Fetch all items with concurrency limit."""
@@ -117,7 +116,7 @@ async def fetch_all_items(item_ids: list[str]) -> list[DataItem]:
 ### 3. Process Data with Resource Limits
 
 ```python
-from lionherd_core.libs.concurrency.resource_tracker import CapacityLimiter
+from lionherd_core.libs.concurrency import CapacityLimiter, sleep
 
 # Global resource limiter (e.g., database connections)
 db_limiter = CapacityLimiter(capacity=5)
@@ -126,7 +125,7 @@ async def process_item(item: DataItem) -> ProcessedItem:
     """Process data item (CPU-intensive or I/O-bound)."""
     # Acquire database connection from pool
     async with db_limiter:
-        await asyncio.sleep(0.05)  # Simulate processing
+        await sleep(0.05)  # Simulate processing
 
         return ProcessedItem(
             id=item.id,
@@ -158,7 +157,7 @@ async def process_all_items(items: list[DataItem]) -> list[ProcessedItem]:
 ### 4. Store Results with Error Aggregation
 
 ```python
-from lionherd_core.libs.concurrency.errors import ExceptionGroup
+from lionherd_core.libs.concurrency import sleep
 
 async def store_item(item: ProcessedItem) -> None:
     """Store item to database (may fail)."""
@@ -166,7 +165,7 @@ async def store_item(item: ProcessedItem) -> None:
     if random.random() < 0.1:  # 10% failure rate
         raise ValueError(f"Storage failed for {item.id}")
 
-    await asyncio.sleep(0.02)  # Simulate write
+    await sleep(0.02)  # Simulate write
     print(f"Stored {item.id}")
 
 async def store_all_items(items: list[ProcessedItem]) -> dict[str, Any]:
@@ -264,6 +263,8 @@ Pipeline result: {
 ### Pattern 1: Circuit Breaker
 
 ```python
+from lionherd_core.libs.concurrency import current_time
+
 class CircuitBreaker:
     """Stop calling failing service after threshold."""
     def __init__(self, failure_threshold: int = 5, timeout: float = 60.0):
@@ -275,7 +276,7 @@ class CircuitBreaker:
     async def call(self, func, *args, **kwargs):
         # Check if circuit is open
         if self.opened_at:
-            if asyncio.get_event_loop().time() - self.opened_at < self.timeout:
+            if current_time() - self.opened_at < self.timeout:
                 raise RuntimeError("Circuit breaker open")
             else:
                 self.opened_at = None  # Reset after timeout
@@ -287,7 +288,7 @@ class CircuitBreaker:
         except Exception as e:
             self.failures += 1
             if self.failures >= self.threshold:
-                self.opened_at = asyncio.get_event_loop().time()
+                self.opened_at = current_time()
             raise
 
 # Usage
@@ -329,6 +330,11 @@ async def pipeline_with_deadline(item_ids: list[str], deadline_sec: float):
 ```python
 import signal
 
+def chunks(lst: list, n: int):
+    """Split list into chunks of size n."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
 class GracefulShutdown:
     """Handle shutdown signals gracefully."""
     def __init__(self):
@@ -361,7 +367,7 @@ async def run_with_shutdown(item_ids: list[str]):
 | alcall | 1-5ms | Batch async operations |
 | CapacityLimiter | <1ms | Resource pool management |
 | ExceptionGroup | <1ms | Error aggregation |
-| Timeout (asyncio.wait_for) | <1ms | Per-operation time limits |
+| Timeout (fail_after) | <1ms | Per-operation time limits |
 
 ## When to Use These Patterns
 
@@ -382,7 +388,6 @@ async def run_with_shutdown(item_ids: list[str]):
 
 - **API Reference**: `docs/api/libs/concurrency.md` for complete API details
 - **Notebooks**: `notebooks/tutorials/concurrency/` for interactive examples
-- **Advanced**: Priority queues, work stealing, adaptive concurrency in `docs/api/ln/tutorials/`
 
 ## Real-World Metrics
 
