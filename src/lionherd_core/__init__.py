@@ -3,8 +3,10 @@
 
 __version__ = "1.0.0-alpha4"  # pragma: no cover
 
-from . import ln as ln
-from . import lndl as lndl
+from . import (
+    ln as ln,
+    lndl as lndl,
+)
 from .base import (
     Broadcaster,
     Edge,
