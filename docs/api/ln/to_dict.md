@@ -669,8 +669,8 @@ from pydantic import BaseModel
 ### Example 1: API Response Normalization
 
 ```python
+from pydantic import BaseModel
 from lionherd_core.ln import to_dict
-from lionherd_core import BaseModel
 
 class APIResponse(BaseModel):
     status: str

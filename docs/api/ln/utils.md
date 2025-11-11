@@ -545,7 +545,7 @@ Specific attribute(s) to import from module.
 
 ```python
 # Pattern 1: Optional dependency with fallback
-def get_parser():
+def get_parser() -> callable:
     """Get parser with optional orjson fallback."""
     try:
         orjson = import_module("orjson")
@@ -555,7 +555,7 @@ def get_parser():
         return json.loads
 
 # Pattern 2: Plugin system
-def load_plugin(plugin_path: str, class_name: str):
+def load_plugin(plugin_path: str, class_name: str) -> type:
     """Load plugin class dynamically."""
     package, module = plugin_path.split(":", 1)
     return import_module(package, module, class_name)
@@ -647,7 +647,7 @@ False
 
 ```python
 # Pattern 1: Optional dependency guard
-def get_fast_parser():
+def get_fast_parser() -> any:
     """Get fastest available JSON parser."""
     if is_import_installed("orjson"):
         from lionherd_core.ln._utils import import_module
