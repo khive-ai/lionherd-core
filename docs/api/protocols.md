@@ -81,7 +81,7 @@ class Observable(Protocol):
 #### Usage Pattern
 
 ```python
-from uuid import uuid4
+from uuid import uuid4, UUID
 from lionherd_core.protocols import Observable, implements
 
 @implements(Observable)
@@ -142,6 +142,7 @@ class Serializable(Protocol):
 #### Usage Pattern
 
 ```python
+from typing import Any
 from lionherd_core.protocols import Serializable, implements
 
 @implements(Serializable)
@@ -212,6 +213,7 @@ class Deserializable(Protocol):
 #### Usage Pattern
 
 ```python
+from typing import Any
 from lionherd_core.protocols import Deserializable, implements
 
 @implements(Deserializable)
@@ -234,6 +236,8 @@ config = Config.from_dict(data)
 Advanced pattern: Use metadata to reconstruct correct subclass.
 
 ```python
+from typing import Any
+
 @implements(Deserializable)
 class Base:
     @classmethod
