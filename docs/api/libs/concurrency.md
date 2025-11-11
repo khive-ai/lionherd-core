@@ -164,9 +164,9 @@ async def flaky_operation():
 async with fail_after(10.0):
     result = await retry(
         flaky_operation,
-        max_attempts=3,
-        initial_delay=0.1,
-        backoff=2.0,
+        attempts=3,
+        base_delay=0.1,
+        max_delay=2.0,
         jitter=0.1,
     )
 ```
@@ -284,11 +284,11 @@ For CPU-bound work, use `ProcessPoolExecutor` instead of async concurrency.
 
 - **[AnyIO Documentation](https://anyio.readthedocs.io/)** - Underlying async abstraction
 - **[Trio Documentation](https://trio.readthedocs.io/)** - Structured concurrency inspiration
-- **[Base Module](../base/)** - Integration with Element, Node, Pile for async workflows
-- **[Notebooks](../../notebooks/)** - Practical examples and tutorials
+- **Base Module** (`../base/`) - Integration with Element, Node, Pile for async workflows
+- **Notebooks** (`../../notebooks/`) - Practical examples and tutorials
 
 ## See Also
 
-- **[libs.schema_handlers](../libs/)** - Async schema validation utilities
-- **[libs.string_handlers](../libs/)** - Async string processing utilities
-- **[protocols](../../protocols.md)** - Protocol-based composition patterns
+- **libs.schema_handlers** - Async schema validation utilities (see `../libs/schema_handlers/`)
+- **libs.string_handlers** - Async string processing utilities (see `../libs/string_handlers/`)
+- **protocols** - Protocol-based composition patterns (documentation coming soon)
