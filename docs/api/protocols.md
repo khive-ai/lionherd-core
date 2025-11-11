@@ -491,6 +491,7 @@ class Containable(Protocol):
 #### Usage Pattern
 
 ```python
+from uuid import UUID, uuid4
 from lionherd_core.protocols import Containable, implements
 
 @implements(Containable)
@@ -616,6 +617,8 @@ class Hashable(Protocol):
 **Identity-Based Hashing** (Element pattern):
 
 ```python
+from uuid import uuid4
+
 @implements(Hashable)
 class Element:
     def __init__(self):
@@ -927,6 +930,7 @@ class MyClass(Serializable):  # Protocols aren't meant for inheritance
 Combine multiple protocols for rich capabilities:
 
 ```python
+from uuid import uuid4, UUID
 from lionherd_core.protocols import Observable, Serializable, Hashable, implements
 
 @implements(Observable, Serializable, Hashable)
@@ -1225,6 +1229,7 @@ assert isinstance(agent, Observable)
 ### Example 2: Implementing Serializable + Deserializable
 
 ```python
+from typing import Any
 from lionherd_core.protocols import Serializable, Deserializable, implements
 
 @implements(Serializable, Deserializable)
@@ -1233,11 +1238,11 @@ class Config:
         self.host = host
         self.port = port
 
-    def to_dict(self, **kwargs) -> dict:
+    def to_dict(self, **kwargs: Any) -> dict[str, Any]:
         return {"host": self.host, "port": self.port}
 
     @classmethod
-    def from_dict(cls, data: dict, **kwargs) -> "Config":
+    def from_dict(cls, data: dict[str, Any], **kwargs: Any) -> "Config":
         return cls(host=data["host"], port=data["port"])
 
 # Roundtrip
@@ -1250,7 +1255,8 @@ assert restored.host == config.host
 ### Example 3: Protocol Composition
 
 ```python
-from uuid import uuid4
+from typing import Any
+from uuid import uuid4, UUID
 from lionherd_core.protocols import Observable, Serializable, Hashable, implements
 
 @implements(Observable, Serializable, Hashable)
@@ -1260,10 +1266,10 @@ class Agent:
         self.name = name
 
     @property
-    def id(self):
+    def id(self) -> UUID:
         return self._id
 
-    def to_dict(self, **kwargs):
+    def to_dict(self, **kwargs: Any) -> dict[str, Any]:
         return {"id": str(self.id), "name": self.name}
 
     def __hash__(self):
@@ -1289,6 +1295,7 @@ lookup = {agent: "result"}  # Dict key
 ### Example 4: Adapter Pattern
 
 ```python
+from typing import Any
 from lionherd_core.protocols import Adaptable, implements
 from pydapter import Adapter, to_json, from_json
 
@@ -1300,14 +1307,14 @@ class Node:
         self.label = label
 
     @classmethod
-    def register_adapter(cls, adapter):
+    def register_adapter(cls, adapter: Any) -> None:
         cls._adapter = adapter
 
-    def adapt_to(self, obj_key: str, many: bool = False, **kwargs):
+    def adapt_to(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any:
         return self._adapter.to(self, obj_key, many=many, **kwargs)
 
     @classmethod
-    def adapt_from(cls, obj, obj_key: str, many: bool = False, **kwargs):
+    def adapt_from(cls, obj: Any, obj_key: str, many: bool = False, **kwargs: Any) -> "Node":
         instance = cls._adapter.from_(obj, obj_key, many=many, **kwargs)
         return instance
 
@@ -1323,16 +1330,17 @@ restored = Node.adapt_from(json_data, "json")
 ### Example 5: Explicit Override Pattern
 
 ```python
+from typing import Any
 from lionherd_core.protocols import Serializable, implements
 
 class Parent:
-    def to_dict(self, **kwargs):
+    def to_dict(self, **kwargs: Any) -> dict[str, Any]:
         return {"parent": "data"}
 
 # ✅ CORRECT: Explicit override
 @implements(Serializable)
 class Child(Parent):
-    def to_dict(self, **kwargs):  # Must be in class body
+    def to_dict(self, **kwargs: Any) -> dict[str, Any]:  # Must be in class body
         data = super().to_dict(**kwargs)
         data["child"] = "additional_data"
         return data
