@@ -594,7 +594,7 @@ class TestEdgeOperations:
             graph.add_edge(e1)
 
     def test_add_edge_missing_head_raises(self, empty_graph):
-        """Test adding edge with missing head node raises ValueError."""
+        """Test adding edge with missing head node raises NotFoundError."""
         n1 = Node(content={"value": "A"})
         n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
@@ -602,11 +602,11 @@ class TestEdgeOperations:
         # n2 not in graph
         edge = Edge(head=n2.id, tail=n1.id)
 
-        with pytest.raises(ValueError, match=r"Head node .* not in graph"):
+        with pytest.raises(NotFoundError, match=r"Head node .* not in graph"):
             empty_graph.add_edge(edge)
 
     def test_add_edge_missing_tail_raises(self, empty_graph):
-        """Test adding edge with missing tail node raises ValueError."""
+        """Test adding edge with missing tail node raises NotFoundError."""
         n1 = Node(content={"value": "A"})
         n2 = Node(content={"value": "B"})
         empty_graph.add_node(n1)
@@ -614,7 +614,7 @@ class TestEdgeOperations:
         # n2 not in graph
         edge = Edge(head=n1.id, tail=n2.id)
 
-        with pytest.raises(ValueError, match=r"Tail node .* not in graph"):
+        with pytest.raises(NotFoundError, match=r"Tail node .* not in graph"):
             empty_graph.add_edge(edge)
 
     def test_remove_edge_basic(self, simple_graph):
@@ -1382,7 +1382,7 @@ class TestGraphAlgorithms:
         graph, _, _ = simple_graph
         fake_node = Node(content={"value": "fake"})
 
-        with pytest.raises(ValueError, match="not in graph"):
+        with pytest.raises(NotFoundError, match="not in graph"):
             await graph.find_path(
                 fake_node, graph.nodes.items[next(iter(graph.nodes.items.keys()))]
             )
@@ -1392,7 +1392,7 @@ class TestGraphAlgorithms:
         graph, (n1, _, _), _ = simple_graph
         fake_node = Node(content={"value": "fake"})
 
-        with pytest.raises(ValueError, match="not in graph"):
+        with pytest.raises(NotFoundError, match="not in graph"):
             await graph.find_path(n1, fake_node)
 
     async def test_find_path_with_conditions_all_pass(self, simple_graph):

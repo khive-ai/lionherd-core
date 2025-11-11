@@ -243,7 +243,7 @@ def test_pile_order_validation_invalid_uuid(simple_items):
     from uuid import uuid4
 
     invalid_order = [uuid4()]  # UUID not in items
-    with pytest.raises(ValueError, match=r"UUID .* not found in items"):
+    with pytest.raises(NotFoundError, match=r"UUID .* not found in items"):
         Pile(items=simple_items, order=invalid_order)
 
 
@@ -744,10 +744,10 @@ def test_filter_by_type_with_strict_validation():
 
 
 def test_filter_by_type_no_matches():
-    """Test filter_by_type raises ValueError when no matches."""
+    """Test filter_by_type raises NotFoundError when no matches."""
     pile = Pile(items=[SimpleElement(value=1)])
 
-    with pytest.raises(ValueError, match="No items of type"):
+    with pytest.raises(NotFoundError, match="No items of type"):
         pile.filter_by_type(TypedElement)
 
 
