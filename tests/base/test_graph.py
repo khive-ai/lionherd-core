@@ -728,8 +728,8 @@ class TestPileKeyErrorHandling:
 
     # Phase 1: Exception Transformation Tests
 
-    def test_get_node_transforms_keyerror(self, empty_graph):
-        """Verify get_node transforms KeyError to ValueError."""
+    def test_get_node_transforms_notfounderror_to_valueerror(self, empty_graph):
+        """Verify get_node transforms Pile NotFoundError to Graph ValueError."""
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
 
         # Should raise ValueError, not KeyError
@@ -744,8 +744,8 @@ class TestPileKeyErrorHandling:
         except ValueError:
             pass  # Expected
 
-    def test_get_edge_transforms_keyerror(self, empty_graph):
-        """Verify get_edge transforms KeyError to ValueError."""
+    def test_get_edge_transforms_notfounderror_to_valueerror(self, empty_graph):
+        """Verify get_edge transforms Pile NotFoundError to Graph ValueError."""
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
 
         # Should raise ValueError, not KeyError
@@ -760,8 +760,8 @@ class TestPileKeyErrorHandling:
         except ValueError:
             pass  # Expected
 
-    def test_remove_edge_transforms_keyerror(self, empty_graph):
-        """Verify remove_edge transforms KeyError to ValueError."""
+    def test_remove_edge_transforms_notfounderror_to_valueerror(self, empty_graph):
+        """Verify remove_edge transforms Pile NotFoundError to Graph ValueError."""
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
 
         # Should raise ValueError, not KeyError
@@ -778,8 +778,8 @@ class TestPileKeyErrorHandling:
 
     # Phase 2: Exception Suppression Tests
 
-    def test_get_node_suppresses_keyerror(self, empty_graph):
-        """Verify 'from None' suppresses KeyError in traceback."""
+    def test_get_node_suppresses_notfounderror(self, empty_graph):
+        """Verify 'from None' suppresses intermediate NotFoundError in traceback."""
         import traceback
 
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
@@ -794,8 +794,8 @@ class TestPileKeyErrorHandling:
             assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
             assert "During handling" not in tb_str, "Exception context should be suppressed"
 
-    def test_get_edge_suppresses_keyerror(self, empty_graph):
-        """Verify 'from None' suppresses KeyError in traceback."""
+    def test_get_edge_suppresses_notfounderror(self, empty_graph):
+        """Verify 'from None' suppresses intermediate NotFoundError in traceback."""
         import traceback
 
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
@@ -810,8 +810,8 @@ class TestPileKeyErrorHandling:
             assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
             assert "During handling" not in tb_str, "Exception context should be suppressed"
 
-    def test_remove_edge_suppresses_keyerror(self, empty_graph):
-        """Verify 'from None' suppresses KeyError in traceback."""
+    def test_remove_edge_suppresses_notfounderror(self, empty_graph):
+        """Verify 'from None' suppresses intermediate NotFoundError in traceback."""
         import traceback
 
         fake_id = UUID("00000000-0000-0000-0000-000000000000")

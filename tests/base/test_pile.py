@@ -819,6 +819,86 @@ async def test_concurrent_async_operations():
 
 
 # =============================================================================
+# Pile Error Handling Tests (Traceback Suppression)
+# =============================================================================
+
+
+def test_remove_suppresses_keyerror():
+    """Verify Pile.remove uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        pile.remove(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        # Should NOT contain KeyError or "During handling" context
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+def test_get_suppresses_keyerror():
+    """Verify Pile.get uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        pile.get(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+@pytest.mark.asyncio
+async def test_remove_async_suppresses_keyerror():
+    """Verify Pile.remove_async uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        await pile.remove_async(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+@pytest.mark.asyncio
+async def test_get_async_suppresses_keyerror():
+    """Verify Pile.get_async uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        await pile.get_async(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+# =============================================================================
 # Thread Safety Tests
 # =============================================================================
 #

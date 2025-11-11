@@ -541,11 +541,10 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Async version of remove()."""
 
         uid = to_uuid(item_id)
-
-        if uid not in self._items:
-            raise NotFoundError(f"Item {uid} not found in pile")
-
-        item = self._items.pop(uid)
+        try:
+            item = self._items.pop(uid)
+        except KeyError:
+            raise NotFoundError(f"Item {uid} not found in pile") from None
         self._progression.remove(uid)
         return item
 
@@ -554,11 +553,10 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Async version of get()."""
 
         uid = to_uuid(item_id)
-
-        if uid not in self._items:
-            raise NotFoundError(f"Item {uid} not found in pile")
-
-        return self._items[uid]
+        try:
+            return self._items[uid]
+        except KeyError:
+            raise NotFoundError(f"Item {uid} not found in pile") from None
 
     # ==================== Query Operations ====================
 
