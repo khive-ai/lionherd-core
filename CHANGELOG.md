@@ -7,15 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0a4](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha4) - 2025-11-11
+
 ### Changed
 
 - **Error Handling**: `Graph`, `Flow`, and `Pile` now raise `NotFoundError` and
-  `ExistsError` instead of `ValueError` for missing/duplicate items (#117, #118).
-  Exception metadata (`.details`, `.retryable`, `.__cause__`) is now preserved
-  for retry logic. Update exception handlers from `except ValueError` to
-  `except NotFoundError` or `except ExistsError` as appropriate.
+  `ExistsError` instead of `ValueError` for missing/duplicate items (#129, #131,
+  #133). Exception metadata (`.details`, `.retryable`, `.__cause__`) is now
+  preserved for retry logic. Update exception handlers from `except ValueError`
+  to `except NotFoundError` or `except ExistsError` as appropriate.
   - `Pile.pop()` now raises `NotFoundError` (was `ValueError`) for consistency
     with `Pile.get()` and `Pile.remove()`.
+- **Performance**: `Pile` methods now use single-lookup pattern (try/except vs
+  if/check) for 50% performance improvement on failed lookups (#128).
+- **Module Organization**: Async utilities consolidated to `libs/concurrency` for
+  cleaner structure (#114).
 
 ### Removed
 
@@ -46,11 +52,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Comprehensive Element API documentation and reference notebook (#39)
+- **Tutorial Infrastructure**: 29 executable tutorials covering concurrency
+  patterns, schema/string handlers, ln utilities, and advanced workflows (#99-106).
+  Includes circuit breakers, deadline management, fuzzy matching, pipelines, and
+  resource lifecycle patterns.
+- **API Documentation**: Complete reference docs and Jupyter notebooks for all
+  base types (Element, Node, Pile, Progression, Flow, Graph, Event, Broadcaster,
+  EventBus), types system (HashableModel, Operable/Spec, Sentinel), and libs
+  (concurrency, schema, string, ln utilities) (#39, #43-46, #52, #54-59).
 - **LNDL Documentation**: Complete API documentation and Jupyter notebooks for LNDL
   (Language InterOperable Network Directive Language) system (#53). Includes 6
   module docs (types, parser, resolver, fuzzy, prompt, errors) and 6 reference
-  notebooks with 100% execution coverage (185/185 cells)
+  notebooks with 100% execution coverage (185/185 cells).
+- **Node Features**: Content constraint (dict|Serializable|BaseModel|None, no
+  primitives) and embedding serialization support for pgvector + JSONB (#50, #113).
+- **Pile.pop() default**: Optional default parameter for safer fallback, consistent
+  with `dict.pop()` behavior (#118, #123).
+- **Test Coverage**: Race condition tests for Event timeout/exception/cancellation
+  scenarios and fuzzy JSON kwargs regression tests (#32, #107, #112).
 
 ## [1.0.0a3](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha3) - 2025-11-06
 
