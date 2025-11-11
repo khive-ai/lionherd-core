@@ -29,7 +29,7 @@ jupyter notebook task_coordination.ipynb
 ### 1. Task Coordination Patterns
 
 **File**: [`task_coordination.ipynb`](./task_coordination.ipynb)
-**Time**: 20-30 minutes | **Difficulty**: Intermediate
+**Time**: 20-30 min | **Difficulty**: 🔵 Intermediate
 
 Master coordinating concurrent workers with proper lifecycle management:
 
@@ -47,7 +47,7 @@ Master coordinating concurrent workers with proper lifecycle management:
 ### 2. Deadline Patterns
 
 **File**: [`deadline_patterns.ipynb`](./deadline_patterns.ipynb)
-**Time**: 20-30 minutes | **Difficulty**: Intermediate
+**Time**: 20-30 min | **Difficulty**: 🔵 Intermediate
 
 Process work within fixed time budgets:
 
@@ -65,7 +65,7 @@ Process work within fixed time budgets:
 ### 3. Error Handling & Timeouts
 
 **File**: [`error_handling_timeouts.ipynb`](./error_handling_timeouts.ipynb)
-**Time**: 20-30 minutes | **Difficulty**: Intermediate
+**Time**: 20-30 min | **Difficulty**: 🔵 Intermediate
 
 Robust timeout and error recovery:
 
@@ -83,7 +83,7 @@ Robust timeout and error recovery:
 ### 4. Transaction Shielding
 
 **File**: [`transaction_shielding.ipynb`](./transaction_shielding.ipynb)
-**Time**: 20-30 minutes | **Difficulty**: Intermediate
+**Time**: 20-30 min | **Difficulty**: 🔵 Intermediate
 
 Protect critical operations from cancellation:
 
@@ -101,7 +101,7 @@ Protect critical operations from cancellation:
 ### 5. Resource Leak Detection
 
 **File**: [`resource_leak_detection.ipynb`](./resource_leak_detection.ipynb)
-**Time**: 25-35 minutes | **Difficulty**: Advanced
+**Time**: 25-35 min | **Difficulty**: 🟠 Advanced
 
 Track and detect resource leaks in production:
 
@@ -119,7 +119,7 @@ Track and detect resource leaks in production:
 ### 6. Service Lifecycle Management
 
 **File**: [`service_lifecycle.ipynb`](./service_lifecycle.ipynb)
-**Time**: 25-35 minutes | **Difficulty**: Advanced
+**Time**: 25-35 min | **Difficulty**: 🟠 Advanced
 
 Build production-ready multi-component services:
 
