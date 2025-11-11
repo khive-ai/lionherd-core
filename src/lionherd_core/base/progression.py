@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
+from ..errors import NotFoundError
 from ..protocols import Containable, implements
 from .element import Element
 
@@ -21,10 +22,7 @@ class Progression(Element):
 
     Attributes:
         name: Optional progression name
-        order: Ordered UUIDs (allows duplicates)
-
-    Supports list-like operations (append/insert/remove/pop/extend), reordering (move/swap/reverse),
-    and idempotent set-like operations (include/exclude).
+        order: Ordered sequence of UUIDs (allows duplicates)
     """
 
     name: str | None = Field(
@@ -39,11 +37,11 @@ class Progression(Element):
     def __init__(
         self, order: list[UUID] | list[Element] | None = None, name: str | None = None, **data
     ):
-        """Initialize Progression.
+        """Initialize progression with optional items.
 
         Args:
             order: Initial items (UUIDs or Elements)
-            name: Optional name for this progression
+            name: Optional name
             **data: Additional Element fields
         """
         # Convert Elements to UUIDs
@@ -96,14 +94,37 @@ class Progression(Element):
         uid = to_uuid(item_id)
         self.order.remove(uid)
 
-    def pop(self, index: int = -1) -> UUID:
-        """Remove and return item at index."""
-        return self.order.pop(index)
+    def pop(self, index: int = -1, default: Any = ...) -> UUID | Any:
+        """Remove and return item at index.
+
+        Args:
+            index: Position to pop (default: -1)
+            default: Return if index not found (default: raise)
+
+        Returns:
+            UUID or default
+
+        Raises:
+            NotFoundError: If index not found and no default
+        """
+        try:
+            return self.order.pop(index)
+        except IndexError as e:
+            if default is ...:
+                raise NotFoundError(
+                    f"Index {index} not found in progression of length {len(self)}",
+                    details={"index": index, "length": len(self)},
+                ) from e
+            return default
 
     def popleft(self) -> UUID:
-        """Remove and return first item (queue behavior)."""
+        """Remove and return first item.
+
+        Raises:
+            NotFoundError: If progression is empty
+        """
         if not self.order:
-            raise IndexError("Progression is empty")
+            raise NotFoundError("Cannot pop from empty progression")
         return self.order.pop(0)
 
     def clear(self) -> None:
@@ -111,12 +132,10 @@ class Progression(Element):
         self.order.clear()
 
     def extend(self, items: list[UUID | Element]) -> None:
-        """Extend progression with multiple items."""
+        """Extend with multiple items (batch operation)."""
         from ._utils import to_uuid
 
-        for item in items:
-            uid = to_uuid(item)
-            self.order.append(uid)
+        self.order.extend(to_uuid(item) for item in items)
 
     # ==================== Query Operations ====================
 
@@ -174,11 +193,26 @@ class Progression(Element):
         """Iterate over UUIDs in reverse order."""
         return reversed(self.order)
 
+    def __list__(self) -> list[UUID]:
+        """Return items as list."""
+        return list(self.order)
+
     def _validate_index(self, index: int, allow_end: bool = False) -> int:
-        """Validate and normalize index (supports negative). Raises IndexError if out of bounds."""
+        """Validate and normalize index.
+
+        Args:
+            index: Index to validate (supports negative)
+            allow_end: Allow index == len (for insertion)
+
+        Returns:
+            Normalized index
+
+        Raises:
+            NotFoundError: If index out of bounds or progression empty
+        """
         length = len(self.order)
         if length == 0 and not allow_end:
-            raise IndexError("Progression is empty")
+            raise NotFoundError("Progression is empty")
 
         # Normalize negative indices
         if index < 0:
@@ -187,7 +221,10 @@ class Progression(Element):
         # Check bounds
         max_index = length if allow_end else length - 1
         if index < 0 or index > max_index:
-            raise IndexError(f"Index {index} out of range for progression of length {length}")
+            raise NotFoundError(
+                f"Index {index} out of range for progression of length {length}",
+                details={"index": index, "length": length, "allow_end": allow_end},
+            )
 
         return index
 
@@ -197,8 +234,8 @@ class Progression(Element):
         """Move item from one position to another.
 
         Args:
-            from_index: Current position (supports negative indexing)
-            to_index: Target position (supports negative indexing)
+            from_index: Current position (supports negative)
+            to_index: Target position (supports negative)
         """
         from_index = self._validate_index(from_index)
         # For to_index, allow insertion at end
@@ -214,8 +251,8 @@ class Progression(Element):
         """Swap two items by index.
 
         Args:
-            index1: First position (supports negative indexing)
-            index2: Second position (supports negative indexing)
+            index1: First position (supports negative)
+            index2: Second position (supports negative)
         """
         index1 = self._validate_index(index1)
         index2 = self._validate_index(index2)
@@ -223,16 +260,16 @@ class Progression(Element):
         self.order[index1], self.order[index2] = self.order[index2], self.order[index1]
 
     def reverse(self) -> None:
-        """Reverse the progression in-place."""
+        """Reverse progression in-place."""
         self.order.reverse()
 
     # ==================== Set-like Operations ====================
 
     def include(self, item: UUID | Element) -> bool:
-        """Include item in progression (idempotent).
+        """Include item (idempotent).
 
         Returns:
-            bool: True if item was added, False if already present
+            True if added, False if already present
         """
         from ._utils import to_uuid
 
@@ -243,10 +280,10 @@ class Progression(Element):
         return False
 
     def exclude(self, item: UUID | Element) -> bool:
-        """Exclude item from progression (idempotent).
+        """Exclude item (idempotent).
 
         Returns:
-            bool: True if item was removed, False if not present
+            True if removed, False if not present
         """
         from ._utils import to_uuid
 
