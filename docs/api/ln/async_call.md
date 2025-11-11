@@ -361,6 +361,7 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 **Examples:**
 
 ```python
+import asyncio
 from lionherd_core.ln import bcall
 from lionherd_core.libs.concurrency import sleep
 
@@ -604,6 +605,7 @@ async for batch in batch_config(urls, fetch_data, batch_size=20):
 ### Basic Parallel Processing
 
 ```python
+import asyncio
 from lionherd_core.ln import alcall
 from lionherd_core.libs.concurrency import sleep
 
@@ -624,14 +626,17 @@ results = await alcall(items, async_process)
 ### Retry with Exponential Backoff
 
 ```python
+import httpx
 from lionherd_core.ln import alcall
 
 async def flaky_api_call(id: str) -> dict:
     """API that may fail transiently."""
-    response = await http_client.get(f"/api/{id}")
-    return response.json()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"/api/{id}")
+        return response.json()
 
 # Retry up to 3 times with exponential backoff
+item_ids = ["item1", "item2", "item3"]
 results = await alcall(
     item_ids,
     flaky_api_call,
@@ -730,6 +735,11 @@ except ExceptionGroup as eg:
 
 ```python
 from lionherd_core.ln import bcall
+
+# User-defined async function (replace with actual implementation)
+async def save_to_db(batch: list) -> None:
+    """Save batch to database."""
+    pass  # Placeholder for actual database logic
 
 # Stream results in batches
 async for batch_results in bcall(
@@ -931,10 +941,15 @@ from lionherd_core.types import Unset
 ### Example 1: LLM Batch Processing
 
 ```python
-from lionherd_core.ln import bcall
 from openai import AsyncOpenAI
+from lionherd_core.ln import bcall
 
 client = AsyncOpenAI()
+
+# User-defined async function (replace with actual database logic)
+async def save_completions(batch: list[str]) -> None:
+    """Save completions to database."""
+    pass  # Placeholder for actual database logic
 
 async def generate_completion(prompt: str) -> str:
     """Generate completion with retry."""
@@ -958,7 +973,7 @@ async for batch_results in bcall(
     retry_backoff=2,
 ):
     # Save batch immediately
-    await db.save_completions(batch_results)  # db.save_completions: user-defined function
+    await save_completions(batch_results)
     print(f"Saved {len(batch_results)} completions")
 ```
 
@@ -968,13 +983,24 @@ async for batch_results in bcall(
 import httpx
 from lionherd_core.ln import alcall
 
+# User-defined function (replace with actual HTML parser like BeautifulSoup)
+def parse_html(html: str) -> dict:
+    """Parse HTML and extract data."""
+    return {"title": "Example", "content": html[:100]}
+
+# User-defined function (replace with actual file reading logic)
+def load_urls_from_file(filename: str) -> list[str]:
+    """Load URLs from file."""
+    with open(filename) as f:
+        return [line.strip() for line in f if line.strip()]
+
 async def scrape_page(url: str) -> dict:
     """Scrape page with timeout."""
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
-        return parse_html(response.text)  # parse_html: user-defined function
+        return parse_html(response.text)
 
-urls = load_urls_from_file("urls.txt")  # load_urls_from_file: user-defined function
+urls = load_urls_from_file("urls.txt")
 
 # Scrape with error recovery
 results = await alcall(
@@ -999,9 +1025,15 @@ print(f"Scraped: {len(successful)}, Failed: {len(failed)}")
 ```python
 from lionherd_core.ln import alcall
 
+# User-defined async function (replace with actual database client like asyncpg)
+async def db_insert(table: str, data: dict) -> str:
+    """Insert record into database."""
+    # Placeholder: would use asyncpg, motor, etc.
+    return f"id_{hash(str(data))}"
+
 async def insert_record(data: dict) -> str:
     """Insert record and return ID."""
-    return await db.insert("users", data)  # db.insert: user-defined function
+    return await db_insert("users", data)
 
 # Nested data with duplicates and None values
 raw_data = [
@@ -1026,17 +1058,26 @@ inserted_ids = await alcall(
 ### Example 4: Parallel File Processing
 
 ```python
-from lionherd_core.ln import alcall
+import glob
 import aiofiles
+from lionherd_core.ln import alcall
+
+# User-defined function (replace with actual text analysis logic)
+def analyze_text(content: str) -> dict:
+    """Analyze text content."""
+    return {
+        "word_count": len(content.split()),
+        "char_count": len(content),
+        "lines": len(content.split('\n'))
+    }
 
 async def process_file(filepath: str) -> dict:
     """Read and process file."""
     async with aiofiles.open(filepath, 'r') as f:
         content = await f.read()
-    return analyze_text(content)  # analyze_text: user-defined function
+    return analyze_text(content)
 
 # Process all .txt files in directory
-import glob
 files = glob.glob("data/**/*.txt", recursive=True)
 
 results = await alcall(

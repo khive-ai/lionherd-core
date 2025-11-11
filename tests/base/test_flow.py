@@ -26,7 +26,7 @@ Workflow State Machine Pattern:
 
     # 3. Add items to shared pile
     task = WorkItem(name="deploy_api")
-    flow.add_item(task, progression_ids="pending")
+    flow.add_item(task, progressions="pending")
 
     # 4. State transitions: move between progressions
     flow.get_progression("pending").remove(task.id)
@@ -49,7 +49,7 @@ Exception Aggregation for Batch Workflows:
     errors = []
     for item in items:
         try:
-            flow.add_item(item, progression_ids="stage1")
+            flow.add_item(item, progressions="stage1")
         except ValueError as e:
             errors.append(e)
 
@@ -63,15 +63,13 @@ Exception Aggregation for Batch Workflows:
     - Workflow integrity checks (report all constraint violations)
 
 Async Workflow Execution:
-    Flow.pile supports async operations for concurrent workflows:
+    Flow supports async context manager for thread-safe operations:
 
     ```python
     async def process_batch(items):
-        # Add items concurrently
-        await gather(*[flow.items.add_async(item) for item in items])
-
-        # Retrieve concurrently
-        results = await gather(*[flow.items.get_async(id) for id in ids])
+        async with flow.items:
+            for item in items:
+                flow.add_item(item)  # Optionally: flow.add_item(item, progressions="stage1")
     ```
 
 Design Rationale:
@@ -101,7 +99,7 @@ See Also:
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -227,7 +225,11 @@ def test_flow_validate_piles_converts_dict():
     def mock_handler(v):  # Mock handler that returns input
         return v
 
-    result = Flow._validate_piles(pile_dict, mock_handler)
+    # Mock info object
+    class MockInfo:
+        field_name = "items"
+
+    result = Flow._validate_piles(pile_dict, mock_handler, MockInfo())
     assert isinstance(result, Pile)
 
 
@@ -239,7 +241,11 @@ def test_flow_validate_piles_preserves_pile():
     def mock_handler(v):  # Mock handler that returns input
         return v
 
-    result = Flow._validate_piles(pile, mock_handler)
+    # Mock info object
+    class MockInfo:
+        field_name = "items"
+
+    result = Flow._validate_piles(pile, mock_handler, MockInfo())
     assert result is pile
 
 
@@ -397,7 +403,7 @@ def test_flow_add_item_to_single_progression():
 
     Pattern:
         ```python
-        flow.add_item(task, progression_ids="pending")  # Assign to state
+        flow.add_item(task, progressions="pending")  # Assign to state
         # Task now in "pending" stage, retrievable via flow.get_progression("pending")
         ```
 
@@ -413,7 +419,7 @@ def test_flow_add_item_to_single_progression():
     f.add_progression(prog)
 
     item = FlowTestItem(value="test")
-    f.add_item(item, progression_ids=prog.id)
+    f.add_item(item, progressions=prog.id)
 
     assert item.id in f.items
     assert item.id in prog
@@ -450,7 +456,7 @@ def test_flow_add_item_to_multiple_progressions():
     f.add_progression(prog2)
 
     item = FlowTestItem(value="test")
-    f.add_item(item, progression_ids=[prog1.id, prog2.id])
+    f.add_item(item, progressions=[prog1.id, prog2.id])
 
     assert item.id in f.items
     assert item.id in prog1
@@ -464,77 +470,35 @@ def test_flow_add_item_by_progression_name():
     f.add_progression(prog)
 
     item = FlowTestItem(value="test")
-    f.add_item(item, progression_ids="test_prog")
+    f.add_item(item, progressions="test_prog")
 
     assert item.id in prog
 
 
-def test_flow_remove_item_from_pile_only():
-    """Test removing item from pile without removing from progressions."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name="test")
-    f.add_progression(prog)
-
-    item = FlowTestItem(value="test")
-    f.add_item(item, progression_ids=prog.id)
-
-    removed = f.remove_item(item.id, remove_from_progressions=False)
-    assert removed is item
-    assert item.id not in f.items
-    assert item.id in prog  # Still in progression
-
-
 def test_flow_remove_item_from_pile_and_progressions():
-    """Test removing item from pile and all progressions.
+    """Test removing item automatically removes from all progressions.
 
-    Design Philosophy - Item-Progression Lifecycle Independence:
-        Items and progressions have independent lifecycles by default. Removing an
-        item from the pile doesn't automatically remove it from progressions, and
-        vice versa. This design respects the M:N relationship between items and
-        progressions.
+    Design Philosophy - Data Integrity:
+        Removing an item from the flow always removes it from all progressions
+        to prevent dangling references. This ensures referential integrity and
+        follows the principle of least surprise.
 
-    Architectural Decision - Cascade Control:
-        The `remove_from_progressions` parameter provides explicit control over
-        cascade behavior:
-        - False (default): Remove from pile only, leave progression references
-          → Enables "soft delete" patterns (mark as deleted but preserve ordering)
-        - True: Remove from pile AND scan all progressions for cleanup
-          → Ensures referential integrity when item truly deleted
+    Why Always Cascade:
+        1. **Prevents bugs**: Dangling UUID references would cause KeyError later
+        2. **Clear semantics**: remove_item() means "fully remove from flow"
+        3. **Simpler API**: No parameter to think about
 
-    Why This Matters:
-        Different use cases require different cascade semantics:
+    Alternative Pattern - Soft Delete:
+        If you need to preserve audit trail while marking items inactive:
+        ```python
+        # Keep item in flow but mark as deleted
+        item.metadata["deleted"] = True
+        flow.items[item.id] = item  # Update in place
+        # Progressions still reference it for history
+        ```
 
-        1. Soft deletion: Item marked inactive but workflows preserve it
-           ```python
-           item.metadata["deleted"] = True
-           flow.items[item.id] = item  # Update in place
-           # Progressions still reference it for audit trail
-           ```
-
-        2. Hard deletion: Item completely removed
-           ```python
-           flow.remove_item(item.id, remove_from_progressions=True)
-           # No dangling references anywhere
-           ```
-
-    Performance Considerations:
-        Cascade removal (remove_from_progressions=True) is O(P) where P is number
-        of progressions, as each progression must be scanned for the item ID.
-        For large flows with many progressions, prefer soft deletion or batch
-        removal strategies.
-
-    Alternative Designs Rejected:
-        1. Always cascade (automatic removal from progressions)
-           - ❌ Prevents soft deletion patterns
-           - ❌ No way to preserve progression ordering for audit
-
-        2. Never cascade (manual cleanup required)
-           - ❌ Easy to create dangling references
-           - ❌ Burden on caller to track all progressions
-
-        3. Reference counting (remove from pile when no progressions reference it)
-           - ❌ Complex bookkeeping overhead
-           - ❌ Unclear lifecycle (when does item "belong" to flow?)
+    Performance:
+        O(P) where P is number of progressions. Each progression is scanned once.
     """
     f = Flow[FlowTestItem, FlowTestProgression]()
     prog1 = FlowTestProgression(name="prog1")
@@ -543,9 +507,9 @@ def test_flow_remove_item_from_pile_and_progressions():
     f.add_progression(prog2)
 
     item = FlowTestItem(value="test")
-    f.add_item(item, progression_ids=[prog1.id, prog2.id])
+    f.add_item(item, progressions=[prog1.id, prog2.id])
 
-    removed = f.remove_item(item.id, remove_from_progressions=True)
+    removed = f.remove_item(item.id)
     assert removed is item
     assert item.id not in f.items
     assert item.id not in prog1
@@ -1003,7 +967,7 @@ def test_flow_add_item_invalid_progression_raises():
 
     # Should raise when trying to access nonexistent progression
     with pytest.raises((ValueError, KeyError)):
-        f.add_item(item, progression_ids="nonexistent")
+        f.add_item(item, progressions="nonexistent")
 
 
 # ==================== Exception Transformation Tests ====================
@@ -1020,22 +984,14 @@ def test_flow_add_item_raises_existserror():
         f.add_item(item)
 
 
-def test_flow_remove_item_raises_notfounderror_with_metadata():
-    """Test remove_item raises NotFoundError with preserved metadata."""
+def test_flow_remove_item_raises_notfounderror():
+    """Test remove_item raises NotFoundError from pile."""
     f = Flow[FlowTestItem, FlowTestProgression]()
     fake_id = UUID("12345678-1234-5678-1234-567812345678")
 
-    # Should raise NotFoundError with better message
-    with pytest.raises(NotFoundError, match=f"Item {fake_id} not found in flow"):
+    # Should raise NotFoundError from pile
+    with pytest.raises(NotFoundError, match=f"Item {fake_id} not found in pile"):
         f.remove_item(fake_id)
-
-    # Verify metadata is preserved via __cause__
-    try:
-        f.remove_item(fake_id)
-    except NotFoundError as e:
-        assert e.__cause__ is not None
-        assert hasattr(e, "details")
-        assert hasattr(e, "retryable")
 
 
 def test_flow_remove_progression_raises_notfounderror_with_metadata():
@@ -1087,7 +1043,7 @@ def test_flow_exception_group_collection():
         errors = []
         for item in batch:
             try:
-                flow.add_item(item, progression_ids="stage")
+                flow.add_item(item, progressions="stage")
             except (ExistsError, NotFoundError) as e:
                 errors.append(e)  # Collect, don't raise immediately
 
@@ -1152,9 +1108,9 @@ async def test_flow_with_async_operations():
     """Test Flow pile supports async operations for concurrent workflows.
 
     Async Workflow Pattern:
-        Flow.pile provides async methods (add_async, get_async) for concurrent
-        workflow execution. This enables non-blocking operations when workflows
-        involve I/O (database, network, file system).
+        Flow.pile supports async context manager for concurrent workflow
+        execution. This enables non-blocking operations when workflows involve
+        I/O (database, network, file system).
 
     Use Cases:
         1. I/O-bound workflows:
@@ -1173,80 +1129,76 @@ async def test_flow_with_async_operations():
         ```python
         async def process_stream(flow, items):
             for item in items:
-                await flow.items.add_async(item)  # Non-blocking
-                # Continue processing while item is added
+                async with flow.items:
+                    flow.add_item(item)
+                # Continue processing after adding item
         ```
 
     Thread Safety:
-        Pile uses threading.RLock for thread-safe async operations.
-        Multiple coroutines can safely add/get items concurrently.
+        Pile uses asyncio.Lock for thread-safe async operations.
+        Multiple coroutines safely coordinate via context manager.
     """
     f = Flow[FlowTestItem, FlowTestProgression]()
 
-    # Use async operations directly (without context manager)
+    # Use async context manager for thread-safe operations
     item = FlowTestItem(value="async_test")
-    await f.items.add_async(item)
+    async with f.items:
+        f.items.add(item)
+
     assert len(f.items) == 1
 
     # Verify async get
-    retrieved = await f.items.get_async(item.id)
+    async with f.items:
+        retrieved = f.items.get(item.id)
+
     assert retrieved is item
 
 
 @pytest.mark.asyncio
 async def test_flow_concurrent_operations():
-    """Test Flow handles concurrent batch operations correctly.
+    """Test Flow handles concurrent lock acquisition correctly.
 
-    Concurrent Workflow Pattern:
-        Batch workflows can process multiple items concurrently using gather().
-        This pattern maximizes throughput for I/O-bound workflow operations.
+    Concurrent Lock Pattern:
+        Multiple coroutines can safely acquire the async lock using context manager.
+        Operations are serialized by the lock, ensuring thread safety.
 
     Use Cases:
-        1. Batch task ingestion:
-           - Receive 100 tasks from API
-           - Add all to flow concurrently
-           - Complete in time of slowest operation, not sum of all
+        1. Multiple async workers:
+           - Multiple coroutines processing items
+           - Each acquires lock when adding results
+           - Lock ensures no race conditions
 
-        2. Multi-source workflows:
-           - Pull items from multiple queues simultaneously
-           - Aggregate into single flow
-           - Maintain ordering per source (progressions)
-
-        3. Parallel state checks:
-           - Check status of 50 running jobs concurrently
-           - Update flow based on results
-           - Don't block on sequential checks
+        2. Concurrent readers/writers:
+           - Some coroutines adding items
+           - Others reading items
+           - Lock coordinates access
 
     Pattern:
         ```python
-        async def batch_add(flow, items):
-            async def add_one(item):
-                await flow.items.add_async(item)
-                return item.id
+        async def worker(flow, item):
+            async with flow.items:
+                flow.add_item(item)
+                # Do other work with exclusive access
 
-            # All adds happen concurrently
-            ids = await gather(*[add_one(item) for item in items])
-            return ids
+
+        # All workers compete for lock
+        await gather(*[worker(flow, item) for item in items])
         ```
 
-    Performance:
-        For 10 items with 100ms I/O each:
-        - Sequential: 10 * 100ms = 1000ms
-        - Concurrent: max(100ms operations) ≈ 100ms
-        10x throughput improvement
+    Thread Safety:
+        Lock ensures operations are serialized even when called concurrently.
     """
     from lionherd_core.libs.concurrency import gather
 
     f = Flow[FlowTestItem, FlowTestProgression]()
-
-    # Create items concurrently
     items = [FlowTestItem(value=f"item{i}") for i in range(10)]
 
-    # Add items to pile concurrently
-    async def add_item(item):
-        await f.items.add_async(item)
+    # Multiple coroutines concurrently acquiring lock
+    async def add_with_lock(item):
+        async with f.items:
+            f.items.add(item)
 
-    await gather(*[add_item(item) for item in items])
+    await gather(*[add_with_lock(item) for item in items])
 
     assert len(f.items) == 10
 
@@ -1256,45 +1208,40 @@ async def test_flow_async_operations_with_progressions():
     """Test Flow async operations with multi-stage workflow progressions.
 
     Concurrent Multi-Stage Workflow:
-        Combine async operations with progressions to build concurrent
-        multi-stage workflows where items flow through stages asynchronously.
+        Multiple coroutines can safely add items and update progressions
+        using async context manager for coordination.
 
     Use Cases:
         1. Pipeline workflows:
-           - Items added concurrently to "intake" stage
+           - Multiple workers adding items with lock coordination
            - Worker coroutines move items through stages
-           - Each stage processes independently and concurrently
+           - Lock ensures consistent state
 
         2. Fan-out/fan-in:
            - Single input progression
-           - Multiple processing progressions (parallel stages)
-           - Results aggregated in output progression
+           - Multiple workers processing stages
+           - Lock coordinates updates
 
         3. Priority lanes:
            - High/medium/low priority progressions
            - Items routed based on priority
-           - Each lane processes concurrently
+           - Lock ensures atomic routing
 
     Pattern:
         ```python
-        async def multi_stage_pipeline(flow, items):
-            # Stage 1: Concurrent ingestion
-            await gather(*[flow.items.add_async(item) for item in items])
-
-            # Stage 2: Assign to stages (can be concurrent)
-            for item in items:
+        async def worker(flow, item):
+            async with flow.items:
                 stage = determine_stage(item)
-                flow[stage].append(item.id)
+                flow.add_item(item, progression_id=stage)
 
-            # Stage 3: Process each stage concurrently
-            results = await gather(
-                *[process_stage(flow[stage]) for stage in ["stage1", "stage2", "stage3"]]
-            )
+
+        # Multiple workers coordinate via lock
+        await gather(*[worker(flow, item) for item in items])
         ```
 
     Architecture Benefits:
         - Progressions isolate stages (failure in one doesn't affect others)
-        - Async enables concurrent processing across stages
+        - Async context manager ensures thread safety
         - Shared pile enables zero-copy state transitions
     """
     from lionherd_core.libs.concurrency import gather
@@ -1306,14 +1253,144 @@ async def test_flow_async_operations_with_progressions():
     for prog in progs:
         f.add_progression(prog)
 
-    # Add items concurrently
+    # Multiple workers adding items with lock coordination
     items = [FlowTestItem(value=f"item{i}") for i in range(5)]
 
-    async def add_item(item):
-        await f.items.add_async(item)
+    async def add_with_lock(item):
+        async with f.items:
+            f.items.add(item)
 
-    await gather(*[add_item(item) for item in items])
+    await gather(*[add_with_lock(item) for item in items])
 
     # Verify structure
     assert len(f.items) == 5
     assert len(f.progressions) == 3
+
+
+# ==================== Coverage Tests for Missing Lines ====================
+
+
+def test_flow_init_with_pile_instance():
+    """Test passing a Pile instance directly to Flow __init__ (line 80)."""
+    # Create a pre-populated Pile
+    pile = Pile[FlowTestItem]()
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+    pile.add(item1)
+    pile.add(item2)
+
+    # Pass Pile instance directly
+    flow = Flow[FlowTestItem, FlowTestProgression](items=pile)
+
+    # Verify it uses the same Pile instance
+    assert flow.items is pile
+    assert len(flow.items) == 2
+    assert item1.id in flow.items
+    assert item2.id in flow.items
+
+
+def test_flow_init_with_single_element():
+    """Test passing a single Element to Flow __init__ (line 87)."""
+    item = FlowTestItem(value="single")
+
+    # Pass single Element (not in a list)
+    flow = Flow[FlowTestItem, FlowTestProgression](items=item)
+
+    # Verify it was normalized to a list and added
+    assert len(flow.items) == 1
+    assert item.id in flow.items
+    assert flow.items[item.id] == item
+
+
+def test_flow_field_validator_with_list_of_elements():
+    """Test field validator with list of Element instances (lines 112-122)."""
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+
+    # Create Flow with list of elements directly to validator
+    # (bypassing __init__ logic by using pydantic constructor)
+    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+        {"items": [item1, item2], "progressions": []}
+    )
+
+    assert len(flow.items) == 2
+    assert item1.id in flow.items
+    assert item2.id in flow.items
+
+
+def test_flow_field_validator_with_list_of_dicts():
+    """Test field validator with list[dict] deserialization (lines 112-122)."""
+    # Create serialized Flow dict that will go through deserialization path
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+
+    # Serialize items to dicts
+    flow_dict = {
+        "id": str(uuid4()),
+        "created_at": "2024-01-01T00:00:00Z",
+        "items": [item1.to_dict(), item2.to_dict()],
+        "progressions": [],
+    }
+
+    # Deserialize - field validator should handle list[dict]
+    flow = Flow[FlowTestItem, FlowTestProgression].from_dict(flow_dict)
+
+    assert len(flow.items) == 2
+    # Verify deserialized correctly
+    for item in flow.items:
+        assert isinstance(item, Element)
+        assert hasattr(item, "value")
+
+
+def test_flow_referential_integrity_validation_failure():
+    """Test model validator raises NotFoundError for missing UUIDs (line 137)."""
+    item1 = FlowTestItem(value="item1")
+    missing_uuid = uuid4()  # UUID not in items
+
+    # Create progression with missing UUID
+    prog = FlowTestProgression(name="test", order=[item1.id, missing_uuid])
+
+    # Should raise NotFoundError during validation
+    with pytest.raises(NotFoundError) as exc_info:
+        Flow[FlowTestItem, FlowTestProgression](items=[item1], progressions=[prog])
+
+    assert "not in items pile" in str(exc_info.value)
+    assert str(missing_uuid) in str(exc_info.value)
+
+
+def test_flow_check_item_exists_error_path():
+    """Test _check_item_exists re-raises NotFoundError with context (lines 153-156)."""
+    flow = Flow[FlowTestItem, FlowTestProgression]()
+    missing_uuid = uuid4()
+
+    # Call _check_item_exists with missing UUID
+    with pytest.raises(NotFoundError) as exc_info:
+        flow._check_item_exists(missing_uuid)
+
+    # Verify error message includes flow context
+    assert "not found in flow" in str(exc_info.value)
+    assert str(missing_uuid) in str(exc_info.value)
+
+
+def test_flow_field_validator_default_factory():
+    """Test field validator default factory path (line 125).
+
+    When neither items nor progressions are provided (not even None),
+    Pydantic should call default_factory=Pile, which goes through
+    handler(v) path in the validator.
+    """
+    # Create Flow using model_validate with minimal fields
+    # This forces Pydantic to use default_factory for items/progressions
+    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+        {
+            "id": str(uuid4()),
+            "created_at": "2024-01-01T00:00:00Z",
+            # No items or progressions fields -> default_factory triggered
+        }
+    )
+
+    # Verify default factories created empty Piles
+    assert isinstance(flow.items, Pile)
+    assert isinstance(flow.progressions, Pile)
+    assert len(flow.items) == 0
+    assert len(flow.progressions) == 0

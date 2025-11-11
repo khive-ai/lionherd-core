@@ -1383,9 +1383,7 @@ class TestGraphAlgorithms:
         fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(NotFoundError, match="not in graph"):
-            await graph.find_path(
-                fake_node, graph.nodes.items[next(iter(graph.nodes.items.keys()))]
-            )
+            await graph.find_path(fake_node, graph.nodes[next(graph.nodes.keys())])
 
     async def test_find_path_end_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if end node not in graph."""
@@ -1400,9 +1398,9 @@ class TestGraphAlgorithms:
         graph, (n1, _, n3), _ = simple_graph
 
         # Replace edges with conditional edges (always true)
-        edge_keys = list(graph.edges.items.keys())
-        graph.edges.items[edge_keys[0]].condition = AlwaysTrueCondition()
-        graph.edges.items[edge_keys[1]].condition = AlwaysTrueCondition()
+        edge_keys = list(graph.edges.keys())
+        graph.edges[edge_keys[0]].condition = AlwaysTrueCondition()
+        graph.edges[edge_keys[1]].condition = AlwaysTrueCondition()
 
         path = await graph.find_path(n1, n3, check_conditions=True)
 
@@ -1552,7 +1550,7 @@ class TestSerialization:
         restored = Graph.from_dict(data)
 
         # Check labels
-        e1_restored = restored.edges.items[next(iter(graph.edges.items.keys()))]
+        e1_restored = restored.edges[next(graph.edges.keys())]
         assert e1_restored.label == ["step1"]
 
     def test_roundtrip_preserves_edge_properties(self, empty_graph):
@@ -1568,7 +1566,7 @@ class TestSerialization:
         data = empty_graph.to_dict()
         restored = Graph.from_dict(data)
 
-        edge_restored = restored.edges.items[edge.id]
+        edge_restored = restored.edges[edge.id]
         assert edge_restored.properties["weight"] == 5.0
         assert edge_restored.properties["color"] == "red"
 
@@ -1873,7 +1871,7 @@ class TestEdgeCases:
         restored = Graph.from_dict(data)
 
         # Edge condition is excluded from serialization (not persisted)
-        edge_restored = restored.edges.items[edge.id]
+        edge_restored = restored.edges[edge.id]
         assert edge_restored.condition is None  # Conditions are not serialized
 
     async def test_remove_node_from_middle_of_chain(self, simple_graph):

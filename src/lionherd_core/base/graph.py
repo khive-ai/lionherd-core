@@ -161,11 +161,11 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     def _rebuild_adjacency(self) -> None:
         """Rebuild adjacency lists from nodes and edges."""
-        self._out_edges = {node_id: set() for node_id in self.nodes.items}
-        self._in_edges = {node_id: set() for node_id in self.nodes.items}
+        self._out_edges = {node_id: set() for node_id in self.nodes.keys()}  # noqa: SIM118
+        self._in_edges = {node_id: set() for node_id in self.nodes.keys()}  # noqa: SIM118
 
-        for edge_id in self.edges.items:
-            edge = self.edges.items[edge_id]
+        for edge_id in self.edges.keys():  # noqa: SIM118
+            edge = self.edges[edge_id]
             if edge.head in self._out_edges:
                 self._out_edges[edge.head].add(edge_id)
             if edge.tail in self._in_edges:
@@ -352,14 +352,14 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     def is_acyclic(self) -> bool:
         """Check if graph is acyclic using three-color DFS."""
         WHITE, GRAY, BLACK = 0, 1, 2
-        colors = {nid: WHITE for nid in self.nodes.items}
+        colors = {nid: WHITE for nid in self.nodes.keys()}  # noqa: SIM118
 
         def dfs(node_id: UUID) -> bool:
             """DFS visit. Returns True if acyclic, False if cycle found."""
             colors[node_id] = GRAY
 
             for edge_id in self._out_edges[node_id]:
-                neighbor_id = self.edges.items[edge_id].tail
+                neighbor_id = self.edges[edge_id].tail
                 if colors[neighbor_id] == GRAY:
                     # Back edge -> cycle detected
                     return False
@@ -371,7 +371,8 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
         # Check all components
         return all(
-            not (colors[node_id] == WHITE and not dfs(node_id)) for node_id in self.nodes.items
+            not (colors[node_id] == WHITE and not dfs(node_id))
+            for node_id in self.nodes.keys()  # noqa: SIM118
         )
 
     def topological_sort(self) -> list[Node]:

@@ -663,14 +663,14 @@ The 10-level maximum recursion depth balances:
 ```python
 # Standard imports for ln.to_dict examples
 from lionherd_core.ln import to_dict
-from pydantic import BaseModel
+from lionherd_core import BaseModel
 ```
 
 ### Example 1: API Response Normalization
 
 ```python
-from lionherd_core.ln import to_dict
 from lionherd_core import BaseModel
+from lionherd_core.ln import to_dict
 
 class APIResponse(BaseModel):
     status: str

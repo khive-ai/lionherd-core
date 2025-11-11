@@ -1276,3 +1276,127 @@ class TestProgressionEdgeCases:
         prog = Progression(order=[uuid4()])
         with pytest.raises(ValueError):
             prog.index(uuid4())
+
+
+# ==================== Coverage Tests for Missing Lines ====================
+
+
+def test_progression_order_none_validator():
+    """Test order=None is normalized to empty list (line 59)."""
+    progression = Progression(order=None)
+    assert progression.order == []
+    assert len(progression) == 0
+
+
+def test_progression_order_single_value_validator():
+    """Test single UUID normalized to list (line 53)."""
+    single_uuid = uuid4()
+
+    # Pass single UUID via from_dict (triggers validator before __init__)
+    progression = Progression.from_dict(
+        {
+            "id": str(uuid4()),
+            "created_at": "2024-01-01T00:00:00Z",
+            "order": str(single_uuid),  # Single UUID string, not list
+        }
+    )
+
+    # Should be normalized to list by validator
+    assert isinstance(progression.order, list)
+    assert len(progression.order) == 1
+    assert progression.order[0] == single_uuid
+
+
+def test_progression_order_non_list_iterable_validator():
+    """Test non-list iterable normalized to list (line 56)."""
+    uuid1 = uuid4()
+    uuid2 = uuid4()
+
+    # Pass tuple (non-list iterable) via from_dict
+    progression = Progression.from_dict(
+        {
+            "id": str(uuid4()),
+            "created_at": "2024-01-01T00:00:00Z",
+            "order": (str(uuid1), str(uuid2)),  # Tuple, not list
+        }
+    )
+
+    # Should be converted to list by validator
+    assert isinstance(progression.order, list)
+    assert len(progression.order) == 2
+    assert progression.order[0] == uuid1
+    assert progression.order[1] == uuid2
+
+
+def test_progression_getitem_slice():
+    """Test __getitem__ with slice (line 152)."""
+    uuids = [uuid4() for _ in range(5)]
+    progression = Progression(order=uuids)
+
+    # Test slice access
+    result = progression[1:3]
+
+    # Should return list of UUIDs
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0] == uuids[1]
+    assert result[1] == uuids[2]
+
+
+# ==================== Validator Regression Tests ====================
+
+
+def test_progression_validator_handles_uuid_strings():
+    """Regression: Validator should accept UUID strings and coerce to UUID objects."""
+    uuid_strs = [str(uuid4()) for _ in range(3)]
+
+    # Pass UUID strings via validator
+    progression = Progression.from_dict(
+        {"id": str(uuid4()), "created_at": "2024-01-01T00:00:00Z", "order": uuid_strs}
+    )
+
+    # Should coerce to UUID objects
+    assert len(progression.order) == 3
+    for i, uuid_str in enumerate(uuid_strs):
+        assert progression.order[i] == UUID(uuid_str)
+
+
+def test_progression_validator_handles_uuid_objects():
+    """Regression: Validator should handle UUID objects directly in from_dict."""
+    uuid_objs = [uuid4() for _ in range(3)]
+
+    # Pass UUID objects directly (no need to serialize)
+    progression = Progression.from_dict(
+        {
+            "id": str(uuid4()),
+            "created_at": "2024-01-01T00:00:00Z",
+            "order": uuid_objs,  # UUID objects work directly
+        }
+    )
+
+    # Should preserve as UUID objects
+    assert len(progression.order) == 3
+    for i, uuid_obj in enumerate(uuid_objs):
+        assert progression.order[i] == uuid_obj
+
+
+def test_progression_validator_raises_on_invalid_uuid():
+    """Regression: Validator should raise on invalid UUID string."""
+    with pytest.raises((ValueError, AttributeError)):  # Invalid UUID string
+        Progression.from_dict(
+            {
+                "id": str(uuid4()),
+                "created_at": "2024-01-01T00:00:00Z",
+                "order": ["not-a-valid-uuid"],
+            }
+        )
+
+
+def test_progression_validator_empty_list():
+    """Regression: Validator should handle empty list."""
+    progression = Progression.from_dict(
+        {"id": str(uuid4()), "created_at": "2024-01-01T00:00:00Z", "order": []}
+    )
+
+    assert progression.order == []
+    assert len(progression) == 0
