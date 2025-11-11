@@ -715,9 +715,7 @@ deadline = current_time() + 5.0
 - **External Documentation**:
   - [AnyIO Cancellation](https://anyio.readthedocs.io/en/stable/cancellation.html): Underlying cancellation scope API
   - [Trio Timeouts](https://trio.readthedocs.io/en/stable/reference-core.html#cancellation-and-timeouts): Inspiration for timeout patterns
-- **Related Concepts**:
-  - [Task Orchestration](../../user_guide/orchestration.md): Using timeouts in workflows
-  - [Error Handling](../../user_guide/error_handling.md): Timeout error patterns
+<!-- TODO: Add links to user guides when available (issue #115) -->
 
 ## Examples
 

@@ -28,7 +28,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Typing :: Typed",
 ]
-dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0", "nest-asyncio>=1.6.0"]
+dependencies = ["pydapter>=1.2.0", "anyio>=4.7.0"]
 
 [project.optional-dependencies]
 schema-gen = ["datamodel-code-generator>=0.25.0"]
@@ -80,5 +80,6 @@ dev = [
   "trio>=0.31.0",
   "ipykernel>=7.1.0",
   "ipywidgets>=8.1.7",
+  "nbmake>=1.5.5",
 ]
 docs = ["mkdocs>=1.5.0", "mkdocs-material>=9.5.0", "mkdocs-autorefs>=1.0.0"]

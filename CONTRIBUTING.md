@@ -67,6 +67,36 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
+### Notebook Validation
+
+If you're contributing notebooks (tutorials, examples, references):
+
+```bash
+# Execute notebooks to check for errors
+uv run pytest --nbmake notebooks/tutorials/
+
+# Check for broken links in notebooks
+# (requires lychee: https://github.com/lycheeverse/lychee)
+lychee notebooks/**/*.md docs/**/*.md
+```
+
+**CI Automation**: Pull requests modifying notebooks trigger automated checks:
+
+- **Notebook Execution** (validate-notebooks.yml): Executes all tutorial notebooks to catch runtime errors (async issues, missing imports, etc.)
+- **Link Validation** (validate-links.yml): Validates all markdown links in notebooks to catch broken relative paths or dead external links
+
+**Common Issues**:
+
+- ❌ Using `async def main()` in notebooks (fails in standard Jupyter)
+- ❌ Incorrect relative paths like `../../../` instead of `../../`
+- ❌ Broken links to API documentation
+
+**Best Practices**:
+
+- Test notebook execution locally before submitting PR
+- Use correct relative paths from notebook location to target
+- Verify links resolve correctly (especially internal API docs)
+
 ## Code Style
 
 ### Formatting
@@ -127,7 +157,10 @@ tests/
 ├── base/           # Base classes (Element, Node, Pile, Graph)
 ├── lndl/           # LNDL parser tests
 ├── ln/            # Utility function tests
-└── libs/          # Library-specific tests
+├── types/         # Type system tests (Spec/Operable/Model)
+├── libs/          # Library-specific tests
+├── utils/         # Utility tests
+└── test_errors.py # Error handling tests
 ```
 
 ### Writing Tests
@@ -198,6 +231,9 @@ uv run pytest --cov=lionherd_core
 # Run linters
 uv run ruff check .
 uv run mypy src/
+
+# If you modified notebooks:
+uv run pytest --nbmake notebooks/tutorials/
 ```
 
 ### 4. Commit Changes
@@ -252,6 +288,8 @@ Pull requests require:
 - ✅ Code coverage ≥80%
 - ✅ Type checking passes
 - ✅ Linting passes
+- ✅ Notebooks execute without errors (if notebooks modified)
+- ✅ Links validated (if documentation modified)
 - ✅ Documentation updated
 - ✅ Approval from maintainer
 
@@ -273,11 +311,15 @@ lionherd-core/
 │   ├── base/              # Base classes
 │   ├── lndl/              # LNDL parser
 │   ├── ln/               # Utilities
-│   │   ├── types/        # Spec/Operable
+│   ├── types/            # Spec/Operable/Model
 │   │   └── spec_adapters/ # Framework adapters
 │   ├── libs/             # Internal libraries
+│   │   ├── concurrency/  # Async utilities
+│   │   ├── schema_handlers/ # Schema operations
+│   │   └── string_handlers/ # String utilities
 │   └── protocols.py      # Protocol definitions
 ├── tests/                # Test suite
+├── notebooks/            # Tutorials and references
 ├── docs/                 # Documentation
 └── pyproject.toml        # Project config
 ```

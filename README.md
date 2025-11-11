@@ -450,7 +450,6 @@ Apache 2.0 - Free for commercial use, no strings attached.
 ## Support
 
 - [GitHub Issues](https://github.com/khive-ai/lionherd-core/issues)
-- [Discussions](https://github.com/khive-ai/lionherd-core/discussions)
 - [Contributing Guide](./CONTRIBUTING.md)
 
 ---

@@ -813,7 +813,6 @@ The `_utils` module collects frequently-needed operations that:
 ## See Also
 
 - **Related Modules**:
-  - [lionherd_core.libs.concurrency](../libs/concurrency.md): `move_on_after` timeout utility
   - [Element](../base/element.md): Uses `now_utc()` for timestamp generation
 - **External Libraries**:
   - [anyio](https://anyio.readthedocs.io/): Async path operations

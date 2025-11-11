@@ -569,7 +569,6 @@ Using `ExceptionGroup.split()` preserves all metadata, unlike manual filtering w
 ## See Also
 
 - **Related Modules**:
-  - [concurrency](../concurrency.md): High-level concurrency module overview
   - [anyio documentation](https://anyio.readthedocs.io/): Underlying async backend abstraction
 - **Related Concepts**:
   - [Task Groups](https://anyio.readthedocs.io/en/stable/tasks.html): anyio's structured concurrency primitive

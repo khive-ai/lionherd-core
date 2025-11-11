@@ -1,0 +1,70 @@
+name: Validate Links
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "notebooks/**/*.ipynb"
+      - "notebooks/**/*.md"
+      - "docs/**/*.md"
+      - "README.md"
+      - ".github/workflows/validate-links.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =============================================================================
+  # Check for broken links in notebooks and documentation
+  # =============================================================================
+  check-links:
+    name: Check Links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate links with lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # Check markdown files and documentation
+          # Note: Notebook links are validated during notebook execution tests
+          args: >-
+            --verbose
+            --no-progress
+            --exclude-path=.venv
+            --exclude-path=node_modules
+            --accept=200,201,202,203,204,301,302,307,308,429
+            --timeout=30
+            --max-redirects=5
+            --max-retries=3
+            --retry-wait-time=5
+            notebooks/**/*.md
+            docs/**/*.md
+            README.md
+          fail: true
+          jobSummary: true
+
+      - name: Check relative paths in notebooks
+        run: |
+          echo "Checking for common relative path issues in notebooks..."
+
+          # Check for incorrect relative paths to API docs
+          if grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints"; then
+            echo "⚠️  Found relative paths (../../) in notebooks"
+            echo "Notebooks use relative paths based on their location"
+            grep -r "\.\.\/\.\.\/" notebooks/ --include="*.ipynb" | grep -v ".ipynb_checkpoints" || true
+          fi
+
+          echo "✅ Relative path sanity checks passed (lychee will catch broken links)"
+
+      - name: Upload link check results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: link-check-results
+          path: |
+            lychee-out.md

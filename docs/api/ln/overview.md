@@ -542,8 +542,6 @@ result = fuzzy_validate_pydantic(existing_task, Task)
 assert result is existing_task  # Same object
 ````
 
-See [Tutorials](../../tutorials/) for advanced patterns like custom fuzzy matching parameters and recursive validation.
-
 **Notes:**
 
 - Handles common LLM output formats (markdown code blocks, plain JSON)
@@ -1408,7 +1406,7 @@ result = to_dict("invalid data", suppress=True)
 # {}
 ```
 
-See [Patterns](#usage-patterns) section and [Tutorials](../../tutorials/) for advanced conversion strategies (fuzzy JSON parsing, recursive conversion, enum handling).
+See [Patterns](#usage-patterns) section for advanced conversion strategies (fuzzy JSON parsing, recursive conversion, enum handling).
 
 **Notes:**
 
@@ -1771,8 +1769,6 @@ results = await alcall(
     return_exceptions=True,  # Don't fail on single error
 )
 ```
-
-See [Patterns](../../tutorials/) for large dataset batch processing examples.
 
 ### Pattern 3: High-Performance JSON Serialization
 
