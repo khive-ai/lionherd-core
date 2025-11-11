@@ -53,6 +53,7 @@ class Flow(Element, Generic[E, P]):
     def __init__(
         self,
         items: list[E] | None = None,
+        progressions: list[P] | None = None,
         name: str | None = None,
         item_type: type[E] | set[type] | list[type] | None = None,
         strict_type: bool = False,
@@ -62,35 +63,78 @@ class Flow(Element, Generic[E, P]):
 
         Args:
             items: Initial items to add to items pile
+            progressions: Initial progressions to add
             name: Flow name
             item_type: Type(s) for validation
             strict_type: Enforce exact type match (no subclasses)
             **data: Additional Element fields
         """
-        super().__init__(name=name, **data)
+        # Check if items/progressions are dicts (from deserialization)
+        # Field validator will convert them to Piles
+        if isinstance(items, dict) or isinstance(progressions, dict):
+            # Deserialization path - pass dicts through, field_validator will convert
+            data["items"] = items
+            data["progressions"] = progressions
+            data["name"] = name
+            super().__init__(**data)
+            return
 
         # Normalize item_type to set and extract types from unions
         if item_type is not None:
             item_type = extract_types(item_type)
 
-        # If type validation, create new Pile with validation and replace the default one
-        if item_type is not None or strict_type:
-            self.items = Pile(items=items, item_type=item_type, strict_type=strict_type)
+        # Normalize items input
+        if isinstance(items, Pile):
+            # Already a Pile, use directly
+            items_pile = items
         else:
-            if items and isinstance(items, list):
-                for item in items:
-                    self.items.add(item)
+            # Create new Pile with validation
+            items_pile = Pile(item_type=item_type, strict_type=strict_type)
+
+            # Normalize items to list
+            if isinstance(items, Element):
+                items = [items]
+
+            # Add items to pile
+            if items:
+                for i in items:
+                    items_pile.add(i)
+
+        # Normalize progressions input
+        if isinstance(progressions, Pile):
+            # Already a Pile, use directly
+            progressions_pile = progressions
+        else:
+            # Create new Pile for progressions
+            progressions_pile = Pile[P]()
+
+            # Add progressions and validate against items
+            if progressions:
+                for prog in progressions:
+                    # Validate that all UUIDs in progression exist in items
+                    if any(uid not in items_pile for uid in prog):
+                        raise NotFoundError(
+                            f"Progression '{prog.name}' contains UUIDs not in items pile"
+                        )
+                    progressions_pile.add(prog)
+
+        # Put everything in data and call super once
+        data["items"] = items_pile
+        data["progressions"] = progressions_pile
+        data["name"] = name
+        super().__init__(**data)
 
     @field_validator("items", "progressions", mode="wrap")
     @classmethod
     def _validate_piles(cls, v: Any, handler: Any) -> Any:
-        """Convert dict to Pile during deserialization."""
-        if isinstance(v, dict):
-            return Pile.from_dict(v)
-        # If it's already a Pile, use it directly (don't let Pydantic recreate it)
+        """Handle Pile and dict inputs - preserve Piles, convert dicts."""
         if isinstance(v, Pile):
+            # Already a Pile from __init__, use it directly
             return v
-        # Let Pydantic handle it
+        if isinstance(v, dict):
+            # Dict from deserialization, convert to Pile
+            return Pile.from_dict(v)
+        # Let Pydantic handle other cases (default_factory)
         return handler(v)
 
     def model_post_init(self, __context: Any) -> None:
