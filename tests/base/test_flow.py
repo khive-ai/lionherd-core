@@ -99,7 +99,7 @@ See Also:
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -1265,3 +1265,108 @@ async def test_flow_async_operations_with_progressions():
     # Verify structure
     assert len(f.items) == 5
     assert len(f.progressions) == 3
+
+
+# ==================== Coverage Tests for Missing Lines ====================
+
+
+def test_flow_init_with_pile_instance():
+    """Test passing a Pile instance directly to Flow __init__ (line 80)."""
+    # Create a pre-populated Pile
+    pile = Pile[FlowTestItem]()
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+    pile.add(item1)
+    pile.add(item2)
+
+    # Pass Pile instance directly
+    flow = Flow[FlowTestItem, FlowTestProgression](items=pile)
+
+    # Verify it uses the same Pile instance
+    assert flow.items is pile
+    assert len(flow.items) == 2
+    assert item1.id in flow.items
+    assert item2.id in flow.items
+
+
+def test_flow_init_with_single_element():
+    """Test passing a single Element to Flow __init__ (line 87)."""
+    item = FlowTestItem(value="single")
+
+    # Pass single Element (not in a list)
+    flow = Flow[FlowTestItem, FlowTestProgression](items=item)
+
+    # Verify it was normalized to a list and added
+    assert len(flow.items) == 1
+    assert item.id in flow.items
+    assert flow.items[item.id] == item
+
+
+def test_flow_field_validator_with_list_of_elements():
+    """Test field validator with list of Element instances (lines 112-122)."""
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+
+    # Create Flow with list of elements directly to validator
+    # (bypassing __init__ logic by using pydantic constructor)
+    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+        {"items": [item1, item2], "progressions": []}
+    )
+
+    assert len(flow.items) == 2
+    assert item1.id in flow.items
+    assert item2.id in flow.items
+
+
+def test_flow_field_validator_with_list_of_dicts():
+    """Test field validator with list[dict] deserialization (lines 112-122)."""
+    # Create serialized Flow dict that will go through deserialization path
+    item1 = FlowTestItem(value="item1")
+    item2 = FlowTestItem(value="item2")
+
+    # Serialize items to dicts
+    flow_dict = {
+        "id": str(uuid4()),
+        "created_at": "2024-01-01T00:00:00Z",
+        "items": [item1.to_dict(), item2.to_dict()],
+        "progressions": [],
+    }
+
+    # Deserialize - field validator should handle list[dict]
+    flow = Flow[FlowTestItem, FlowTestProgression].from_dict(flow_dict)
+
+    assert len(flow.items) == 2
+    # Verify deserialized correctly
+    for item in flow.items:
+        assert isinstance(item, Element)
+        assert hasattr(item, "value")
+
+
+def test_flow_referential_integrity_validation_failure():
+    """Test model validator raises NotFoundError for missing UUIDs (line 137)."""
+    item1 = FlowTestItem(value="item1")
+    missing_uuid = uuid4()  # UUID not in items
+
+    # Create progression with missing UUID
+    prog = FlowTestProgression(name="test", order=[item1.id, missing_uuid])
+
+    # Should raise NotFoundError during validation
+    with pytest.raises(NotFoundError) as exc_info:
+        Flow[FlowTestItem, FlowTestProgression](items=[item1], progressions=[prog])
+
+    assert "not in items pile" in str(exc_info.value)
+    assert str(missing_uuid) in str(exc_info.value)
+
+
+def test_flow_check_item_exists_error_path():
+    """Test _check_item_exists re-raises NotFoundError with context (lines 153-156)."""
+    flow = Flow[FlowTestItem, FlowTestProgression]()
+    missing_uuid = uuid4()
+
+    # Call _check_item_exists with missing UUID
+    with pytest.raises(NotFoundError) as exc_info:
+        flow._check_item_exists(missing_uuid)
+
+    # Verify error message includes flow context
+    assert "not found in flow" in str(exc_info.value)
+    assert str(missing_uuid) in str(exc_info.value)

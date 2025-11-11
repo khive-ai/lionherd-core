@@ -81,6 +81,9 @@ class Flow(Element, Generic[E, P]):
         elif isinstance(items, dict):
             # Dict from deserialization - let field validator handle it
             data["items"] = items
+        elif isinstance(items, list) and items and isinstance(items[0], dict):
+            # List of dicts from deserialization - let field validator handle it
+            data["items"] = items
         elif items is not None or item_type is not None or strict_type:
             # Normalize to list
             if isinstance(items, Element):
