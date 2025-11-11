@@ -106,6 +106,7 @@ from uuid import UUID
 import pytest
 
 from lionherd_core.base import Element, Flow, Pile, Progression
+from lionherd_core.errors import ExistsError, NotFoundError
 from lionherd_core.ln import to_dict
 
 # ==================== Fixtures ====================
@@ -975,23 +976,23 @@ def test_flow_add_item_duplicate_raises():
     item = FlowTestItem(value="test")
     f.add_item(item)
 
-    with pytest.raises(ValueError, match="already exists"):
+    with pytest.raises(ExistsError, match="already exists"):
         f.add_item(item)
 
 
 def test_flow_remove_nonexistent_progression_raises():
-    """Test removing nonexistent progression raises ValueError."""
+    """Test removing nonexistent progression raises NotFoundError."""
     f = Flow[FlowTestItem, FlowTestProgression]()
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         f.remove_progression(UUID("12345678-1234-5678-1234-567812345678"))
 
 
 def test_flow_remove_nonexistent_item_raises():
-    """Test removing nonexistent item raises ValueError."""
+    """Test removing nonexistent item raises NotFoundError."""
     f = Flow[FlowTestItem, FlowTestProgression]()
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         f.remove_item(UUID("12345678-1234-5678-1234-567812345678"))
 
 
@@ -1003,6 +1004,56 @@ def test_flow_add_item_invalid_progression_raises():
     # Should raise when trying to access nonexistent progression
     with pytest.raises((ValueError, KeyError)):
         f.add_item(item, progression_ids="nonexistent")
+
+
+# ==================== Exception Transformation Tests ====================
+
+
+def test_flow_add_item_raises_existserror():
+    """Test add_item raises ExistsError when item already exists."""
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    item = FlowTestItem(value="test")
+    f.add_item(item)
+
+    # Adding again should raise ExistsError
+    with pytest.raises(ExistsError, match=f"Item {item.id} already exists"):
+        f.add_item(item)
+
+
+def test_flow_remove_item_raises_notfounderror_with_metadata():
+    """Test remove_item raises NotFoundError with preserved metadata."""
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    # Should raise NotFoundError with better message
+    with pytest.raises(NotFoundError, match=f"Item {fake_id} not found in flow"):
+        f.remove_item(fake_id)
+
+    # Verify metadata is preserved via __cause__
+    try:
+        f.remove_item(fake_id)
+    except NotFoundError as e:
+        assert e.__cause__ is not None
+        assert hasattr(e, "details")
+        assert hasattr(e, "retryable")
+
+
+def test_flow_remove_progression_raises_notfounderror_with_metadata():
+    """Test remove_progression raises NotFoundError with preserved metadata."""
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    # Should raise NotFoundError with better message
+    with pytest.raises(NotFoundError, match=f"Progression {fake_id} not found in flow"):
+        f.remove_progression(fake_id)
+
+    # Verify metadata is preserved via __cause__
+    try:
+        f.remove_progression(fake_id)
+    except NotFoundError as e:
+        assert e.__cause__ is not None
+        assert hasattr(e, "details")
+        assert hasattr(e, "retryable")
 
 
 # ==================== ExceptionGroup Tests ====================
@@ -1055,21 +1106,21 @@ def test_flow_exception_group_collection():
         f = Flow[FlowTestItem, FlowTestProgression]()
         errors = []
 
-        # Try adding duplicate items
+        # Try adding duplicate items (raises ExistsError)
         item1 = FlowTestItem(value="item1")
         f.add_item(item1)
         try:
             f.add_item(item1)
-        except ValueError as e:
+        except ExistsError as e:
             errors.append(e)
 
-        # Try removing nonexistent item
+        # Try removing nonexistent item (raises NotFoundError)
         try:
             f.remove_item(UUID("12345678-1234-5678-1234-567812345678"))
-        except ValueError as e:
+        except NotFoundError as e:
             errors.append(e)
 
-        # Try adding progression with duplicate name
+        # Try adding progression with duplicate name (raises ValueError - name uniqueness check)
         prog1 = FlowTestProgression(name="duplicate")
         f.add_progression(prog1)
         try:
@@ -1087,7 +1138,10 @@ def test_flow_exception_group_collection():
 
     eg = exc_info.value
     assert len(eg.exceptions) == 3
-    assert all(isinstance(e, ValueError) for e in eg.exceptions)
+    # Mixed exception types: ExistsError, NotFoundError, ValueError
+    assert isinstance(eg.exceptions[0], ExistsError)
+    assert isinstance(eg.exceptions[1], NotFoundError)
+    assert isinstance(eg.exceptions[2], ValueError)
 
 
 # ==================== Async-Related Tests ====================
