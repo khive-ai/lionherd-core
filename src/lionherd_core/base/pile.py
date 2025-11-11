@@ -149,7 +149,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             # Validate that all UUIDs in order are in items
             for uid in order_list:
                 if uid not in self._items:
-                    raise ValueError(f"UUID {uid} in order not found in items")
+                    raise NotFoundError(f"UUID {uid} in order not found in items")
             # Set progression order
             self._progression = Progression(order=order_list)
 
@@ -526,7 +526,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         # Check if any items found
         if not filtered_items:
-            raise ValueError(f"No items of type(s) {types_to_filter} found in pile")
+            raise NotFoundError(f"No items of type(s) {types_to_filter} found in pile")
 
         # Return NEW Pile with filtered items
         new_pile = Pile(

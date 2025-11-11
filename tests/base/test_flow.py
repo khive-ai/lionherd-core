@@ -273,7 +273,7 @@ def test_flow_add_progression():
 
 
 def test_flow_add_progression_duplicate_name_raises():
-    """Test adding progression with duplicate name raises ValueError.
+    """Test adding progression with duplicate name raises ExistsError.
 
     Design Rationale - Name Uniqueness:
         Progression names serve as ergonomic access keys (`flow.get_progression("stage_name")`).
@@ -302,7 +302,7 @@ def test_flow_add_progression_duplicate_name_raises():
     prog2 = FlowTestProgression(name="duplicate")
 
     f.add_progression(prog1)
-    with pytest.raises(ValueError, match="Progression with name 'duplicate' already exists"):
+    with pytest.raises(ExistsError, match="Progression with name 'duplicate' already exists"):
         f.add_progression(prog2)
 
 
@@ -1088,7 +1088,7 @@ def test_flow_exception_group_collection():
         for item in batch:
             try:
                 flow.add_item(item, progression_ids="stage")
-            except ValueError as e:
+            except (ExistsError, NotFoundError) as e:
                 errors.append(e)  # Collect, don't raise immediately
 
         if errors:
@@ -1120,13 +1120,13 @@ def test_flow_exception_group_collection():
         except NotFoundError as e:
             errors.append(e)
 
-        # Try adding progression with duplicate name (raises ValueError - name uniqueness check)
+        # Try adding progression with duplicate name (raises ExistsError - name uniqueness check)
         prog1 = FlowTestProgression(name="duplicate")
         f.add_progression(prog1)
         try:
             prog2 = FlowTestProgression(name="duplicate")
             f.add_progression(prog2)
-        except ValueError as e:
+        except ExistsError as e:
             errors.append(e)
 
         # Raise ExceptionGroup if any errors
@@ -1138,10 +1138,10 @@ def test_flow_exception_group_collection():
 
     eg = exc_info.value
     assert len(eg.exceptions) == 3
-    # Mixed exception types: ExistsError, NotFoundError, ValueError
+    # Mixed exception types: ExistsError, NotFoundError, ExistsError
     assert isinstance(eg.exceptions[0], ExistsError)
     assert isinstance(eg.exceptions[1], NotFoundError)
-    assert isinstance(eg.exceptions[2], ValueError)
+    assert isinstance(eg.exceptions[2], ExistsError)
 
 
 # ==================== Async-Related Tests ====================

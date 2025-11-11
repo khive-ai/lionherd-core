@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
 
-from ..errors import NotFoundError
+from ..errors import ExistsError, NotFoundError
 from ..protocols import Serializable, implements
 from ._utils import extract_types, synchronized
 from .element import Element
@@ -150,10 +150,10 @@ class Flow(Element, Generic[E, P]):
 
     @synchronized
     def add_progression(self, progression: P) -> None:
-        """Add progression with name registration. Raises ValueError if UUID or name exists."""
+        """Add progression with name registration. Raises ExistsError if UUID or name exists."""
         # Check name uniqueness
         if progression.name and progression.name in self._progression_names:
-            raise ValueError(
+            raise ExistsError(
                 f"Progression with name '{progression.name}' already exists. Names must be unique."
             )
 

@@ -248,16 +248,16 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     @synchronized
     def add_edge(self, edge: Edge) -> None:
-        """Add edge to graph. Raises ValueError if head/tail missing, ExistsError if already exists.
+        """Add edge to graph. Raises NotFoundError if head/tail missing, ExistsError if already exists.
 
         Thread-safe: Uses @synchronized to ensure atomic operation across
         edges.add() and adjacency list updates. Critical for Rust port and
         Python 3.13+ nogil where GIL won't protect dict operations.
         """
         if edge.head not in self.nodes:
-            raise ValueError(f"Head node {edge.head} not in graph")
+            raise NotFoundError(f"Head node {edge.head} not in graph")
         if edge.tail not in self.nodes:
-            raise ValueError(f"Tail node {edge.tail} not in graph")
+            raise NotFoundError(f"Tail node {edge.tail} not in graph")
 
         self.edges.add(edge)
         self._out_edges[edge.head].add(edge.id)
@@ -400,7 +400,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         end_id = self._coerce_id(end)
 
         if start_id not in self.nodes or end_id not in self.nodes:
-            raise ValueError("Start or end node not in graph")
+            raise NotFoundError("Start or end node not in graph")
 
         # BFS with parent tracking
         queue: deque[UUID] = deque([start_id])
