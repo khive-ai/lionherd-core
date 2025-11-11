@@ -132,7 +132,7 @@ json_dumps({"obj": CustomClass()}, safe_fallback=True)
 
 ### Why Task Groups?
 
-**Decision**: Use `asyncio.TaskGroup` (Python 3.11+) for `alcall`/`bcall`.
+**Decision**: Use lionherd-core's `create_task_group()` (Python 3.11+) for `alcall`/`bcall`.
 
 **Rationale**:
 
@@ -144,13 +144,16 @@ json_dumps({"obj": CustomClass()}, safe_fallback=True)
 **Comparison**:
 
 ```python
+from lionherd_core.libs.concurrency import gather, create_task_group
+
 # Old pattern (asyncio.gather)
-results = await asyncio.gather(*tasks, return_exceptions=True)
+results = await gather(*tasks, return_exceptions=True)
 # Problems: Orphaned tasks on cancel, manual exception handling
 
 # New pattern (TaskGroup)
-async with asyncio.TaskGroup() as tg:
-    tasks = [tg.create_task(func(x)) for x in items]
+async with create_task_group() as tg:
+    for x in items:
+        await tg.start_soon(func, x)
 # Benefits: Automatic cleanup, structured error handling
 ```
 

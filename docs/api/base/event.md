@@ -307,6 +307,8 @@ lock)
 **Example**:
 
 ```python
+from lionherd_core.libs.concurrency import gather
+
 # First call - executes _invoke()
 result1 = await event.invoke()
 
@@ -317,7 +319,7 @@ result3 = await event.invoke()
 assert result1 is result2 is result3  # Same cached result
 
 # Concurrent calls also return same result
-results = await asyncio.gather(
+results = await gather(
     event.invoke(),
     event.invoke(),
     event.invoke(),
@@ -606,7 +608,7 @@ elif event.status == EventStatus.CANCELLED:
 ### Pattern 2: Retry Strategy with Backoff
 
 ```python
-import asyncio
+from lionherd_core.libs.concurrency import sleep
 
 async def retry_with_backoff(event: Event, max_retries: int = 3) -> Any:
     """Retry event with exponential backoff."""
@@ -626,7 +628,7 @@ async def retry_with_backoff(event: Event, max_retries: int = 3) -> Any:
             # Exponential backoff
             delay = 2 ** attempt
             print(f"Retry {attempt + 1}/{max_retries} after {delay}s")
-            await asyncio.sleep(delay)
+            await sleep(delay)
 
             # Create fresh event for retry
             current = current.as_fresh_event(copy_meta=True)
@@ -683,10 +685,12 @@ async def execute_with_monitoring(event: Event) -> Any:
 ### Pattern 4: Parallel Execution with Error Aggregation
 
 ```python
+from lionherd_core.libs.concurrency import gather
+
 async def execute_parallel(events: list[Event]) -> dict:
     """Execute events in parallel, aggregate results."""
     # Execute all in parallel
-    await asyncio.gather(*[e.invoke() for e in events])
+    await gather(*[e.invoke() for e in events])
 
     # Aggregate results
     results = {
@@ -866,7 +870,7 @@ Comprehensive examples demonstrating:
 - `await event.invoke()` - Execute with lifecycle management
 - `if event.execution.retryable: fresh = event.as_fresh_event()` - Retry pattern
 - `event.execution.to_dict()` - Serialize for monitoring
-- `await asyncio.gather(*[e.invoke() for e in events])` - Parallel execution
+- `await gather(*[e.invoke() for e in events])` - Parallel execution (import from `lionherd_core.libs.concurrency`)
 
 **Performance**:
 
