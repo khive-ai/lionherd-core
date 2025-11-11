@@ -702,6 +702,170 @@ class TestEdgeOperations:
 
 
 # ============================================================================
+# Error Handling Tests (Pile[key] Pattern - PR #117)
+# ============================================================================
+#
+# Design aspect validated: Pile[key] primitive error handling pattern.
+# PR #117 refactored from double-lookup (.get()) to single-lookup ([key]) pattern,
+# introducing try/except KeyError→ValueError transformation.
+#
+# Pattern validated:
+#   try:
+#       item = pile[key]
+#   except KeyError:
+#       raise ValueError(f"Item {key} not found") from None
+#
+# Why test error transformation:
+# - Validates KeyError from Pile.__getitem__ is caught and transformed
+# - Ensures ValueError (domain error) raised instead of KeyError (implementation detail)
+# - Verifies 'from None' suppresses KeyError from traceback (cleaner debugging)
+#
+# Methods tested: get_node(), get_edge(), remove_edge()
+# Pattern scope: All Pile[key] usage in Graph (15 sites total)
+
+class TestPileKeyErrorHandling:
+    """Test error handling for Pile[key] pattern introduced in PR #117."""
+
+    # Phase 1: Exception Transformation Tests
+
+    def test_get_node_transforms_keyerror(self, empty_graph):
+        """Verify get_node transforms KeyError to ValueError."""
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        # Should raise ValueError, not KeyError
+        with pytest.raises(ValueError, match=f"Node {fake_id} not found"):
+            empty_graph.get_node(fake_id)
+
+        # Verify it's ValueError, not KeyError
+        try:
+            empty_graph.get_node(fake_id)
+        except KeyError:
+            pytest.fail("Should raise ValueError, not KeyError")
+        except ValueError:
+            pass  # Expected
+
+    def test_get_edge_transforms_keyerror(self, empty_graph):
+        """Verify get_edge transforms KeyError to ValueError."""
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        # Should raise ValueError, not KeyError
+        with pytest.raises(ValueError, match=f"Edge {fake_id} not found"):
+            empty_graph.get_edge(fake_id)
+
+        # Verify it's ValueError, not KeyError
+        try:
+            empty_graph.get_edge(fake_id)
+        except KeyError:
+            pytest.fail("Should raise ValueError, not KeyError")
+        except ValueError:
+            pass  # Expected
+
+    def test_remove_edge_transforms_keyerror(self, empty_graph):
+        """Verify remove_edge transforms KeyError to ValueError."""
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        # Should raise ValueError, not KeyError
+        with pytest.raises(ValueError, match=f"Edge {fake_id} not found"):
+            empty_graph.remove_edge(fake_id)
+
+        # Verify it's ValueError, not KeyError
+        try:
+            empty_graph.remove_edge(fake_id)
+        except KeyError:
+            pytest.fail("Should raise ValueError, not KeyError")
+        except ValueError:
+            pass  # Expected
+
+    # Phase 2: Exception Suppression Tests
+
+    def test_get_node_suppresses_keyerror(self, empty_graph):
+        """Verify 'from None' suppresses KeyError in traceback."""
+        import traceback
+
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        try:
+            empty_graph.get_node(fake_id)
+        except ValueError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should NOT contain KeyError or "During handling" context
+            assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+            assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+    def test_get_edge_suppresses_keyerror(self, empty_graph):
+        """Verify 'from None' suppresses KeyError in traceback."""
+        import traceback
+
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        try:
+            empty_graph.get_edge(fake_id)
+        except ValueError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should NOT contain KeyError or "During handling" context
+            assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+            assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+    def test_remove_edge_suppresses_keyerror(self, empty_graph):
+        """Verify 'from None' suppresses KeyError in traceback."""
+        import traceback
+
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        try:
+            empty_graph.remove_edge(fake_id)
+        except ValueError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should NOT contain KeyError or "During handling" context
+            assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+            assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+    # Phase 3: Error Message Format Tests
+
+    def test_get_node_error_message_format(self, empty_graph):
+        """Verify error message includes UUID and context."""
+        fake_id = UUID("12345678-1234-1234-1234-123456789abc")
+
+        try:
+            empty_graph.get_node(fake_id)
+        except ValueError as e:
+            error_msg = str(e)
+            assert str(fake_id) in error_msg, "Error message should include UUID"
+            assert "not found" in error_msg.lower(), "Error message should indicate not found"
+            assert "graph" in error_msg.lower(), "Error message should mention graph context"
+
+    def test_get_edge_error_message_format(self, empty_graph):
+        """Verify error message includes UUID and context."""
+        fake_id = UUID("12345678-1234-1234-1234-123456789abc")
+
+        try:
+            empty_graph.get_edge(fake_id)
+        except ValueError as e:
+            error_msg = str(e)
+            assert str(fake_id) in error_msg, "Error message should include UUID"
+            assert "not found" in error_msg.lower(), "Error message should indicate not found"
+            assert "graph" in error_msg.lower(), "Error message should mention graph context"
+
+    def test_remove_edge_error_message_format(self, empty_graph):
+        """Verify error message includes UUID and context."""
+        fake_id = UUID("12345678-1234-1234-1234-123456789abc")
+
+        try:
+            empty_graph.remove_edge(fake_id)
+        except ValueError as e:
+            error_msg = str(e)
+            assert str(fake_id) in error_msg, "Error message should include UUID"
+            assert "not found" in error_msg.lower(), "Error message should indicate not found"
+            assert "graph" in error_msg.lower(), "Error message should mention graph context"
+
+
+# ============================================================================
 # Adjacency Queries Tests
 # ============================================================================
 #
