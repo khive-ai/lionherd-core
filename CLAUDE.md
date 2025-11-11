@@ -230,4 +230,4 @@ PRs must pass:
 - **AGENTS.md**: Quick reference for AI agents
 - **CHANGELOG.md**: API evolution
 - **notebooks/tutorials/**: Executable examples
-- **docs/api/**: API reference (Sphinx)
+- **docs/**: MkDocs documentation
