@@ -33,7 +33,6 @@ from ._utils import (
     extract_types,
     load_type_from_string,
     synchronized,
-    to_uuid,
 )
 from .element import Element
 from .progression import Progression
@@ -270,7 +269,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             NotFoundError: If item not found
         """
 
-        uid = to_uuid(item_id)
+        uid = Element._coerce_id(item_id)
 
         try:
             item = self._items.pop(uid)
@@ -294,7 +293,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         Raises:
             NotFoundError: If item not found and no default provided
         """
-        uid = to_uuid(item_id)
+        uid = Element._coerce_id(item_id)
 
         try:
             item = self._items.pop(uid)
@@ -319,8 +318,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         Raises:
             NotFoundError: If item not found and no default
         """
-
-        uid = to_uuid(item_id)
+        uid = Element._coerce_id(item_id)
 
         try:
             return self._items[uid]
@@ -373,7 +371,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             bool: True if item was removed, False if not present
         """
 
-        uid = to_uuid(item)
+        uid = Element._coerce_id(item)
         if uid in self._items:
             self.remove(uid)
             return True
@@ -574,7 +572,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     async def remove_async(self, item_id: UUID | str | Element) -> T:
         """Async version of remove()."""
 
-        uid = to_uuid(item_id)
+        uid = Element._coerce_id(item_id)
         try:
             item = self._items.pop(uid)
         except KeyError:
@@ -586,7 +584,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     async def get_async(self, item_id: UUID | str | Element) -> T:
         """Async version of get()."""
 
-        uid = to_uuid(item_id)
+        uid = Element._coerce_id(item_id)
         try:
             return self._items[uid]
         except KeyError:
@@ -598,7 +596,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     def __contains__(self, item: UUID | str | Element) -> bool:
         """Check if item exists in pile."""
         with contextlib.suppress(Exception):
-            uid = to_uuid(item)
+            uid = Element._coerce_id(item)
             return uid in self._items
         return False
 
