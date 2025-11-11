@@ -55,14 +55,14 @@ class TaskList(BaseModel):
 ### 2. Create LNDL Spec
 
 ```python
-from lionherd_core.types import Spec, Operable
+from lionherd_core import types
 
 # Create specs for each model
-task_spec = Spec(Task, name="task")
-task_list_spec = Spec(TaskList, name="task_list")
+task_spec = types.Spec(Task, name="task")
+task_list_spec = types.Spec(TaskList, name="task_list")
 
 # Bundle into Operable for parsing
-operable = Operable([task_spec, task_list_spec])
+operable = types.Operable([task_spec, task_list_spec])
 ```
 
 ### 3. Prepare LLM Prompt
@@ -85,7 +85,7 @@ Return tasks in LNDL format.
 ### 4. Parse LLM Response (Fuzzy)
 
 ```python
-from lionherd_core.lndl import parse_lndl_fuzzy
+from lionherd_core import lndl
 
 # Simulated LLM response (with typos and formatting issues)
 llm_response = """
@@ -112,7 +112,7 @@ OUT{task_list: [task_list]}
 """
 
 # Parse with fuzzy matching (tolerates typos)
-result = parse_lndl_fuzzy(llm_response, operable, threshold=0.85)
+result = lndl.parse_lndl_fuzzy(llm_response, operable, threshold=0.85)
 
 # Access structured data
 task_list = result.task_list
@@ -141,13 +141,13 @@ Total hours: 14.0
 
 ```python
 # Strict (fewer false positives, more failures)
-result = parse_lndl_fuzzy(response, operable, threshold=0.95)
+result = lndl.parse_lndl_fuzzy(response, operable, threshold=0.95)
 
 # Balanced (default, recommended)
-result = parse_lndl_fuzzy(response, operable, threshold=0.85)
+result = lndl.parse_lndl_fuzzy(response, operable, threshold=0.85)
 
 # Lenient (tolerates more typos, risk false positives)
-result = parse_lndl_fuzzy(response, operable, threshold=0.75)
+result = lndl.parse_lndl_fuzzy(response, operable, threshold=0.75)
 ```
 
 **Recommendation**: Start with 0.85, adjust based on your LLM's accuracy.
@@ -155,14 +155,14 @@ result = parse_lndl_fuzzy(response, operable, threshold=0.75)
 ### Pattern 2: Fallback Strategy
 
 ```python
-from lionherd_core.lndl import parse_lndl
+from lionherd_core import lndl
 
 try:
     # Try strict first (faster)
-    result = parse_lndl(response, operable)
+    result = lndl.parse_lndl(response, operable)
 except Exception:
     # Fallback to fuzzy if strict fails
-    result = parse_lndl_fuzzy(response, operable, threshold=0.85)
+    result = lndl.parse_lndl_fuzzy(response, operable, threshold=0.85)
 ```
 
 ### Pattern 3: Validation + Retry
@@ -175,7 +175,7 @@ for attempt in range(max_retries):
     llm_response = call_llm(prompt)
 
     try:
-        result = parse_lndl_fuzzy(llm_response, operable)
+        result = lndl.parse_lndl_fuzzy(llm_response, operable)
         break  # Success
     except ValidationError as e:
         if attempt == max_retries - 1:
@@ -230,7 +230,7 @@ class AgentResponse(BaseModel):
 # Parse LLM response → execute tools → return results
 # llm = YourLLMClient()  # Initialize your LLM client
 response = llm.generate(prompt)
-parsed = parse_lndl_fuzzy(response, Operable([Spec(AgentResponse, "result")]))
+parsed = lndl.parse_lndl_fuzzy(response, types.Operable([types.Spec(AgentResponse, "result")]))
 
 for call in parsed.result.tool_calls:
     # def execute_tool(name: str, args: dict) -> Any: ...  # Your tool execution logic

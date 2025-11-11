@@ -57,7 +57,7 @@ class ProcessedItem(BaseModel):
 # Simulated external API (with random failures)
 async def fetch_from_api(item_id: str) -> DataItem:
     """Fetch data from external API (may fail randomly)."""
-    await sleep(0.1)  # Simulate network latency
+    await concurrency.sleep(0.1)  # Simulate network latency
 
     # Simulate failures (20% failure rate)
     import random
@@ -70,8 +70,7 @@ async def fetch_from_api(item_id: str) -> DataItem:
 ### 2. Resilient Fetcher with Retry Logic
 
 ```python
-from lionherd_core.ln import alcall
-from lionherd_core.libs.concurrency import fail_after, sleep
+from lionherd_core import ln, concurrency
 
 async def fetch_with_retry(
     item_id: str,
@@ -90,12 +89,12 @@ async def fetch_with_retry(
                 print(f"Failed {item_id} after {max_retries} attempts: {e}")
                 return None
             # Exponential backoff
-            await sleep(2 ** attempt)
+            await concurrency.sleep(2 ** attempt)
 
 async def fetch_all_items(item_ids: list[str]) -> list[DataItem]:
     """Fetch all items with concurrency limit."""
     # alcall handles concurrency control automatically
-    results = await alcall(
+    results = await ln.alcall(
         item_ids,
         fetch_with_retry,
         max_concurrent=10,  # Max 10 concurrent API calls
@@ -116,16 +115,16 @@ async def fetch_all_items(item_ids: list[str]) -> list[DataItem]:
 ### 3. Process Data with Resource Limits
 
 ```python
-from lionherd_core.libs.concurrency import CapacityLimiter, sleep
+from lionherd_core import concurrency
 
 # Global resource limiter (e.g., database connections)
-db_limiter = CapacityLimiter(capacity=5)
+db_limiter = concurrency.CapacityLimiter(capacity=5)
 
 async def process_item(item: DataItem) -> ProcessedItem:
     """Process data item (CPU-intensive or I/O-bound)."""
     # Acquire database connection from pool
     async with db_limiter:
-        await sleep(0.05)  # Simulate processing
+        await concurrency.sleep(0.05)  # Simulate processing
 
         return ProcessedItem(
             id=item.id,
@@ -135,7 +134,7 @@ async def process_item(item: DataItem) -> ProcessedItem:
 
 async def process_all_items(items: list[DataItem]) -> list[ProcessedItem]:
     """Process all items with resource constraints."""
-    results = await alcall(
+    results = await ln.alcall(
         items,
         process_item,
         max_concurrent=20,  # Can process more than DB connections
@@ -157,7 +156,7 @@ async def process_all_items(items: list[DataItem]) -> list[ProcessedItem]:
 ### 4. Store Results with Error Aggregation
 
 ```python
-from lionherd_core.libs.concurrency import sleep
+from lionherd_core import concurrency
 
 async def store_item(item: ProcessedItem) -> None:
     """Store item to database (may fail)."""
@@ -165,12 +164,12 @@ async def store_item(item: ProcessedItem) -> None:
     if random.random() < 0.1:  # 10% failure rate
         raise ValueError(f"Storage failed for {item.id}")
 
-    await sleep(0.02)  # Simulate write
+    await concurrency.sleep(0.02)  # Simulate write
     print(f"Stored {item.id}")
 
 async def store_all_items(items: list[ProcessedItem]) -> dict[str, Any]:
     """Store all items and aggregate errors."""
-    results = await alcall(
+    results = await ln.alcall(
         items,
         store_item,
         max_concurrent=10,
@@ -263,7 +262,7 @@ Pipeline result: {
 ### Pattern 1: Circuit Breaker
 
 ```python
-from lionherd_core.libs.concurrency import current_time
+from lionherd_core import concurrency
 
 class CircuitBreaker:
     """Stop calling failing service after threshold."""
@@ -276,7 +275,7 @@ class CircuitBreaker:
     async def call(self, func, *args, **kwargs):
         # Check if circuit is open
         if self.opened_at:
-            if current_time() - self.opened_at < self.timeout:
+            if concurrency.current_time() - self.opened_at < self.timeout:
                 raise RuntimeError("Circuit breaker open")
             else:
                 self.opened_at = None  # Reset after timeout
@@ -288,7 +287,7 @@ class CircuitBreaker:
         except Exception as e:
             self.failures += 1
             if self.failures >= self.threshold:
-                self.opened_at = current_time()
+                self.opened_at = concurrency.current_time()
             raise
 
 # Usage
@@ -315,7 +314,7 @@ async def pipeline_with_deadline(item_ids: list[str], deadline_sec: float):
         return {"error": "Deadline exceeded during fetch"}
 
     # Adjust processing timeout based on remaining time
-    processed = await alcall(
+    processed = await ln.alcall(
         fetched,
         process_item,
         retry_timeout=remaining * 0.8,  # Leave 20% buffer for storage
