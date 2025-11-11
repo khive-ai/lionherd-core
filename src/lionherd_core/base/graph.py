@@ -15,7 +15,7 @@ from pydapter import (
 )
 from typing_extensions import override
 
-from ..errors import ExistsError, NotFoundError
+from ..errors import NotFoundError
 from ..protocols import (
     Adaptable,
     AsyncAdaptable,
@@ -81,9 +81,7 @@ class Edge(Element):
     @classmethod
     def _validate_uuid(cls, value: Any) -> UUID:
         """Coerce to UUID."""
-        from ._utils import to_uuid
-
-        return to_uuid(value)
+        return cls._coerce_id(value)
 
     async def check_condition(self, *args: Any, **kwargs: Any) -> bool:
         """Check if edge is traversable. Returns True if no condition or condition passes."""
@@ -163,40 +161,75 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             if edge.tail in self._in_edges:
                 self._in_edges[edge.tail].add(edge_id)
 
+    def _check_node_exists(self, node_id: UUID) -> Node:
+        """Verify node exists, re-raising NotFoundError with graph context.
+
+        Args:
+            node_id: Node UUID to check
+
+        Returns:
+            Node if found
+
+        Raises:
+            NotFoundError: With graph context and preserved metadata
+        """
+        try:
+            return self.nodes[node_id]
+        except NotFoundError as e:
+            raise NotFoundError(
+                f"Node {node_id} not found in graph",
+                details=e.details,
+                retryable=e.retryable,
+                cause=e,
+            )
+
+    def _check_edge_exists(self, edge_id: UUID) -> Edge:
+        """Verify edge exists, re-raising NotFoundError with graph context.
+
+        Args:
+            edge_id: Edge UUID to check
+
+        Returns:
+            Edge if found
+
+        Raises:
+            NotFoundError: With graph context and preserved metadata
+        """
+        try:
+            return self.edges[edge_id]
+        except NotFoundError as e:
+            raise NotFoundError(
+                f"Edge {edge_id} not found in graph",
+                details=e.details,
+                retryable=e.retryable,
+                cause=e,
+            )
+
     # ==================== Node Operations ====================
 
     @synchronized
     def add_node(self, node: Node) -> None:
-        """Add node to graph. Raises ValueError if exists.
+        """Add node to graph. Raises ExistsError if already exists.
 
         Thread-safe: Uses @synchronized to ensure atomic operation across
         nodes.add() and adjacency dict initialization.
         """
-        try:
-            self.nodes.add(node)
-        except ExistsError:
-            raise ValueError(f"Node {node.id} already exists in graph") from None
-
+        self.nodes.add(node)
         self._out_edges[node.id] = set()
         self._in_edges[node.id] = set()
 
     @synchronized
     def remove_node(self, node_id: UUID | Node) -> Node:
-        """Remove node and all connected edges. Raises ValueError if not found.
+        """Remove node and all connected edges. Raises NotFoundError if not found.
 
         Thread-safe: Uses @synchronized with RLock to allow nested calls to
         remove_edge(). Ensures atomic operation across edge removal, dict
         cleanup, and node removal.
         """
-        from ._utils import to_uuid
-
-        nid = to_uuid(node_id)
+        nid = self._coerce_id(node_id)
 
         # Verify node exists before removing edges
-        try:
-            node = self.nodes[nid]
-        except NotFoundError:
-            raise ValueError(f"Node {nid} not found in graph") from None
+        self._check_node_exists(nid)
 
         # Remove all connected edges
         for edge_id in list(self._in_edges[nid]):
@@ -209,26 +242,13 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         del self._out_edges[nid]
 
         # Remove and return node
-        try:
-            return self.nodes.remove(nid)
-        except NotFoundError:
-            raise ValueError(f"Node {nid} not found in graph") from None
-
-    def get_node(self, node_id: UUID | Node) -> Node:
-        """Get node by ID. Raises ValueError if not found."""
-        from ._utils import to_uuid
-
-        nid = to_uuid(node_id)
-        try:
-            return self.nodes[nid]
-        except NotFoundError:
-            raise ValueError(f"Node {nid} not found in graph") from None
+        return self.nodes.remove(nid)
 
     # ==================== Edge Operations ====================
 
     @synchronized
     def add_edge(self, edge: Edge) -> None:
-        """Add edge to graph. Raises ValueError if exists or head/tail missing.
+        """Add edge to graph. Raises ValueError if head/tail missing, ExistsError if already exists.
 
         Thread-safe: Uses @synchronized to ensure atomic operation across
         edges.add() and adjacency list updates. Critical for Rust port and
@@ -239,52 +259,31 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         if edge.tail not in self.nodes:
             raise ValueError(f"Tail node {edge.tail} not in graph")
 
-        try:
-            self.edges.add(edge)
-        except ExistsError:
-            raise ValueError(f"Edge {edge.id} already exists in graph") from None
-
+        self.edges.add(edge)
         self._out_edges[edge.head].add(edge.id)
         self._in_edges[edge.tail].add(edge.id)
 
     @synchronized
     def remove_edge(self, edge_id: UUID | Edge) -> Edge:
-        """Remove edge from graph. Raises ValueError if not found.
+        """Remove edge from graph. Raises NotFoundError if not found.
 
         Thread-safe: Uses @synchronized to ensure atomic operation across
         adjacency dict updates and edges.remove(). RLock allows nested calls
         from remove_node().
         """
-        from ._utils import to_uuid
-
-        eid = to_uuid(edge_id)
-        try:
-            edge = self.edges[eid]
-        except NotFoundError:
-            raise ValueError(f"Edge {eid} not found in graph") from None
+        eid = self._coerce_id(edge_id)
+        edge = self._check_edge_exists(eid)
 
         self._out_edges[edge.head].discard(eid)
         self._in_edges[edge.tail].discard(eid)
 
         return self.edges.remove(eid)
 
-    def get_edge(self, edge_id: UUID | Edge) -> Edge:
-        """Get edge by ID. Raises ValueError if not found."""
-        from ._utils import to_uuid
-
-        eid = to_uuid(edge_id)
-        try:
-            return self.edges[eid]
-        except NotFoundError:
-            raise ValueError(f"Edge {eid} not found in graph") from None
-
     # ==================== Graph Queries ====================
 
     def get_predecessors(self, node_id: UUID | Node) -> list[Node]:
         """Get all nodes with edges pointing to this node."""
-        from ._utils import to_uuid
-
-        nid = to_uuid(node_id)
+        nid = self._coerce_id(node_id)
         predecessors = []
         for edge_id in self._in_edges.get(nid, set()):
             edge = self.edges[edge_id]
@@ -293,9 +292,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     def get_successors(self, node_id: UUID | Node) -> list[Node]:
         """Get all nodes this node points to."""
-        from ._utils import to_uuid
-
-        nid = to_uuid(node_id)
+        nid = self._coerce_id(node_id)
         successors = []
         for edge_id in self._out_edges.get(nid, set()):
             edge = self.edges[edge_id]
@@ -316,12 +313,10 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         Raises:
             ValueError: If invalid direction
         """
-        from ._utils import to_uuid
-
         if direction not in {"in", "out", "both"}:
             raise ValueError(f"Invalid direction: {direction}")
 
-        nid = to_uuid(node_id)
+        nid = self._coerce_id(node_id)
         result = []
 
         if direction in {"in", "both"}:
@@ -401,10 +396,8 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         check_conditions: bool = False,
     ) -> list[Edge] | None:
         """Find path from start to end using BFS. Returns edges or None if no path."""
-        from ._utils import to_uuid
-
-        start_id = to_uuid(start)
-        end_id = to_uuid(end)
+        start_id = self._coerce_id(start)
+        end_id = self._coerce_id(end)
 
         if start_id not in self.nodes or end_id not in self.nodes:
             raise ValueError("Start or end node not in graph")
