@@ -34,6 +34,7 @@ Lionherd uses **semantic exceptions** that convey intent, not just symptoms:
 - `ExistsError`: Item already exists (not generic `ValueError`)
 
 This enables:
+
 1. **Precise error handling**: Catch specific conditions
 2. **Retry logic**: Use `.retryable` flag to decide retry strategy
 3. **Structured debugging**: Access `.details` for context
@@ -48,6 +49,7 @@ This enables:
 Base exception for all lionherd errors.
 
 **Attributes:**
+
 - `message: str` - Human-readable error message
 - `details: dict[str, Any]` - Additional structured context
 - `retryable: bool` - Whether this error can be retried
@@ -65,6 +67,7 @@ LionherdError(
 ```
 
 **Parameters:**
+
 - `message`: Error message (uses `default_message` if None)
 - `details`: Additional context dict for debugging
 - `retryable`: Whether error can be retried (uses `default_retryable` if None)
@@ -81,6 +84,7 @@ def to_dict(self) -> dict[str, Any]
 ```
 
 **Returns:**
+
 - Dict with `error`, `message`, `retryable`, and optionally `details`
 
 **Example:**
@@ -113,6 +117,7 @@ Item not found. **Not retryable** by default.
 **Use when:** An expected item is missing (collection access, file lookup, database query).
 
 **Attributes:**
+
 - `default_message = "Item not found"`
 - `default_retryable = False` (missing items won't appear on retry)
 
@@ -166,6 +171,7 @@ Item already exists. **Not retryable** by default.
 **Use when:** Attempting to create an item that already exists (duplicate insertion, unique constraint violation).
 
 **Attributes:**
+
 - `default_message = "Item already exists"`
 - `default_retryable = False` (duplicate items won't resolve on retry)
 
@@ -215,6 +221,7 @@ Validation failure. **Not retryable**.
 **Use when:** Input validation fails (schema mismatch, type error, constraint violation).
 
 **Attributes:**
+
 - `default_message = "Validation failed"`
 - `default_retryable = False` (validation errors won't fix themselves)
 
@@ -247,6 +254,7 @@ Configuration error. **Not retryable**.
 **Use when:** Invalid configuration (missing environment variable, invalid settings, incompatible options).
 
 **Attributes:**
+
 - `default_message = "Configuration error"`
 - `default_retryable = False` (config errors need manual fixes)
 
@@ -279,6 +287,7 @@ Event/Calling execution failure. **Retryable** by default.
 **Use when:** Runtime execution fails (function call error, async task failure, operation timeout).
 
 **Attributes:**
+
 - `default_message = "Execution failed"`
 - `default_retryable = True` (most execution failures are transient)
 
@@ -317,6 +326,7 @@ Connection/network failure. **Retryable** by default.
 **Use when:** Network operations fail (API call timeout, database connection lost, socket error).
 
 **Attributes:**
+
 - `default_message = "Connection error"`
 - `default_retryable = True` (network issues are often transient)
 
@@ -355,6 +365,7 @@ Operation timeout. **Retryable** by default.
 **Use when:** Operations exceed time limit (async timeout, request timeout, lock timeout).
 
 **Attributes:**
+
 - `default_message = "Operation timed out"`
 - `default_retryable = True` (timeouts might succeed with more time)
 
@@ -396,11 +407,13 @@ except TimeoutError:
 The `.retryable` flag indicates whether an operation can be retried after this error.
 
 **Retryable exceptions** (default `True`):
+
 - `ExecutionError` - Transient execution failures
 - `ConnectionError` - Network issues
 - `TimeoutError` - Time limits exceeded
 
 **Non-retryable exceptions** (default `False`):
+
 - `NotFoundError` - Missing items won't appear
 - `ExistsError` - Duplicates won't resolve
 - `ValidationError` - Invalid input won't change
@@ -511,7 +524,7 @@ except NotFoundError as e:
 
 ---
 
-### .__cause__ Chaining
+### .**cause** Chaining
 
 The `__cause__` attribute preserves the original exception that triggered this error.
 
@@ -617,6 +630,7 @@ except KeyError as e:
 ```
 
 **Benefits:**
+
 - 2x fewer lookups (performance)
 - Exception chain preserved (`.__cause__`)
 - Better error messages (domain context)
@@ -874,9 +888,11 @@ except KeyError as e:
 ### Breaking Changes
 
 **Removed:**
+
 - Generic `ValueError` for missing/duplicate items
 
 **Added:**
+
 - `NotFoundError` for missing items
 - `ExistsError` for duplicates
 - `.retryable` flag for retry logic
