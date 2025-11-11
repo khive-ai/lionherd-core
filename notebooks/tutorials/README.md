@@ -7,7 +7,7 @@ Hands-on tutorials demonstrating lionherd-core features through practical, copy-
 1. **Install**: `pip install lionherd-core`
 2. **Pick a tutorial**: Browse by category below
 3. **Run**: Open in Jupyter and execute cells sequentially
-4. **Time**: Most tutorials complete in 15-30 minutes
+4. **Time**: Most tutorials complete in 15-30 min
 
 ## Tutorial Categories
 
@@ -49,44 +49,44 @@ Function call parsing and dynamic schema selection for tool-calling systems (MCP
 
 | Tutorial | Difficulty | Time | Topics |
 |----------|------------|------|--------|
-| [Task Coordination](./concurrency/task_coordination.ipynb) | Intermediate | 20-30min | TaskGroups, result aggregation, error handling |
-| [Deadline Patterns](./concurrency/deadline_patterns.ipynb) | Intermediate | 20-30min | `fail_at`, deadline propagation, timeout coordination |
-| [Error Handling Timeouts](./concurrency/error_handling_timeouts.ipynb) | Intermediate | 20-30min | `move_on_after`, timeout recovery, partial failures |
-| [Transaction Shielding](./concurrency/transaction_shielding.ipynb) | Intermediate | 20-30min | `shield`, commit/rollback, cleanup patterns |
-| [Resource Leak Detection](./concurrency/resource_leak_detection.ipynb) | Advanced | 25-35min | `LeakTracker`, connection pools, file handles |
-| [Service Lifecycle](./concurrency/service_lifecycle.ipynb) | Advanced | 25-35min | Service management, graceful shutdown, startup/cleanup |
+| [Task Coordination](./concurrency/task_coordination.ipynb) | 🔵 Intermediate | 20-30 min | TaskGroups, result aggregation, error handling |
+| [Deadline Patterns](./concurrency/deadline_patterns.ipynb) | 🔵 Intermediate | 20-30 min | `fail_at`, deadline propagation, timeout coordination |
+| [Error Handling Timeouts](./concurrency/error_handling_timeouts.ipynb) | 🔵 Intermediate | 20-30 min | `move_on_after`, timeout recovery, partial failures |
+| [Transaction Shielding](./concurrency/transaction_shielding.ipynb) | 🔵 Intermediate | 20-30 min | `shield`, commit/rollback, cleanup patterns |
+| [Resource Leak Detection](./concurrency/resource_leak_detection.ipynb) | 🔴 Advanced | 25-35min | `LeakTracker`, connection pools, file handles |
+| [Service Lifecycle](./concurrency/service_lifecycle.ipynb) | 🔴 Advanced | 25-35min | Service management, graceful shutdown, startup/cleanup |
 
 ### ln Utilities (11)
 
 | Tutorial | Difficulty | Time | Topics |
 |----------|------------|------|--------|
-| [Fuzzy Validation](./ln_utilities/fuzzy_validation.ipynb) | Intermediate | 15-20min | `fuzzy_validate()`, lenient/strict modes, param objects |
-| [Advanced to_dict](./ln_utilities/advanced_to_dict.ipynb) | Intermediate | 15-20min | `to_dict()`, type conversion, custom serialization |
-| [Custom JSON Serialization](./ln_utilities/custom_json_serialization.ipynb) | Intermediate | 15-20min | JSON handlers, datetime, complex types |
-| [Nested Cleaning](./ln_utilities/nested_cleaning.ipynb) | Intermediate | 15-20min | Recursive sanitization, nested structures |
-| [Content Deduplication](./ln_utilities/content_deduplication.ipynb) | Intermediate | 15-20min | `hash_dict()`, duplicate detection, stable hashing |
-| [Multi-Stage Pipeline](./ln_utilities/multistage_pipeline.ipynb) | Intermediate | 15-20min | `lcall()`, data transformations, pipeline composition |
-| [Async Path Creation](./ln_utilities/async_path_creation.ipynb) | Intermediate | 15-20min | `alcall()`, async operations, path handling |
-| [Data Migration](./ln_utilities/data_migration.ipynb) | Intermediate | 15-20min | Schema mapping, validation, migration patterns |
-| [API Field Flattening](./ln_utilities/api_field_flattening.ipynb) | Intermediate | 20-30min | Nested data, dot notation, normalization |
-| [Fuzzy JSON Parsing](./ln_utilities/fuzzy_json_parsing.ipynb) | Intermediate | 20-30min | LLM output, markdown extraction, lenient parsing |
-| [LLM Complex Models](./ln_utilities/llm_complex_models.ipynb) | Intermediate | 15-20min | Pydantic models, LLM parsing, structured extraction |
+| [Fuzzy Validation](./ln_utilities/fuzzy_validation.ipynb) | 🔵 Intermediate | 15-20min | `fuzzy_validate()`, lenient/strict modes, param objects |
+| [Advanced to_dict](./ln_utilities/advanced_to_dict.ipynb) | 🔵 Intermediate | 15-20min | `to_dict()`, type conversion, custom serialization |
+| [Custom JSON Serialization](./ln_utilities/custom_json_serialization.ipynb) | 🔵 Intermediate | 15-20min | JSON handlers, datetime, complex types |
+| [Nested Cleaning](./ln_utilities/nested_cleaning.ipynb) | 🔵 Intermediate | 15-20min | Recursive sanitization, nested structures |
+| [Content Deduplication](./ln_utilities/content_deduplication.ipynb) | 🔵 Intermediate | 15-20min | `hash_dict()`, duplicate detection, stable hashing |
+| [Multi-Stage Pipeline](./ln_utilities/multistage_pipeline.ipynb) | 🔵 Intermediate | 15-20min | `lcall()`, data transformations, pipeline composition |
+| [Async Path Creation](./ln_utilities/async_path_creation.ipynb) | 🔵 Intermediate | 15-20min | `alcall()`, async operations, path handling |
+| [Data Migration](./ln_utilities/data_migration.ipynb) | 🔵 Intermediate | 15-20min | Schema mapping, validation, migration patterns |
+| [API Field Flattening](./ln_utilities/api_field_flattening.ipynb) | 🔵 Intermediate | 20-30 min | Nested data, dot notation, normalization |
+| [Fuzzy JSON Parsing](./ln_utilities/fuzzy_json_parsing.ipynb) | 🔵 Intermediate | 20-30 min | LLM output, markdown extraction, lenient parsing |
+| [LLM Complex Models](./ln_utilities/llm_complex_models.ipynb) | 🔵 Intermediate | 15-20min | Pydantic models, LLM parsing, structured extraction |
 
 ### String Handlers (4)
 
 | Tutorial | Difficulty | Time | Topics |
 |----------|------------|------|--------|
-| [CLI Fuzzy Matching](./string_handlers/cli_fuzzy_matching.ipynb) | Intermediate | 15-20min | Command correction, Jaro-Winkler, typo tolerance |
-| [Consensus Matching](./string_handlers/consensus_matching.ipynb) | Intermediate | 15-20min | Multi-algorithm voting, confidence scoring |
-| [Fuzzy Deduplication](./string_handlers/fuzzy_deduplication.ipynb) | Intermediate | 15-25min | Similarity clustering, union-find, dedup pipeline |
-| [Phonetic Matching](./string_handlers/phonetic_matching.ipynb) | Intermediate | 15-30min | Soundex, phonetic similarity, custom callables |
+| [CLI Fuzzy Matching](./string_handlers/cli_fuzzy_matching.ipynb) | 🔵 Intermediate | 15-20min | Command correction, Jaro-Winkler, typo tolerance |
+| [Consensus Matching](./string_handlers/consensus_matching.ipynb) | 🔵 Intermediate | 15-20min | Multi-algorithm voting, confidence scoring |
+| [Fuzzy Deduplication](./string_handlers/fuzzy_deduplication.ipynb) | 🔵 Intermediate | 15-25min | Similarity clustering, union-find, dedup pipeline |
+| [Phonetic Matching](./string_handlers/phonetic_matching.ipynb) | 🔵 Intermediate | 15-30 min | Soundex, phonetic similarity, custom callables |
 
 ### Schema Handlers (2)
 
 | Tutorial | Difficulty | Time | Topics |
 |----------|------------|------|--------|
-| [Dynamic Schema Selection](./schema_handlers/dynamic_schema_selection.ipynb) | Intermediate | 15-25min | Schema dict, dynamic routing, positional/keyword args |
-| [MCP Tool Pipeline](./schema_handlers/mcp_tool_pipeline.ipynb) | Intermediate | 20-30min | Function parsing, MCP integration, nested arguments |
+| [Dynamic Schema Selection](./schema_handlers/dynamic_schema_selection.ipynb) | 🔵 Intermediate | 15-25min | Schema dict, dynamic routing, positional/keyword args |
+| [MCP Tool Pipeline](./schema_handlers/mcp_tool_pipeline.ipynb) | 🔵 Intermediate | 20-30 min | Function parsing, MCP integration, nested arguments |
 
 ## Learning Paths
 
