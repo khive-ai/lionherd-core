@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Progression exceptions**: Migrate `IndexError` → `NotFoundError` for semantic consistency
+  - `pop()` without default raises `NotFoundError` instead of `IndexError`
+  - `popleft()` on empty raises `NotFoundError` instead of `IndexError`
+  - `_validate_index()` raises `NotFoundError` for out-of-bounds/empty
+  - Rationale: "Index not found" is semantically same as "item not found" (consistent with Pile/Graph/Flow)
+- **Progression docstrings**: Trimmed to API contract only (params, returns, raises)
+  - Moved design rationale and "why" explanations to test docstrings
+  - Pattern: Source code = what/how, tests = why/design intent
 - **BREAKING**: Protocol separation - `Adaptable`/`AsyncAdaptable` split from registry mutation (#147). Classes now explicitly compose capabilities:
   - `Adaptable` / `AsyncAdaptable` - read-only adaptation (adapt_to/from)
   - `AdapterRegisterable` / `AsyncAdapterRegisterable` - mutable registry (register_adapter)

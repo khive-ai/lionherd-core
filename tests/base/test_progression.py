@@ -52,7 +52,7 @@ Test Coverage:
     - Query operations: contains, len, iter, getitem, setitem, index, reversed
     - Workflow operations: move, swap, reverse, index validation
     - Set-like operations: include, exclude (idempotent)
-    - Error handling: IndexError, ValueError, ExceptionGroup for batch operations
+    - Error handling: NotFoundError (semantic exceptions), ValueError, ExceptionGroup for batch operations
     - Async: concurrent append/include, task groups
     - Serialization: to_dict/from_dict roundtrips, ln integration
     - Edge cases: empty, single item, duplicates, negative indices
@@ -63,6 +63,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from lionherd_core.base import Element, Progression
+from lionherd_core.errors import NotFoundError
 from lionherd_core.libs.concurrency import create_task_group, gather
 from lionherd_core.ln import to_dict, to_list
 
@@ -397,7 +398,11 @@ class TestProgressionCoreOperations:
         assert prog.order == [uid1, uid3]
 
     def test_pop_with_default(self):
-        """pop with default should return default on IndexError."""
+        """pop with default should return default on NotFoundError.
+
+        Design Intent: Allow graceful fallback when index doesn't exist,
+        consistent with dict.get(key, default) pattern.
+        """
         uid1 = uuid4()
         prog = Progression(order=[uid1])
         default_value = uuid4()
@@ -407,9 +412,14 @@ class TestProgressionCoreOperations:
         assert prog.order == [uid1]  # Unchanged
 
     def test_pop_without_default_raises(self):
-        """pop without default should raise IndexError on invalid index."""
+        """pop without default should raise NotFoundError on invalid index.
+
+        Design Intent: Semantic exception (NotFoundError) instead of IndexError
+        for consistency with Pile/Graph/Flow patterns. Index "not found" is
+        conceptually same as item "not found".
+        """
         prog = Progression(order=[uuid4()])
-        with pytest.raises(IndexError):
+        with pytest.raises(NotFoundError, match="not found"):
             prog.pop(10)
 
     def test_popleft_success(self):
@@ -421,9 +431,13 @@ class TestProgressionCoreOperations:
         assert prog.order == [uid2]
 
     def test_popleft_empty(self):
-        """popleft on empty progression should raise IndexError."""
+        """popleft on empty progression should raise NotFoundError.
+
+        Design Intent: Semantic exception for empty collection operations.
+        "Cannot pop from empty" is a "not found" semantic.
+        """
         prog = Progression()
-        with pytest.raises(IndexError, match="empty"):
+        with pytest.raises(NotFoundError, match="empty"):
             prog.popleft()
 
     def test_clear(self):
@@ -650,16 +664,19 @@ class TestProgressionWorkflowOperations:
     """
 
     def test_validate_index_empty(self):
-        """_validate_index should raise IndexError for empty progression."""
+        """_validate_index should raise NotFoundError for empty progression.
+
+        Design Intent: Empty progression has no valid indices - "not found" semantic.
+        """
         prog = Progression()
-        with pytest.raises(IndexError, match="empty"):
+        with pytest.raises(NotFoundError, match="empty"):
             prog._validate_index(0)
 
     def test_validate_index_allow_end(self):
         """_validate_index with allow_end=True should accept len as index."""
         prog = Progression(order=[uuid4(), uuid4()])
         # Without allow_end, len is out of bounds
-        with pytest.raises(IndexError):
+        with pytest.raises(NotFoundError):
             prog._validate_index(2, allow_end=False)
         # With allow_end, len is valid (for insertion)
         result = prog._validate_index(2, allow_end=True)
@@ -672,9 +689,13 @@ class TestProgressionWorkflowOperations:
         assert prog._validate_index(-2) == 1
 
     def test_validate_index_out_of_bounds(self):
-        """_validate_index should raise IndexError for invalid indices."""
+        """_validate_index should raise NotFoundError for invalid indices.
+
+        Design Intent: Out-of-range index is semantically "not found" - the
+        requested position doesn't exist in the progression.
+        """
         prog = Progression(order=[uuid4(), uuid4()])
-        with pytest.raises(IndexError, match="out of range"):
+        with pytest.raises(NotFoundError, match="out of range"):
             prog._validate_index(5)
 
     def test_move_forward(self):
@@ -827,12 +848,13 @@ class TestProgressionErrorHandling:
     """Error handling: ExceptionGroup for batch operations.
 
     Error Propagation Strategy:
-        Individual operations raise specific exceptions (IndexError, ValueError).
+        Individual operations raise specific exceptions (NotFoundError, ValueError).
         Batch operations collect errors and group them via Python 3.11+ ExceptionGroup.
 
     Exception Types:
-        IndexError: Out-of-bounds access, empty progression operations
-            Raised by: pop, popleft, __getitem__, _validate_index
+        NotFoundError: Out-of-bounds access, empty progression operations, index not found
+            Raised by: pop, popleft, _validate_index (semantic "not found" vs positional IndexError)
+        IndexError: Still raised by __getitem__ (Python list semantic preserved)
             Message: Descriptive (e.g., "empty progression", "index out of range")
 
         ValueError: Item not found in progression
@@ -871,7 +893,11 @@ class TestProgressionErrorHandling:
     """
 
     def test_batch_operations_with_errors(self):
-        """Batch operations should collect errors in ExceptionGroup."""
+        """Batch operations should collect errors in ExceptionGroup.
+
+        Design Intent: Demonstrate that NotFoundError integrates cleanly with
+        ExceptionGroup for batch error handling, maintaining semantic meaning.
+        """
         prog = Progression(order=[uuid4(), uuid4()])
         errors = []
 
@@ -885,7 +911,7 @@ class TestProgressionErrorHandling:
         for op, _ in operations:
             try:
                 op()
-            except (IndexError, ValueError) as e:
+            except (NotFoundError, ValueError) as e:
                 errors.append(e)
 
         # Verify we collected multiple errors
@@ -897,19 +923,24 @@ class TestProgressionErrorHandling:
             assert len(exc_group.exceptions) >= 2
 
     def test_validation_errors_grouped(self):
-        """Multiple validation errors should be groupable."""
+        """Multiple validation errors should be groupable.
+
+        Design Intent: Show how NotFoundError from multiple operations can be
+        collected and grouped for batch error reporting. Semantic exceptions
+        make error groups more meaningful than generic IndexError.
+        """
         prog = Progression()
         errors = []
 
         # Empty progression - multiple operations will fail
         try:
             prog.pop()
-        except IndexError as e:
+        except NotFoundError as e:
             errors.append(e)
 
         try:
             prog.popleft()
-        except IndexError as e:
+        except NotFoundError as e:
             errors.append(e)
 
         try:
