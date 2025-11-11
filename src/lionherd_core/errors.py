@@ -11,7 +11,9 @@ __all__ = (
     "ConfigurationError",
     "ConnectionError",
     "ExecutionError",
+    "ExistsError",
     "LionherdError",
+    "NotFoundError",
     "TimeoutError",
     "ValidationError",
 )
@@ -102,3 +104,17 @@ class TimeoutError(LionherdError):
 
     default_message = "Operation timed out"
     default_retryable = True  # Timeouts might succeed with more time
+
+
+class NotFoundError(LionherdError):
+    """Item not found. Not retryable."""
+
+    default_message = "Item not found"
+    default_retryable = False  # Missing items won't appear on retry
+
+
+class ExistsError(LionherdError):
+    """Item already exists. Not retryable."""
+
+    default_message = "Item already exists"
+    default_retryable = False  # Duplicate items won't resolve on retry

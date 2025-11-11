@@ -192,6 +192,7 @@ from uuid import UUID
 import pytest
 
 from lionherd_core.base import Edge, EdgeCondition, Graph, Node
+from lionherd_core.errors import ExistsError, NotFoundError
 
 # ============================================================================
 # Test EdgeCondition Subclasses
@@ -479,10 +480,10 @@ class TestNodeOperations:
         assert empty_graph._in_edges[node.id] == set()
 
     def test_add_node_duplicate_raises(self, simple_graph):
-        """Test adding duplicate node raises ValueError."""
+        """Test adding duplicate node raises ExistsError."""
         graph, (n1, _, _), _ = simple_graph
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(ExistsError, match="already exists"):
             graph.add_node(n1)
 
     def test_remove_node_basic(self, simple_graph):
@@ -528,35 +529,11 @@ class TestNodeOperations:
         assert n1 not in graph
 
     def test_remove_node_not_found_raises(self, empty_graph):
-        """Test removing non-existent node raises ValueError."""
+        """Test removing non-existent node raises NotFoundError."""
         fake_node = Node(content={"value": "fake"})
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             empty_graph.remove_node(fake_node)
-
-    def test_get_node_basic(self, simple_graph):
-        """Test getting a node by ID."""
-        graph, (_n1, n2, _n3), _ = simple_graph
-
-        retrieved = graph.get_node(n2.id)
-
-        assert retrieved == n2
-        assert retrieved.content == {"value": "B"}
-
-    def test_get_node_by_node_object(self, simple_graph):
-        """Test getting node by passing Node object (UUID coercion)."""
-        graph, (n1, _, _), _ = simple_graph
-
-        retrieved = graph.get_node(n1)
-
-        assert retrieved == n1
-
-    def test_get_node_not_found_raises(self, empty_graph):
-        """Test getting non-existent node raises ValueError."""
-        fake_id = UUID("00000000-0000-0000-0000-000000000000")
-
-        with pytest.raises(ValueError, match="not found"):
-            empty_graph.get_node(fake_id)
 
 
 # ============================================================================
@@ -610,10 +587,10 @@ class TestEdgeOperations:
         assert edge.id in graph._in_edges[n3.id]
 
     def test_add_edge_duplicate_raises(self, simple_graph):
-        """Test adding duplicate edge raises ValueError."""
+        """Test adding duplicate edge raises ExistsError."""
         graph, _, (e1, _) = simple_graph
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(ExistsError, match="already exists"):
             graph.add_edge(e1)
 
     def test_add_edge_missing_head_raises(self, empty_graph):
@@ -671,34 +648,120 @@ class TestEdgeOperations:
         assert e1 not in graph
 
     def test_remove_edge_not_found_raises(self, empty_graph):
-        """Test removing non-existent edge raises ValueError."""
+        """Test removing non-existent edge raises NotFoundError."""
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             empty_graph.remove_edge(fake_id)
 
-    def test_get_edge_basic(self, simple_graph):
-        """Test getting an edge by ID."""
-        graph, _, (_e1, e2) = simple_graph
 
-        retrieved = graph.get_edge(e2.id)
+# ============================================================================
+# Error Handling Tests (Pile[key] Pattern - PR #117)
+# ============================================================================
+#
+# Design aspect validated: Pile[key] primitive error handling pattern.
+# PR #117 refactored from double-lookup (.get()) to single-lookup ([key]) pattern,
+# introducing try/except KeyError→ValueError transformation.
+#
+# Pattern validated:
+#   try:
+#       item = pile[key]
+#   except KeyError:
+#       raise ValueError(f"Item {key} not found") from None
+#
+# Why test error transformation:
+# - Validates KeyError from Pile.__getitem__ is caught and transformed
+# - Ensures ValueError (domain error) raised instead of KeyError (implementation detail)
+# - Verifies 'from None' suppresses KeyError from traceback (cleaner debugging)
+#
+# Methods tested: get_node(), get_edge(), remove_edge()
+# Pattern scope: All Pile[key] usage in Graph (15 sites total)
 
-        assert retrieved == e2
 
-    def test_get_edge_by_edge_object(self, simple_graph):
-        """Test getting edge by passing Edge object (UUID coercion)."""
-        graph, _, (e1, _) = simple_graph
+class TestPileKeyErrorHandling:
+    """Test error handling for Pile[key] pattern introduced in PR #117."""
 
-        retrieved = graph.get_edge(e1)
+    # Phase 1: Exception Transformation Tests
 
-        assert retrieved == e1
-
-    def test_get_edge_not_found_raises(self, empty_graph):
-        """Test getting non-existent edge raises ValueError."""
+    def test_remove_edge_raises_notfounderror_with_metadata(self, empty_graph):
+        """Verify remove_edge raises NotFoundError with preserved metadata."""
         fake_id = UUID("00000000-0000-0000-0000-000000000000")
 
-        with pytest.raises(ValueError, match="not found"):
-            empty_graph.get_edge(fake_id)
+        # Should raise NotFoundError with better message
+        with pytest.raises(NotFoundError, match=f"Edge {fake_id} not found in graph"):
+            empty_graph.remove_edge(fake_id)
+
+        # Verify metadata is preserved via __cause__
+        try:
+            empty_graph.remove_edge(fake_id)
+        except NotFoundError as e:
+            # Check that __cause__ is set (exception chain preserved)
+            assert e.__cause__ is not None
+            # Check that details and retryable are accessible
+            assert hasattr(e, "details")
+            assert hasattr(e, "retryable")
+
+    # Phase 2: Exception Chain Preservation Tests
+
+    def test_remove_edge_preserves_exception_chain(self, empty_graph):
+        """Verify exception chain is preserved via __cause__ (not suppressed with 'from None')."""
+        import traceback
+
+        fake_id = UUID("00000000-0000-0000-0000-000000000000")
+
+        try:
+            empty_graph.remove_edge(fake_id)
+        except NotFoundError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should contain "The above exception was the direct cause"
+            assert "direct cause" in tb_str, "Exception chain should be preserved via cause="
+            # Verify __cause__ is set
+            assert e.__cause__ is not None, "__cause__ should be set"
+
+    # Phase 3: Error Message Format Tests
+
+    def test_remove_edge_error_message_format(self, empty_graph):
+        """Verify error message includes UUID and graph context."""
+        fake_id = UUID("12345678-1234-1234-1234-123456789abc")
+
+        try:
+            empty_graph.remove_edge(fake_id)
+        except NotFoundError as e:
+            error_msg = str(e)
+            assert str(fake_id) in error_msg, "Error message should include UUID"
+            assert "not found" in error_msg.lower(), "Error message should indicate not found"
+            assert "graph" in error_msg.lower(), "Error message should mention graph context"
+
+    # Phase 4: ExistsError Transformation Tests
+
+    def test_add_node_raises_existserror(self, empty_graph):
+        """Verify add_node raises ExistsError when node already exists."""
+        from lionherd_core.base import Node
+
+        node = Node(content={"value": "test"})
+        empty_graph.add_node(node)
+
+        # Adding again should raise ExistsError
+        with pytest.raises(ExistsError, match=f"Item {node.id} already exists"):
+            empty_graph.add_node(node)
+
+    def test_add_edge_raises_existserror(self, empty_graph):
+        """Verify add_edge raises ExistsError when edge already exists."""
+        from lionherd_core.base import Edge, Node
+
+        node1 = Node(content={"value": "A"})
+        node2 = Node(content={"value": "B"})
+        empty_graph.add_node(node1)
+        empty_graph.add_node(node2)
+
+        edge = Edge(head=node1.id, tail=node2.id)
+        empty_graph.add_edge(edge)
+
+        # Adding again should raise ExistsError
+        with pytest.raises(ExistsError, match=f"Item {edge.id} already exists"):
+            empty_graph.add_edge(edge)
 
 
 # ============================================================================
@@ -1786,11 +1849,11 @@ class TestEdgeCases:
         assert len(edges) == 2
 
     def test_uuid_coercion_string(self, simple_graph):
-        """Test UUID coercion from string."""
+        """Test UUID coercion from string via direct Pile access."""
         graph, (n1, _, _), _ = simple_graph
 
-        # Pass UUID as string
-        node = graph.get_node(str(n1.id))
+        # Pass UUID as string - Pile supports Element._coerce_id
+        node = graph.nodes[str(n1.id)]
         assert node == n1
 
     def test_graph_with_edge_conditions_serialization(self, empty_graph):

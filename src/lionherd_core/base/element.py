@@ -16,6 +16,7 @@ from ..protocols import (
     Serializable,
     implements,
 )
+from ._utils import coerce_created_at, to_uuid
 
 __all__ = ("DEFAULT_ELEMENT_SERIALIZER", "LN_ELEMENT_FIELDS", "Element")
 
@@ -47,16 +48,12 @@ class Element(BaseModel):
     @classmethod
     def _coerce_id(cls, v) -> UUID:
         """Coerce to UUID4."""
-        from ._utils import to_uuid
-
         return to_uuid(v)
 
     @field_validator("created_at", mode="before")
     @classmethod
     def _coerce_created_at(cls, v) -> dt.datetime:
         """Coerce to UTC datetime."""
-        from ._utils import coerce_created_at
-
         return coerce_created_at(v)
 
     @field_validator("metadata", mode="before")
