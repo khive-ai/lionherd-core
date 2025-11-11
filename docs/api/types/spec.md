@@ -30,10 +30,7 @@
 - Static type annotations without runtime metadata (use typing module)
 - Framework-specific features requiring deep integration (use framework's field system)
 
-**Interactive Learning:**
-
-- [Part 1 (Basics)](../../notebooks/references/types_spec.ipynb): CommonMeta, construction, metadata, defaults, validators
-- [Part 2 (Advanced)](../../notebooks/references/types_spec_advanced.ipynb): Transformations, type annotations, Operable integration, patterns
+<!-- TODO: Add links to interactive notebooks when available (issue #115) -->
 
 ## Class Hierarchy
 

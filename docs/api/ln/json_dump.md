@@ -904,7 +904,7 @@ json_output2 = json_dumpb(data2, sort_keys=True, deterministic_sets=True)
 assert json_output == json_output2  # ✓ Deterministic
 ```
 
-**Note**: For caching strategies, see [Tutorial: Content-Based Caching](../../tutorials/content_caching.md)
+<!-- TODO: Add link to content-based caching tutorial when available (issue #115) -->
 
 ### Custom Type Handlers
 
@@ -925,7 +925,7 @@ result = json_dumpb(data, default=custom_default)
 # datetime objects converted via custom handler
 ```
 
-**Note**: For domain-specific types, see [Tutorial: Advanced Type Serialization](../../tutorials/advanced_types.md)
+<!-- TODO: Add link to advanced type serialization tutorial when available (issue #115) -->
 
 ## Design Rationale
 
@@ -1110,7 +1110,7 @@ logger = setup_json_logging("myapp")
 logger.info("User action")  # Safely logs even with non-serializable objects
 ```
 
-**Note**: For full logging formatter customization, see [Tutorial: JSON Logging Integration](../../tutorials/json_logging.md) (custom exception formatting, context propagation, etc.)
+<!-- TODO: Add link to JSON logging integration tutorial when available (issue #115) -->
 
 ### Example 3: Large Dataset Streaming
 
@@ -1134,7 +1134,7 @@ def export_results(output_path: Path):
 export_results(Path("export.ndjson"))
 ```
 
-**Note**: For advanced patterns (batching, parallel processing, error handling), see [Tutorial: Large-Scale Data Export](../../tutorials/large_scale_export.md)
+<!-- TODO: Add link to large-scale data export tutorial when available (issue #115) -->
 
 ### Example 4: Deterministic Hashing
 
@@ -1160,7 +1160,7 @@ hash2 = hash_dict(params2)
 assert hash1 == hash2  # ✓ Content-based, order-independent
 ```
 
-**Note**: For caching patterns, see [Tutorial: Content-Based Caching](../../tutorials/content_caching.md)
+<!-- TODO: Add link to content-based caching tutorial when available (issue #115) -->
 
 ### Example 5: Custom Type Integration
 
@@ -1191,4 +1191,4 @@ json_output = json_dumpb(event, default=custom_default)
 # Handles custom types via additional serializers
 ```
 
-**Note**: For complex type hierarchies, see [Tutorial: Advanced Type Serialization](../../tutorials/advanced_types.md)
+<!-- TODO: Add link to advanced type serialization tutorial when available (issue #115) -->

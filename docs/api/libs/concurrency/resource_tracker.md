@@ -689,9 +689,7 @@ def hot_path_function():
   - [Concurrency Primitives](primitives.md): Async primitives (Semaphore, Lock, Queue)
   - [Concurrency Patterns](patterns.md): High-level concurrency patterns
   - [Cancel Scopes](cancel.md): Structured cancellation for async tasks
-- **Related Guides**:
-  - [Concurrency Overview](../../../../user_guide/concurrency.md): Concurrency system guide
-  - [Debugging Guide](../../../../user_guide/debugging.md): Debugging techniques
+<!-- TODO: Add links to user guides when available (issue #115) -->
 
 ## Examples
 

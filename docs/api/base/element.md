@@ -868,10 +868,7 @@ restored = [Element.from_dict(data) for data in serialized]
   - [Node](node.md): Element subclass with relationship edges
   - [Event](event.md): Element subclass with async execution lifecycle
   - [HashableModel](../types/model.md): Content-based hashing alternative
-- **Related Guides**:
-  - [Protocols Guide](../../user_guide/protocols.md): Protocol system overview
-  - [Serialization Guide](../../user_guide/serialization.md): Deep dive on serialization modes
-  - [Polymorphism Guide](../../user_guide/polymorphism.md): Polymorphic deserialization patterns
+<!-- TODO: Add links to user guides when available (issue #115) -->
 
 ## Examples
 

@@ -29,7 +29,7 @@
 - Entities that need **UUID tracking** and creation timestamps
 - Multi-class systems requiring **polymorphic deserialization** with `lion_class`
 
-See [Element](../base/element.md) for identity-based hashing alternative.
+See Element class in `lionherd_core.base.element` for identity-based hashing alternative.
 
 ## HashableModel vs Element Comparison
 
@@ -661,7 +661,7 @@ agent2 = Agent(name="Agent-1", status="active")
 print(agent1 == agent2)  # True (but they're different agents!)
 ```
 
-**Solution**: Use [Element](../base/element.md) for workflow entities with identity:
+**Solution**: Use Element for workflow entities with identity:
 
 ```python
 from lionherd_core import Element
@@ -755,13 +755,10 @@ For database persistence, use [Element](../base/element.md) or subclass it.
 ## See Also
 
 - **Related Classes**:
-  - [Element](../base/element.md): Identity-based hashing alternative for workflow entities
-  - [Node](../base/node.md): Element subclass with relationship edges
-  - [Event](../base/event.md): Element subclass with async execution lifecycle
-- **Related Guides**:
-  - [Protocols Guide](../../user_guide/protocols.md): Protocol system overview
-  - [Serialization Guide](../../user_guide/serialization.md): Deep dive on serialization modes
-  - [Hashing Guide](../../user_guide/hashing.md): Content-based vs identity-based hashing
+  - Element: Identity-based hashing alternative for workflow entities
+  - Node: Element subclass with relationship edges
+  - Event: Element subclass with async execution lifecycle
+<!-- TODO: Add links to user guides when available (issue #115) -->
 
 ## Examples
 

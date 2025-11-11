@@ -928,9 +928,7 @@ for i in range(1_000_000):
 - **Related Primitives**:
   - `Condition`: Underlying locking primitive (from `_primitives.py`)
   - `heapq`: Min-heap implementation (Python stdlib)
-- **Related Guides**:
-  - [Concurrency Guide](../../user_guide/concurrency.md): Concurrency patterns in lionherd
-  - [Task Scheduling](../../user_guide/task_scheduling.md): Using priority queues for scheduling
+<!-- TODO: Add links to user guides when available (issue #115) -->
 
 ## Examples
 
