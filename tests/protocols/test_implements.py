@@ -123,9 +123,7 @@ class TestImplementsDecorator:
         complete = CompleteClass()
 
         # isinstance() checks structure (method presence), not @implements()
-        assert not isinstance(
-            incomplete, Observable
-        )  # Missing .id despite @implements
+        assert not isinstance(incomplete, Observable)  # Missing .id despite @implements
         assert isinstance(complete, Observable)  # Has .id despite no @implements
 
     def test_implements_with_hashable_protocol(self):
