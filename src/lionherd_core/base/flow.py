@@ -73,11 +73,10 @@ class Flow(Element, Generic[E, P]):
         if item_type is not None:
             item_type = extract_types(item_type)
 
-        # If type validation is requested, create new Pile with validation and replace the default one
+        # If type validation, create new Pile with validation and replace the default one
         if item_type is not None or strict_type:
             self.items = Pile(items=items, item_type=item_type, strict_type=strict_type)
         else:
-            # No type validation - add items to default Pile
             if items and isinstance(items, list):
                 for item in items:
                     self.items.add(item)
@@ -224,10 +223,7 @@ class Flow(Element, Generic[E, P]):
         # Add to specified progressions
         if progressions is not None:
             # Normalize to list - treat string/UUID as single value, convert other iterables
-            if isinstance(progressions, (str, UUID)):
-                ids = [progressions]
-            else:
-                ids = list(progressions)
+            ids = [progressions] if isinstance(progressions, (str, UUID)) else list(progressions)
 
             for prog_id in ids:
                 progression = self.get_progression(prog_id)

@@ -517,7 +517,9 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
                         )
 
         # Filter items by type(s) - iterate over self to reuse synchronized iterator
-        filtered_items = [item for item in self if any(isinstance(item, t) for t in types_to_filter)]
+        filtered_items = [
+            item for item in self if any(isinstance(item, t) for t in types_to_filter)
+        ]
 
         # Check if any items found
         if not filtered_items:

@@ -941,8 +941,6 @@ def test_get_suppresses_keyerror():
         assert "During handling" not in tb_str, "Exception context should be suppressed"
 
 
-
-
 # =============================================================================
 # Thread Safety Tests
 # =============================================================================

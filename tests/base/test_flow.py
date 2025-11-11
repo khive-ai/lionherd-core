@@ -1172,6 +1172,7 @@ async def test_flow_concurrent_operations():
                 flow.add_item(item)
                 # Do other work with exclusive access
 
+
         # All workers compete for lock
         await gather(*[worker(flow, item) for item in items])
         ```
@@ -1224,6 +1225,7 @@ async def test_flow_async_operations_with_progressions():
             async with flow.items:
                 stage = determine_stage(item)
                 flow.add_item(item, progression_id=stage)
+
 
         # Multiple workers coordinate via lock
         await gather(*[worker(flow, item) for item in items])
