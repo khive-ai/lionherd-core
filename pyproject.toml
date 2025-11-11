@@ -1,6 +1,6 @@
 [project]
 name = "lionherd-core"
-version = "1.0.0-alpha3"
+version = "1.0.0-alpha4"
 description = "The kernel layer for production AI agents - protocol-based, type-safe, zero framework lock-in"
 readme = "README.md"
 license = { text = "Apache-2.0" }
