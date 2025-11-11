@@ -276,19 +276,19 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         Args:
             item_id: Item ID or Element instance
-            default: Default value if not found (default: raise ValueError)
+            default: Default value if not found (default: raise NotFoundError)
 
         Returns:
             Removed item or default
 
         Raises:
-            ValueError: If item not found and no default provided
+            NotFoundError: If item not found and no default provided
         """
         uid = to_uuid(item_id)
 
         if uid not in self._items:
             if default is ...:
-                raise ValueError(f"Item {uid} not found in pile")
+                raise NotFoundError(f"Item {uid} not found in pile")
             return default
 
         item = self._items.pop(uid)

@@ -362,12 +362,12 @@ def test_pop_alias():
 
 
 def test_pop_without_default_not_found():
-    """Test pop() raises ValueError when item not found and no default."""
+    """Test pop() raises NotFoundError when item not found and no default."""
     from uuid import uuid4
 
     pile = Pile()
 
-    with pytest.raises(ValueError, match="not found in pile"):
+    with pytest.raises(NotFoundError, match="not found in pile"):
         pile.pop(uuid4())
 
 
