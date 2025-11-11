@@ -55,7 +55,7 @@ jobs:
           uv run pytest --nbmake notebooks/ \
             --nbmake-timeout=300 \
             --tb=short \
-            -n 4 \
+            -n 3 \
             -v
 
       - name: Upload execution artifacts

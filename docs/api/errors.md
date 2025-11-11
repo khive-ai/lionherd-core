@@ -238,7 +238,7 @@ if not isinstance(item, Node):
     )
 
 # Schema validation
-if not all(k in required_fields for k in data.keys()):
+if not all(field in data.keys() for field in required_fields):
     raise ValidationError(
         "Missing required fields",
         details={"missing": set(required_fields) - set(data.keys())}
@@ -375,27 +375,26 @@ Operation timeout. **Retryable** by default.
 from lionherd_core.errors import TimeoutError
 import anyio
 
-# Async timeout
+# Async timeout - anyio raises cancellation exceptions, not TimeoutError
 try:
     async with anyio.fail_after(30):
         result = await long_operation()
-except TimeoutError as e:
+except anyio.get_cancelled_exc_class() as e:
     raise TimeoutError(
         "Operation timed out after 30s",
-        details={"timeout": 30, "operation": "long_operation"},
-        cause=e
-    )
+        details={"timeout": 30, "operation": "long_operation"}
+    ) from e
 
 # Lock timeout
 try:
     async with anyio.fail_after(5):
         async with lock:
             await critical_section()
-except TimeoutError:
+except anyio.get_cancelled_exc_class() as e:
     raise TimeoutError(
         "Failed to acquire lock",
         details={"timeout": 5, "lock": "critical_section"}
-    )
+    ) from e
 ```
 
 ---
@@ -452,6 +451,8 @@ except LionherdError as e:
 **Override retryable flag:**
 
 ```python
+from lionherd_core.errors import ExecutionError, NotFoundError
+
 # Force non-retryable
 raise ExecutionError(
     "Critical failure - do not retry",
@@ -510,6 +511,7 @@ raise NotFoundError(
 **Logging with details:**
 
 ```python
+from lionherd_core.errors import NotFoundError
 import logging
 
 try:
@@ -531,6 +533,8 @@ The `__cause__` attribute preserves the original exception that triggered this e
 **Pattern:**
 
 ```python
+from lionherd_core.errors import NotFoundError
+
 try:
     # Low-level operation
     data = dict_lookup[key]
@@ -585,6 +589,8 @@ async def process_user(user_id):
 **Inspecting exception chain:**
 
 ```python
+from lionherd_core.errors import ExecutionError
+
 try:
     await process_user(123)
 except ExecutionError as e:
@@ -902,6 +908,8 @@ except KeyError as e:
 **Migration impact:**
 
 ```python
+from lionherd_core.errors import NotFoundError
+
 # Old code will break
 try:
     item = pile[uuid]
