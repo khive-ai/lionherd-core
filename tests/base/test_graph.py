@@ -192,6 +192,7 @@ from uuid import UUID
 import pytest
 
 from lionherd_core.base import Edge, EdgeCondition, Graph, Node
+from lionherd_core.errors import ExistsError
 
 # ============================================================================
 # Test EdgeCondition Subclasses
@@ -864,6 +865,92 @@ class TestPileKeyErrorHandling:
             assert str(fake_id) in error_msg, "Error message should include UUID"
             assert "not found" in error_msg.lower(), "Error message should indicate not found"
             assert "graph" in error_msg.lower(), "Error message should mention graph context"
+
+    # Phase 4: ExistsError Transformation Tests
+
+    def test_add_node_transforms_existserror_to_valueerror(self, empty_graph):
+        """Verify add_node transforms Pile ExistsError to Graph ValueError."""
+        from lionherd_core.base import Node
+
+        node = Node(content={"value": "test"})
+        empty_graph.add_node(node)
+
+        # Adding again should raise ValueError (not ExistsError)
+        with pytest.raises(ValueError, match=f"Node {node.id} already exists"):
+            empty_graph.add_node(node)
+
+        # Verify it's ValueError, not ExistsError
+        try:
+            empty_graph.add_node(node)
+        except ExistsError:
+            pytest.fail("Should raise ValueError, not ExistsError")
+        except ValueError:
+            pass  # Expected
+
+    def test_add_edge_transforms_existserror_to_valueerror(self, empty_graph):
+        """Verify add_edge transforms Pile ExistsError to Graph ValueError."""
+        from lionherd_core.base import Node, Edge
+
+        node1 = Node(content={"value": "A"})
+        node2 = Node(content={"value": "B"})
+        empty_graph.add_node(node1)
+        empty_graph.add_node(node2)
+
+        edge = Edge(head=node1.id, tail=node2.id)
+        empty_graph.add_edge(edge)
+
+        # Adding again should raise ValueError (not ExistsError)
+        with pytest.raises(ValueError, match=f"Edge {edge.id} already exists"):
+            empty_graph.add_edge(edge)
+
+        # Verify it's ValueError, not ExistsError
+        try:
+            empty_graph.add_edge(edge)
+        except ExistsError:
+            pytest.fail("Should raise ValueError, not ExistsError")
+        except ValueError:
+            pass  # Expected
+
+    def test_add_node_suppresses_existserror(self, empty_graph):
+        """Verify 'from None' suppresses intermediate ExistsError in traceback."""
+        import traceback
+        from lionherd_core.base import Node
+
+        node = Node(content={"value": "test"})
+        empty_graph.add_node(node)
+
+        try:
+            empty_graph.add_node(node)
+        except ValueError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should NOT contain ExistsError or "During handling" context
+            assert "ExistsError" not in tb_str, "ExistsError should be suppressed by 'from None'"
+            assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+    def test_add_edge_suppresses_existserror(self, empty_graph):
+        """Verify 'from None' suppresses intermediate ExistsError in traceback."""
+        import traceback
+        from lionherd_core.base import Node, Edge
+
+        node1 = Node(content={"value": "A"})
+        node2 = Node(content={"value": "B"})
+        empty_graph.add_node(node1)
+        empty_graph.add_node(node2)
+
+        edge = Edge(head=node1.id, tail=node2.id)
+        empty_graph.add_edge(edge)
+
+        try:
+            empty_graph.add_edge(edge)
+        except ValueError as e:
+            tb = traceback.format_exception(type(e), e, e.__traceback__)
+            tb_str = "".join(tb)
+
+            # Should NOT contain ExistsError or "During handling" context
+            assert "ExistsError" not in tb_str, "ExistsError should be suppressed by 'from None'"
+            assert "During handling" not in tb_str, "Exception context should be suppressed"
 
 
 # ============================================================================

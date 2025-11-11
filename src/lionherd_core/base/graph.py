@@ -15,7 +15,7 @@ from pydapter import (
 )
 from typing_extensions import override
 
-from ..errors import NotFoundError
+from ..errors import ExistsError, NotFoundError
 from ..protocols import (
     Adaptable,
     AsyncAdaptable,
@@ -172,10 +172,11 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         Thread-safe: Uses @synchronized to ensure atomic operation across
         nodes.add() and adjacency dict initialization.
         """
-        if node.id in self.nodes:
-            raise ValueError(f"Node {node.id} already exists in graph")
+        try:
+            self.nodes.add(node)
+        except ExistsError:
+            raise ValueError(f"Node {node.id} already exists in graph") from None
 
-        self.nodes.add(node)
         self._out_edges[node.id] = set()
         self._in_edges[node.id] = set()
 
@@ -190,8 +191,12 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         from ._utils import to_uuid
 
         nid = to_uuid(node_id)
-        if nid not in self.nodes:
-            raise ValueError(f"Node {nid} not found in graph")
+
+        # Verify node exists before removing edges
+        try:
+            node = self.nodes[nid]
+        except NotFoundError:
+            raise ValueError(f"Node {nid} not found in graph") from None
 
         # Remove all connected edges
         for edge_id in list(self._in_edges[nid]):
@@ -204,7 +209,10 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         del self._out_edges[nid]
 
         # Remove and return node
-        return self.nodes.remove(nid)
+        try:
+            return self.nodes.remove(nid)
+        except NotFoundError:
+            raise ValueError(f"Node {nid} not found in graph") from None
 
     def get_node(self, node_id: UUID | Node) -> Node:
         """Get node by ID. Raises ValueError if not found."""
@@ -226,14 +234,16 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         edges.add() and adjacency list updates. Critical for Rust port and
         Python 3.13+ nogil where GIL won't protect dict operations.
         """
-        if edge.id in self.edges:
-            raise ValueError(f"Edge {edge.id} already exists in graph")
         if edge.head not in self.nodes:
             raise ValueError(f"Head node {edge.head} not in graph")
         if edge.tail not in self.nodes:
             raise ValueError(f"Tail node {edge.tail} not in graph")
 
-        self.edges.add(edge)
+        try:
+            self.edges.add(edge)
+        except ExistsError:
+            raise ValueError(f"Edge {edge.id} already exists in graph") from None
+
         self._out_edges[edge.head].add(edge.id)
         self._in_edges[edge.tail].add(edge.id)
 

@@ -1005,6 +1005,125 @@ def test_flow_add_item_invalid_progression_raises():
         f.add_item(item, progression_ids="nonexistent")
 
 
+# ==================== Exception Transformation Tests ====================
+
+
+def test_flow_add_item_transforms_existserror():
+    """Test add_item transforms Pile ExistsError to Flow ValueError."""
+    from lionherd_core.errors import ExistsError
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    item = FlowTestItem(value="test")
+    f.add_item(item)
+
+    # Adding again should raise ValueError (not ExistsError)
+    with pytest.raises(ValueError, match=f"Item {item.id} already exists in flow"):
+        f.add_item(item)
+
+    # Verify it's ValueError, not ExistsError
+    try:
+        f.add_item(item)
+    except ExistsError:
+        pytest.fail("Should raise ValueError, not ExistsError")
+    except ValueError:
+        pass  # Expected
+
+
+def test_flow_remove_item_transforms_notfounderror():
+    """Test remove_item transforms Pile NotFoundError to Flow ValueError."""
+    from lionherd_core.errors import NotFoundError
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    # Removing nonexistent should raise ValueError (not NotFoundError)
+    with pytest.raises(ValueError, match=f"Item {fake_id} not found in flow"):
+        f.remove_item(fake_id)
+
+    # Verify it's ValueError, not NotFoundError
+    try:
+        f.remove_item(fake_id)
+    except NotFoundError:
+        pytest.fail("Should raise ValueError, not NotFoundError")
+    except ValueError:
+        pass  # Expected
+
+
+def test_flow_remove_progression_transforms_notfounderror():
+    """Test remove_progression transforms Pile NotFoundError to Flow ValueError."""
+    from lionherd_core.errors import NotFoundError
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    # Removing nonexistent should raise ValueError (not NotFoundError)
+    with pytest.raises(ValueError, match=f"Progression {fake_id} not found in flow"):
+        f.remove_progression(fake_id)
+
+    # Verify it's ValueError, not NotFoundError
+    try:
+        f.remove_progression(fake_id)
+    except NotFoundError:
+        pytest.fail("Should raise ValueError, not NotFoundError")
+    except ValueError:
+        pass  # Expected
+
+
+def test_flow_add_item_suppresses_existserror():
+    """Test add_item suppresses intermediate ExistsError in traceback."""
+    import traceback
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    item = FlowTestItem(value="test")
+    f.add_item(item)
+
+    try:
+        f.add_item(item)
+    except ValueError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        # Should NOT contain ExistsError or "During handling" context
+        assert "ExistsError" not in tb_str, "ExistsError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+def test_flow_remove_item_suppresses_notfounderror():
+    """Test remove_item suppresses intermediate NotFoundError in traceback."""
+    import traceback
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    try:
+        f.remove_item(fake_id)
+    except ValueError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        # Should NOT contain NotFoundError or "During handling" context
+        assert "NotFoundError" not in tb_str, "NotFoundError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+def test_flow_remove_progression_suppresses_notfounderror():
+    """Test remove_progression suppresses intermediate NotFoundError in traceback."""
+    import traceback
+
+    f = Flow[FlowTestItem, FlowTestProgression]()
+    fake_id = UUID("12345678-1234-5678-1234-567812345678")
+
+    try:
+        f.remove_progression(fake_id)
+    except ValueError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        # Should NOT contain NotFoundError or "During handling" context
+        assert "NotFoundError" not in tb_str, "NotFoundError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
 # ==================== ExceptionGroup Tests ====================
 
 
