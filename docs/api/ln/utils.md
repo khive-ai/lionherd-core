@@ -544,8 +544,10 @@ Specific attribute(s) to import from module.
 **Usage Patterns:**
 
 ```python
+from typing import Callable
+
 # Pattern 1: Optional dependency with fallback
-def get_parser() -> callable:
+def get_parser() -> Callable:
     """Get parser with optional orjson fallback."""
     try:
         orjson = import_module("orjson")
