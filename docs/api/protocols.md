@@ -520,7 +520,7 @@ Pythonic `in` operator enables:
 
 #### See Also
 
-- [Pile.__contains__](base/pile.md#__contains__): Collection membership with UUID/instance support
+- [Pile.**contains**](base/pile.md#__contains__): Collection membership with UUID/instance support
 
 ---
 
@@ -650,8 +650,8 @@ Hashable protocol enables:
 
 #### See Also
 
-- [Element.__hash__](base/element.md#__hash__): Identity-based hashing
-- [Params.__hash__](types/base.md#__hash__): Content-based hashing
+- [Element.**hash**](base/element.md#__hash__): Identity-based hashing
+- [Params.**hash**](types/base.md#__hash__): Content-based hashing
 
 ---
 
