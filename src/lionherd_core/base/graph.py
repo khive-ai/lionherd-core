@@ -15,6 +15,7 @@ from pydapter import (
 )
 from typing_extensions import override
 
+from ..errors import NotFoundError
 from ..protocols import (
     Adaptable,
     AsyncAdaptable,
@@ -212,7 +213,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         nid = to_uuid(node_id)
         try:
             return self.nodes[nid]
-        except KeyError:
+        except NotFoundError:
             raise ValueError(f"Node {nid} not found in graph") from None
 
     # ==================== Edge Operations ====================
@@ -249,7 +250,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         eid = to_uuid(edge_id)
         try:
             edge = self.edges[eid]
-        except KeyError:
+        except NotFoundError:
             raise ValueError(f"Edge {eid} not found in graph") from None
 
         self._out_edges[edge.head].discard(eid)
@@ -264,7 +265,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         eid = to_uuid(edge_id)
         try:
             return self.edges[eid]
-        except KeyError:
+        except NotFoundError:
             raise ValueError(f"Edge {eid} not found in graph") from None
 
     # ==================== Graph Queries ====================

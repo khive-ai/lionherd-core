@@ -16,6 +16,7 @@ from pydapter import (
 )
 from typing_extensions import override
 
+from ..errors import ExistsError, NotFoundError
 from ..libs.concurrency import Lock as AsyncLock
 from ..protocols import (
     Adaptable,
@@ -239,7 +240,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         self._validate_type(item)
 
         if item.id in self._items:
-            raise ValueError(f"Item {item.id} already exists in pile")
+            raise ExistsError(f"Item {item.id} already exists in pile")
 
         self._items[item.id] = item
         self._progression.append(item.id)
@@ -263,7 +264,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         try:
             item = self._items.pop(uid)
         except KeyError:
-            raise ValueError(f"Item {uid} not found in pile") from None
+            raise NotFoundError(f"Item {uid} not found in pile") from None
 
         self._progression.remove(uid)
         return item
@@ -293,7 +294,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             return self._items[uid]
         except KeyError:
             if default is ...:
-                raise ValueError(f"Item {uid} not found in pile") from None
+                raise NotFoundError(f"Item {uid} not found in pile") from None
             return default
 
     @synchronized
@@ -309,7 +310,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         self._validate_type(item)
 
         if item.id not in self._items:
-            raise ValueError(f"Item {item.id} not found in pile")
+            raise NotFoundError(f"Item {item.id} not found in pile")
 
         self._items[item.id] = item
 
@@ -530,7 +531,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         self._validate_type(item)
 
         if item.id in self._items:
-            raise ValueError(f"Item {item.id} already exists in pile")
+            raise ExistsError(f"Item {item.id} already exists in pile")
 
         self._items[item.id] = item
         self._progression.append(item.id)
@@ -542,7 +543,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         uid = to_uuid(item_id)
 
         if uid not in self._items:
-            raise ValueError(f"Item {uid} not found in pile")
+            raise NotFoundError(f"Item {uid} not found in pile")
 
         item = self._items.pop(uid)
         self._progression.remove(uid)
@@ -555,7 +556,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         uid = to_uuid(item_id)
 
         if uid not in self._items:
-            raise ValueError(f"Item {uid} not found in pile")
+            raise NotFoundError(f"Item {uid} not found in pile")
 
         return self._items[uid]
 
