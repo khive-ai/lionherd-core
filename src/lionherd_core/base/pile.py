@@ -89,13 +89,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
     # Properties for internal access (return immutable views)
     @property
-    def items(self):
-        """Items as read-only mapping view."""
-        from types import MappingProxyType
-
-        return MappingProxyType(self._items)
-
-    @property
     def progression(self) -> Progression:
         """Progression order as read-only copy."""
         # Return copy to prevent external modification
@@ -104,10 +97,12 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     # Type validation config
     item_type: set[type] | None = Field(
         default=None,
+        frozen=True,
         description="Set of allowed types for validation (None = any Element subclass)",
     )
     strict_type: bool = Field(
         default=False,
+        frozen=True,
         description="If True, enforce exact type match (no subclasses allowed)",
     )
 
@@ -357,10 +352,13 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Include item in pile (idempotent).
 
         Returns:
-            bool: True if item was added, False if already present
+            True if item IS in pile (membership guaranteed).
+            False only if validation fails.
+            Use pattern: `if pile.include(x): ...` guarantees x is in pile.
         """
-        if item.id not in self._items:
-            self.add(item)
+        with contextlib.suppress(Exception):
+            if item.id not in self._items:
+                self.add(item)
             return True
         return False
 
@@ -368,12 +366,14 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Exclude item from pile (idempotent).
 
         Returns:
-            bool: True if item was removed, False if not present
+            True if item IS NOT in pile (absence guaranteed).
+            False only if ID coercion fails.
+            Use pattern: `if pile.exclude(x): ...` guarantees x is not in pile.
         """
-
-        uid = Element._coerce_id(item)
-        if uid in self._items:
-            self.remove(uid)
+        with contextlib.suppress(Exception):
+            uid = Element._coerce_id(item)
+            if uid in self._items:
+                self.remove(uid)
             return True
         return False
 
@@ -611,6 +611,25 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         for uid in self._progression:
             if uid in self._items:
                 yield self._items[uid]
+
+    @synchronized
+    def keys(self) -> Iterator[UUID]:
+        """Iterate over UUIDs in insertion order.
+
+        Returns:
+            Iterator of UUIDs in the order items were added.
+        """
+        return iter(self._progression)
+
+    @synchronized
+    def items(self) -> Iterator[tuple[UUID, T]]:
+        """Iterate over (UUID, item) pairs in insertion order.
+
+        Returns:
+            Iterator of (UUID, item) tuples in the order items were added.
+        """
+        for uid in self._progression:
+            yield (uid, self._items[uid])
 
     def __list__(self) -> list[T]:
         """Return items as list in insertion order."""

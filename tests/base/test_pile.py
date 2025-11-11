@@ -489,44 +489,44 @@ def test_clear():
 
 
 def test_include_new_item():
-    """Test include adds new item."""
+    """Test include adds new item and returns True (membership guaranteed)."""
     pile = Pile()
     item = SimpleElement(value=42)
 
     result = pile.include(item)
-    assert result is True
+    assert result is True  # Membership guaranteed
     assert item.id in pile
 
 
 def test_include_existing_item():
-    """Test include is idempotent."""
+    """Test include is idempotent - returns True even if already present."""
     pile = Pile()
     item = SimpleElement(value=42)
     pile.add(item)
 
     result = pile.include(item)
-    assert result is False
-    assert len(pile) == 1
+    assert result is True  # Still returns True (membership guaranteed)
+    assert len(pile) == 1  # Not duplicated
 
 
 def test_exclude_existing_item():
-    """Test exclude removes item."""
+    """Test exclude removes item and returns True (absence guaranteed)."""
     pile = Pile()
     item = SimpleElement(value=42)
     pile.add(item)
 
     result = pile.exclude(item.id)
-    assert result is True
+    assert result is True  # Absence guaranteed
     assert item.id not in pile
 
 
 def test_exclude_nonexistent_item():
-    """Test exclude is idempotent."""
+    """Test exclude is idempotent - returns True even if not present."""
     from uuid import uuid4
 
     pile = Pile()
     result = pile.exclude(uuid4())
-    assert result is False
+    assert result is True  # Returns True (absence guaranteed)
 
 
 def test_exclude_by_element():
@@ -538,6 +538,29 @@ def test_exclude_by_element():
     result = pile.exclude(item)
     assert result is True
     assert len(pile) == 0
+
+
+def test_include_validation_failure():
+    """Test include returns False on validation failure."""
+    pile = Pile(item_type=SimpleElement, strict_type=True)
+
+    # Create incompatible item (different type)
+    class OtherElement(Element):
+        pass
+
+    item = OtherElement()
+    result = pile.include(item)
+    assert result is False  # Validation failed
+    assert len(pile) == 0  # Item not added
+
+
+def test_exclude_invalid_id():
+    """Test exclude returns False on ID coercion failure."""
+    pile = Pile()
+
+    # Invalid ID that cannot be coerced
+    result = pile.exclude(12345)  # Not a valid UUID/str/Element
+    assert result is False  # ID coercion failed
 
 
 # =============================================================================
@@ -2112,19 +2135,36 @@ def test_is_empty():
 # =============================================================================
 
 
-def test_items_property_immutable(simple_items):
-    """Test items property returns immutable view."""
+def test_keys_method(simple_items):
+    """Test keys() method returns UUID iterator."""
     pile = Pile(items=simple_items)
-    items_view = pile.items
+    keys_list = list(pile.keys())
 
-    # Should be MappingProxyType (read-only)
-    from types import MappingProxyType
+    # Should return all UUIDs
+    assert len(keys_list) == len(simple_items)
+    assert all(item.id in keys_list for item in simple_items)
 
-    assert isinstance(items_view, MappingProxyType)
+    # Should be in insertion order
+    expected_order = [item.id for item in simple_items]
+    assert keys_list == expected_order
 
-    # Should not be modifiable
-    with pytest.raises(TypeError):
-        items_view[simple_items[0].id] = SimpleElement(value=999)
+
+def test_items_method(simple_items):
+    """Test items() method returns (UUID, item) iterator."""
+    pile = Pile(items=simple_items)
+    items_list = list(pile.items())
+
+    # Should return all (UUID, item) pairs
+    assert len(items_list) == len(simple_items)
+
+    # Each item should be a tuple
+    for uuid, item in items_list:
+        assert isinstance(uuid, UUID)
+        assert pile[uuid] == item
+
+    # Should be in insertion order
+    expected_order = [(item.id, item) for item in simple_items]
+    assert items_list == expected_order
 
 
 def test_progression_property_copy(simple_items):

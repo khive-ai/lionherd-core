@@ -56,6 +56,9 @@ class Flow(Element, Generic[E, P]):
         """Convert dict to Pile during deserialization."""
         if isinstance(v, dict):
             return Pile.from_dict(v)
+        # If it's already a Pile, use it directly (don't let Pydantic recreate it)
+        if isinstance(v, Pile):
+            return v
         # Let Pydantic handle it
         return handler(v)
 
@@ -128,23 +131,22 @@ class Flow(Element, Generic[E, P]):
             strict_type: Enforce exact type match (no subclasses)
             **data: Additional Element fields
         """
-        # Let Pydantic create default piles, then populate
+        # Let Pydantic create default piles
         super().__init__(name=name, **data)
 
         # Normalize item_type to set and extract types from unions
         if item_type is not None:
             item_type = extract_types(item_type)
 
-        # Set item_type and strict_type on items pile if provided
-        if item_type:
-            self.items.item_type = item_type
-        if strict_type:
-            self.items.strict_type = strict_type
-
-        # Add items after initialization (only if items is a list, not during deserialization)
-        if items and isinstance(items, list):
-            for item in items:
-                self.items.add(item)
+        # If type validation is requested, create new Pile with validation
+        # and replace the default one
+        if item_type is not None or strict_type:
+            self.items = Pile(items=items, item_type=item_type, strict_type=strict_type)
+        else:
+            # No type validation - add items to default Pile
+            if items and isinstance(items, list):
+                for item in items:
+                    self.items.add(item)
 
     # ==================== Progression Management ====================
 
