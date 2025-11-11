@@ -18,9 +18,9 @@ from typing_extensions import override
 from ..errors import NotFoundError
 from ..protocols import (
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
     Containable,
     Deserializable,
     Serializable,
@@ -100,9 +100,9 @@ class Edge(Element):
     Deserializable,
     Containable,
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
 )
 class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     """Directed graph with Pile-backed storage, O(1) operations, graph algorithms.

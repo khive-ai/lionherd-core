@@ -299,3 +299,20 @@ class TestImplementsDecorator:
 
         assert hasattr(EmptyClass, "__protocols__")
         assert EmptyClass.__protocols__ == ()
+
+    def test_implements_validates_pydantic_fields_via_annotations(self):
+        """@implements() should recognize Pydantic fields via __annotations__."""
+        from pydantic import BaseModel
+
+        # ✅ Pydantic field in __annotations__ satisfies Observable protocol
+        @implements(Observable)
+        class PydanticObservable(BaseModel):
+            id: UUID  # Field annotation (no @property needed)
+
+        # Should succeed without raising
+        assert hasattr(PydanticObservable, "__protocols__")
+        assert Observable in PydanticObservable.__protocols__
+
+        # Verify it actually works
+        instance = PydanticObservable(id=uuid4())
+        assert isinstance(instance.id, UUID)

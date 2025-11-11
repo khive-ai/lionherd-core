@@ -15,9 +15,9 @@ from pydapter import (
 
 from ..protocols import (
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
     Deserializable,
     Serializable,
     implements,
@@ -29,9 +29,9 @@ NODE_REGISTRY: dict[str, type[Node]] = {}
 
 @implements(
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
     Deserializable,
     Serializable,
 )

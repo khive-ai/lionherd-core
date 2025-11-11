@@ -20,9 +20,9 @@ from ..errors import ExistsError, NotFoundError
 from ..libs.concurrency import Lock as AsyncLock
 from ..protocols import (
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
     Containable,
     Deserializable,
     Serializable,
@@ -46,9 +46,9 @@ T = TypeVar("T", bound=Element)
 @implements(
     Containable,
     Adaptable,
-    AdapterRegistry,
+    AdapterRegisterable,
     AsyncAdaptable,
-    AsyncAdapterRegistry,
+    AsyncAdapterRegisterable,
     Serializable,
     Deserializable,
 )

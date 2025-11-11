@@ -6,10 +6,10 @@ from uuid import UUID
 
 __all__ = (
     "Adaptable",
-    "AdapterRegistry",
+    "AdapterRegisterable",
     "Allowable",
     "AsyncAdaptable",
-    "AsyncAdapterRegistry",
+    "AsyncAdapterRegisterable",
     "Containable",
     "Deserializable",
     "Hashable",
@@ -64,7 +64,7 @@ class Adaptable(Protocol):
 
 
 @runtime_checkable
-class AdapterRegistry(Protocol):
+class AdapterRegisterable(Protocol):
     """Mutable adapter registry. Compose with Adaptable for configurable adapters."""
 
     @classmethod
@@ -90,7 +90,7 @@ class AsyncAdaptable(Protocol):
 
 
 @runtime_checkable
-class AsyncAdapterRegistry(Protocol):
+class AsyncAdapterRegisterable(Protocol):
     """Mutable async adapter registry. Compose with AsyncAdaptable for configurable async adapters."""
 
     @classmethod
