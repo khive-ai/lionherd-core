@@ -361,7 +361,6 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 **Examples:**
 
 ```python
-import asyncio
 from lionherd_core.ln import bcall
 from lionherd_core.libs.concurrency import sleep
 
@@ -605,7 +604,6 @@ async for batch in batch_config(urls, fetch_data, batch_size=20):
 ### Basic Parallel Processing
 
 ```python
-import asyncio
 from lionherd_core.ln import alcall
 from lionherd_core.libs.concurrency import sleep
 

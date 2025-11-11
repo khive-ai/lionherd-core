@@ -978,7 +978,6 @@ base_type, *metadata = get_args(ann)
 
 ```python
 from lionherd_core.types import Spec
-import asyncio
 
 # Literal default
 spec = Spec(str, default="hello")
