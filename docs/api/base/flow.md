@@ -153,7 +153,7 @@ def add_progression(self, progression: P) -> None
 
 **Raises:**
 
-- `ValueError`: If progression UUID or name already exists
+- `ExistsError`: If progression UUID or name already exists
 - `TypeError`: If progression type doesn't match Pile constraint
 
 **Thread Safety:** Synchronized with @synchronized decorator
@@ -170,7 +170,7 @@ flow.add_progression(Progression(name="completed"))
 print(len(flow.progressions))  # 3
 ```
 
-**Note**: Progression names must be unique. Attempting to add a progression with an existing name raises ValueError.
+**Note**: Progression names must be unique. Attempting to add a progression with an existing name raises ExistsError.
 
 ---
 
@@ -190,7 +190,9 @@ def remove_progression(self, progression_id: UUID | str | P) -> P
 
 **Returns:** P - The removed progression
 
-**Raises:** ValueError if progression not found
+**Raises:**
+
+- `NotFoundError`: If progression not found in flow
 
 **Thread Safety:** Synchronized with @synchronized decorator
 
@@ -270,7 +272,7 @@ def add_item(
 
 **Raises:**
 
-- `ValueError`: If item already exists in items pile
+- `ExistsError`: If item already exists in items pile
 - `KeyError`: If progression_ids references non-existent progression
 
 **Time Complexity:** O(1) for pile add, O(k) for k progression assignments
@@ -315,7 +317,9 @@ def remove_item(
 
 **Returns:** E - The removed item
 
-**Raises:** ValueError if item not found in pile
+**Raises:**
+
+- `NotFoundError`: If item not found in flow
 
 **Time Complexity:** O(p × n) where p = number of progressions, n = items per progression (if remove_from_progressions=True)
 
@@ -535,11 +539,11 @@ flow.remove_item(task_id)  # Default removes from progressions
 
 ### Pitfall 2: Duplicate Progression Names
 
-**Issue**: Adding progressions with duplicate names raises ValueError.
+**Issue**: Adding progressions with duplicate names raises ExistsError.
 
 ```python
 flow.add_progression(Progression(name="pending"))
-flow.add_progression(Progression(name="pending"))  # ❌ ValueError
+flow.add_progression(Progression(name="pending"))  # ❌ ExistsError
 ```
 
 **Solution**: Check existence before adding or use unique naming scheme.
