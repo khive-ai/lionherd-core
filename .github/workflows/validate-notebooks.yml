@@ -14,43 +14,16 @@ concurrency:
 
 jobs:
   # =============================================================================
-  # Discover notebooks for parallel execution
+  # Execute all notebooks in parallel across Python versions
   # =============================================================================
-  discover-notebooks:
-    name: Discover Notebooks
+  execute-notebooks:
+    name: Notebooks (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    outputs:
-      tutorials: ${{ steps.find-tutorials.outputs.notebooks }}
-      references: ${{ steps.find-references.outputs.notebooks }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Find tutorial notebooks
-        id: find-tutorials
-        run: |
-          NOTEBOOKS=$(find notebooks/tutorials -name "*.ipynb" -type f | jq -R -s -c 'split("\n")[:-1]')
-          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
-          echo "Found $(echo $NOTEBOOKS | jq '. | length') tutorial notebooks"
-
-      - name: Find reference notebooks
-        id: find-references
-        run: |
-          NOTEBOOKS=$(find notebooks/references -name "*.ipynb" -type f | jq -R -s -c 'split("\n")[:-1]')
-          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
-          echo "Found $(echo $NOTEBOOKS | jq '. | length') reference notebooks"
-
-  # =============================================================================
-  # Execute tutorial notebooks in parallel (strict validation)
-  # =============================================================================
-  execute-tutorials:
-    name: Tutorial - ${{ matrix.notebook }}
-    runs-on: ubuntu-latest
-    needs: discover-notebooks
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
-      fail-fast: false # Continue running other notebooks even if one fails
+      fail-fast: false
       matrix:
-        notebook: ${{ fromJson(needs.discover-notebooks.outputs.tutorials) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -69,34 +42,35 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute notebook
+      - name: Execute all notebooks (parallel)
         run: |
-          uv run pytest --nbmake "${{ matrix.notebook }}" \
+          uv run pytest --nbmake notebooks/ \
             --nbmake-timeout=300 \
             --tb=short \
+            -n auto \
             -v
 
       - name: Upload execution artifacts
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: tutorial-failure-${{ hashFiles(matrix.notebook) }}
+          name: notebook-failures-py${{ matrix.python-version }}
           path: |
             .pytest_cache/
             **/*.nbconvert.ipynb
 
   # =============================================================================
-  # Execute reference notebooks in parallel (strict validation)
+  # Run pre-commit hooks on notebooks
   # =============================================================================
-  execute-references:
-    name: Reference - ${{ matrix.notebook }}
+  pre-commit:
+    name: Pre-commit (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    needs: discover-notebooks
+    needs: execute-notebooks
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        notebook: ${{ fromJson(needs.discover-notebooks.outputs.references) }}
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +78,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -115,18 +89,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute notebook
-        run: |
-          uv run pytest --nbmake "${{ matrix.notebook }}" \
-            --nbmake-timeout=300 \
-            --tb=short \
-            -v
-
-      - name: Upload execution artifacts
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: reference-failure-${{ hashFiles(matrix.notebook) }}
-          path: |
-            .pytest_cache/
-            **/*.nbconvert.ipynb
+      - name: Run pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure
