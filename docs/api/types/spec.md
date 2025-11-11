@@ -564,10 +564,10 @@ async def acreate_default_value(self) -> Any: ...
 >>> async def async_factory():
 ...     return []
 >>> spec = Spec(list, default_factory=async_factory)
->>> asyncio.run(spec.acreate_default_value())
+>>> await spec.acreate_default_value()
 []
 >>> spec_sync = Spec(list, default_factory=list)
->>> asyncio.run(spec_sync.acreate_default_value())
+>>> await spec_sync.acreate_default_value()
 []  # Handles sync factories too
 ```
 
@@ -994,7 +994,7 @@ async def fetch_default():
 
 spec = Spec(dict, default_factory=fetch_default)
 # spec.create_default_value()  # ValueError (async factory)
-asyncio.run(spec.acreate_default_value())  # {"key": "value"}
+await spec.acreate_default_value()  # {"key": "value"}
 ```
 
 ### Metadata Filtering
@@ -1143,8 +1143,7 @@ spec = Spec(list, default_factory=async_default)
 **Solution**: Use `acreate_default_value()` for async factories:
 
 ```python
-import asyncio
-value = asyncio.run(spec.acreate_default_value())
+value = await spec.acreate_default_value()
 ```
 
 ### Pitfall 4: Cache Size Exhaustion
@@ -1321,12 +1320,12 @@ schema = {
 
 ```python
 from lionherd_core.types import Spec
-import asyncio
+from lionherd_core.libs.concurrency import sleep
 
 # Database lookup default
 async def get_default_config():
     # Simulate async DB query
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     return {"theme": "dark", "language": "en"}
 
 config_spec = Spec(dict, name="config", default_factory=get_default_config)
@@ -1336,7 +1335,9 @@ async def create_user():
     config = await config_spec.acreate_default_value()
     print(config)  # {"theme": "dark", "language": "en"}
 
-asyncio.run(create_user())
+# In your application (use anyio.run for backend-agnostic entry point)
+import anyio
+anyio.run(create_user)
 ```
 
 ### Example 4: Metadata-Driven Validation

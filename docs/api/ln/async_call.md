@@ -30,7 +30,7 @@ The `async_call` module provides high-performance utilities for applying functio
 - Single-item operations (use direct `await func(item)`)
 - Simple list comprehensions without concurrency needs
 - Operations requiring complex inter-item dependencies (use task graphs)
-- Real-time streaming where order doesn't matter (use `asyncio.gather` directly)
+- Real-time streaming where order doesn't matter (use lionherd's `gather` directly from `lionherd_core.libs.concurrency`)
 
 ## Functions
 
@@ -362,10 +362,11 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 
 ```python
 from lionherd_core.ln import bcall
+from lionherd_core.libs.concurrency import sleep
 
 # Batch process with streaming results
 async def process_item(item: int) -> int:
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     return item * 2
 
 items = list(range(20))
@@ -604,6 +605,7 @@ async for batch in batch_config(urls, fetch_data, batch_size=20):
 
 ```python
 from lionherd_core.ln import alcall
+from lionherd_core.libs.concurrency import sleep
 
 # Process list items in parallel
 items = [1, 2, 3, 4, 5]
@@ -612,7 +614,7 @@ results = await alcall(items, lambda x: x ** 2)
 
 # Async function
 async def async_process(item: int) -> int:
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     return item * 2
 
 results = await alcall(items, async_process)
@@ -873,7 +875,7 @@ Results maintain input order regardless of completion sequence because:
 1. **Predictability**: Index mapping simplifies result lookup (`results[i]` ↔ `input_[i]`)
 2. **No Sorting Overhead**: Preallocated list with index-based filling avoids post-processing
 3. **Debugging**: Easier to correlate inputs with outputs during troubleshooting
-4. **API Compatibility**: Matches common async patterns (`asyncio.gather()` preserves order)
+4. **API Compatibility**: Matches common async patterns (lionherd's `gather()` preserves order like `asyncio.gather()`)
 
 ### Why Separate alcall and bcall?
 
@@ -909,7 +911,7 @@ Automatic sync/async detection via `is_coro_func()` enables:
 
 - **Related Functions**:
   - `to_list()`: Input/output preprocessing utility
-  - `asyncio.gather()`: Standard library async gathering (no retry/concurrency control)
+  - `gather()` from lionherd: Enhanced gathering with retry/concurrency control (use this instead of `asyncio.gather()`)
   - `create_task_group()`: Structured concurrency primitive
 - **Related Classes**:
   - `Params`: Base class for parameter dataclasses

@@ -426,13 +426,15 @@ print(ShutdownBroadcaster.get_subscriber_count())  # 1 (h1 auto-removed)
 ### Pattern 4: Mixed Sync/Async Handlers
 
 ```python
+from lionherd_core.libs.concurrency import sleep
+
 # Sync handler (immediate execution)
 def sync_log(event):
     print(f"SYNC: {event.reason}")
 
 # Async handler (awaited execution)
 async def async_cleanup(event):
-    await asyncio.sleep(0.1)  # Simulate async work
+    await sleep(0.1)  # Simulate async work
     print(f"ASYNC: {event.reason}")
 
 ShutdownBroadcaster.subscribe(sync_log)
@@ -490,8 +492,10 @@ ShutdownBroadcaster.subscribe(log_event)
 **Issue**: Expecting handlers to run concurrently (they execute sequentially)
 
 ```python
+from lionherd_core.libs.concurrency import sleep
+
 async def slow_handler(event):
-    await asyncio.sleep(1.0)  # Blocks next handler
+    await sleep(1.0)  # Blocks next handler
 
 async def fast_handler(event):
     print("Fast")  # Waits for slow_handler to complete
@@ -499,7 +503,7 @@ async def fast_handler(event):
 await ShutdownBroadcaster.broadcast(event)  # Sequential execution
 ```
 
-**Solution**: Use EventBus for concurrent handler execution via `asyncio.gather()`.
+**Solution**: Use EventBus for concurrent handler execution via lionherd's `gather()`.
 
 ### Pitfall 4: Relying on Execution Order
 
@@ -540,6 +544,7 @@ Broadcaster does NOT implement lionherd-core protocols (Observable, Serializable
 ```python
 from lionherd_core.base.broadcaster import Broadcaster
 from lionherd_core.base.event import Event
+from lionherd_core.libs.concurrency import sleep
 
 # Define event type
 class SystemEvent(Event):
@@ -558,7 +563,7 @@ def handler1(event):
     received.append(f"H1: {event.message}")
 
 async def handler2(event):
-    await asyncio.sleep(0.01)
+    await sleep(0.01)
     received.append(f"H2: {event.message}")
 
 SystemBroadcaster.subscribe(handler1)

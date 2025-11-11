@@ -442,15 +442,15 @@ await log_bus.emit("log", level="INFO", message="Request processed")
 ### Pattern 3: Multi-Handler Concurrent Execution
 
 ```python
-import asyncio
 from lionherd_core.base.eventbus import EventBus
+from lionherd_core.libs.concurrency import sleep
 
 bus = EventBus()
 execution_order = []
 
 async def slow_handler():
     execution_order.append("slow_start")
-    await asyncio.sleep(0.02)
+    await sleep(0.02)
     execution_order.append("slow_end")
 
 async def fast_handler():
@@ -645,14 +645,14 @@ print(events)
 ### Example 2: Concurrent Handler Execution
 
 ```python
-import asyncio
+from lionherd_core.libs.concurrency import sleep
 
 bus = EventBus()
 execution_log = []
 
 async def slow_handler():
     execution_log.append("slow_start")
-    await asyncio.sleep(0.02)
+    await sleep(0.02)
     execution_log.append("slow_end")
 
 async def fast_handler():
