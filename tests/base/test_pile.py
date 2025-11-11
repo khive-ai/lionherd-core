@@ -361,6 +361,50 @@ def test_pop_alias():
     assert len(pile) == 0
 
 
+def test_pop_without_default_not_found():
+    """Test pop() raises NotFoundError when item not found and no default."""
+    from uuid import uuid4
+
+    pile = Pile()
+
+    with pytest.raises(NotFoundError, match="not found in pile"):
+        pile.pop(uuid4())
+
+
+def test_pop_with_default_none():
+    """Test pop() returns None when item not found with default=None."""
+    from uuid import uuid4
+
+    pile = Pile()
+    result = pile.pop(uuid4(), default=None)
+    assert result is None
+
+
+def test_pop_with_custom_default():
+    """Test pop() returns custom default when item not found."""
+    from uuid import uuid4
+
+    pile = Pile()
+    default_item = SimpleElement(value=999)
+
+    result = pile.pop(uuid4(), default=default_item)
+    assert result == default_item
+
+
+def test_pop_with_default_when_exists():
+    """Test pop() returns and removes item when it exists, ignoring default."""
+    pile = Pile()
+    item = SimpleElement(value=42)
+    pile.add(item)
+
+    default_item = SimpleElement(value=999)
+    popped = pile.pop(item.id, default=default_item)
+
+    assert popped == item
+    assert popped != default_item
+    assert len(pile) == 0
+
+
 def test_get_item():
     """Test getting items from Pile."""
     pile = Pile()

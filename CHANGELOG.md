@@ -9,11 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Error Handling**: `Graph` and `Flow` now raise `NotFoundError` and
-  `ExistsError` instead of `ValueError` for missing/duplicate items (#117).
+- **Error Handling**: `Graph`, `Flow`, and `Pile` now raise `NotFoundError` and
+  `ExistsError` instead of `ValueError` for missing/duplicate items (#117, #118).
   Exception metadata (`.details`, `.retryable`, `.__cause__`) is now preserved
   for retry logic. Update exception handlers from `except ValueError` to
   `except NotFoundError` or `except ExistsError` as appropriate.
+  - `Pile.pop()` now raises `NotFoundError` (was `ValueError`) for consistency
+    with `Pile.get()` and `Pile.remove()`.
+
+### Removed
+
+- **BREAKING**: `Graph.get_node()` and `Graph.get_edge()` removed in favor of
+  direct Pile access (#117, #124, #132).
+
+  **Migration**:
+
+  ```python
+  # Before
+  node = graph.get_node(node_id)
+  edge = graph.get_edge(edge_id)
+
+  # After
+  node = graph.nodes[node_id]
+  edge = graph.edges[edge_id]
+  ```
+
+  **Rationale**: Eliminates unnecessary wrapper methods. Direct Pile access is
+  more Pythonic and consistent with dict/list-like interfaces.
 
 ### Fixed
 
