@@ -50,6 +50,38 @@ class Flow(Element, Generic[E, P]):
     _progression_names: dict[str, UUID] = PrivateAttr(default_factory=dict)
     _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
+    def __init__(
+        self,
+        items: list[E] | None = None,
+        name: str | None = None,
+        item_type: type[E] | set[type] | list[type] | None = None,
+        strict_type: bool = False,
+        **data,
+    ):
+        """Initialize Flow with optional items and type validation.
+
+        Args:
+            items: Initial items to add to items pile
+            name: Flow name
+            item_type: Type(s) for validation
+            strict_type: Enforce exact type match (no subclasses)
+            **data: Additional Element fields
+        """
+        super().__init__(name=name, **data)
+
+        # Normalize item_type to set and extract types from unions
+        if item_type is not None:
+            item_type = extract_types(item_type)
+
+        # If type validation is requested, create new Pile with validation and replace the default one
+        if item_type is not None or strict_type:
+            self.items = Pile(items=items, item_type=item_type, strict_type=strict_type)
+        else:
+            # No type validation - add items to default Pile
+            if items and isinstance(items, list):
+                for item in items:
+                    self.items.add(item)
+
     @field_validator("items", "progressions", mode="wrap")
     @classmethod
     def _validate_piles(cls, v: Any, handler: Any) -> Any:
@@ -114,40 +146,6 @@ class Flow(Element, Generic[E, P]):
                 cause=e,
             )
 
-    def __init__(
-        self,
-        items: list[E] | None = None,
-        name: str | None = None,
-        item_type: type[E] | set[type] | list[type] | None = None,
-        strict_type: bool = False,
-        **data,
-    ):
-        """Initialize Flow with optional items and type validation.
-
-        Args:
-            items: Initial items to add to items pile
-            name: Flow name
-            item_type: Type(s) for validation
-            strict_type: Enforce exact type match (no subclasses)
-            **data: Additional Element fields
-        """
-        # Let Pydantic create default piles
-        super().__init__(name=name, **data)
-
-        # Normalize item_type to set and extract types from unions
-        if item_type is not None:
-            item_type = extract_types(item_type)
-
-        # If type validation is requested, create new Pile with validation
-        # and replace the default one
-        if item_type is not None or strict_type:
-            self.items = Pile(items=items, item_type=item_type, strict_type=strict_type)
-        else:
-            # No type validation - add items to default Pile
-            if items and isinstance(items, list):
-                for item in items:
-                    self.items.add(item)
-
     # ==================== Progression Management ====================
 
     @synchronized
@@ -209,37 +207,50 @@ class Flow(Element, Generic[E, P]):
     def add_item(
         self,
         item: E,
-        progression_ids: list[UUID | str] | UUID | str | None = None,
+        progressions: list[UUID | str] | UUID | str | None = None,
     ) -> None:
-        """Add item to items pile and optionally to progressions. Raises ExistsError if exists."""
+        """Add item to items pile and optionally to progressions.
+
+        Args:
+            item: Item to add
+            progressions: Progression ID(s) or name(s) to add item to
+
+        Raises:
+            ExistsError: If item already exists
+        """
         # Add to items pile (let ExistsError bubble)
         self.items.add(item)
 
         # Add to specified progressions
-        if progression_ids is not None:
-            # Normalize to list
-            ids = [progression_ids] if not isinstance(progression_ids, list) else progression_ids
+        if progressions is not None:
+            # Normalize to list - treat string/UUID as single value, convert other iterables
+            if isinstance(progressions, (str, UUID)):
+                ids = [progressions]
+            else:
+                ids = list(progressions)
 
             for prog_id in ids:
                 progression = self.get_progression(prog_id)
                 progression.append(item)
 
-    def remove_item(
-        self,
-        item_id: UUID | str | Element,
-        remove_from_progressions: bool = True,
-    ) -> E:
-        """Remove item from items pile and optionally from progressions. Raises NotFoundError if not found."""
+    def remove_item(self, item_id: UUID | str | Element) -> E:
+        """Remove item from items pile and all progressions.
+
+        Args:
+            item_id: Item ID, UUID string, or Element instance
+
+        Returns:
+            Removed item
+
+        Raises:
+            NotFoundError: If item not found in pile
+        """
         uid = self._coerce_id(item_id)
 
-        # Verify item exists first
-        self._check_item_exists(uid)
-
-        # Remove from progressions first
-        if remove_from_progressions:
-            for progression in self.progressions:
-                if uid in progression:
-                    progression.remove(uid)
+        # Remove from all progressions first
+        for progression in self.progressions:
+            if uid in progression:
+                progression.remove(uid)
 
         # Remove from items pile
         return self.items.remove(uid)

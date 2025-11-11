@@ -138,6 +138,10 @@ class Progression(Element):
         """Return number of items."""
         return len(self.order)
 
+    def __bool__(self) -> bool:
+        """Return False if progression is empty, True otherwise."""
+        return len(self.order) > 0
+
     def __iter__(self):
         """Iterate over UUIDs in order."""
         return iter(self.order)

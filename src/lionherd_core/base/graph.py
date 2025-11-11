@@ -161,10 +161,10 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     def _rebuild_adjacency(self) -> None:
         """Rebuild adjacency lists from nodes and edges."""
-        self._out_edges = {node_id: set() for node_id in self.nodes.keys()}
-        self._in_edges = {node_id: set() for node_id in self.nodes.keys()}
+        self._out_edges = {node_id: set() for node_id in self.nodes.keys()}  # noqa: SIM118
+        self._in_edges = {node_id: set() for node_id in self.nodes.keys()}  # noqa: SIM118
 
-        for edge_id in self.edges.keys():
+        for edge_id in self.edges.keys():  # noqa: SIM118
             edge = self.edges[edge_id]
             if edge.head in self._out_edges:
                 self._out_edges[edge.head].add(edge_id)
@@ -352,7 +352,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     def is_acyclic(self) -> bool:
         """Check if graph is acyclic using three-color DFS."""
         WHITE, GRAY, BLACK = 0, 1, 2
-        colors = {nid: WHITE for nid in self.nodes.keys()}
+        colors = {nid: WHITE for nid in self.nodes.keys()}  # noqa: SIM118
 
         def dfs(node_id: UUID) -> bool:
             """DFS visit. Returns True if acyclic, False if cycle found."""
@@ -371,7 +371,8 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
         # Check all components
         return all(
-            not (colors[node_id] == WHITE and not dfs(node_id)) for node_id in self.nodes.keys()
+            not (colors[node_id] == WHITE and not dfs(node_id))
+            for node_id in self.nodes.keys()  # noqa: SIM118
         )
 
     def topological_sort(self) -> list[Node]:

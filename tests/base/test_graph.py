@@ -1383,9 +1383,7 @@ class TestGraphAlgorithms:
         fake_node = Node(content={"value": "fake"})
 
         with pytest.raises(NotFoundError, match="not in graph"):
-            await graph.find_path(
-                fake_node, graph.nodes[next(iter(graph.nodes.keys()))]
-            )
+            await graph.find_path(fake_node, graph.nodes[next(graph.nodes.keys())])
 
     async def test_find_path_end_not_in_graph_raises(self, simple_graph):
         """Test find_path raises if end node not in graph."""
@@ -1552,7 +1550,7 @@ class TestSerialization:
         restored = Graph.from_dict(data)
 
         # Check labels
-        e1_restored = restored.edges[next(iter(graph.edges.keys()))]
+        e1_restored = restored.edges[next(graph.edges.keys())]
         assert e1_restored.label == ["step1"]
 
     def test_roundtrip_preserves_edge_properties(self, empty_graph):

@@ -29,7 +29,6 @@ from ..protocols import (
     implements,
 )
 from ._utils import (
-    async_synchronized,
     extract_types,
     load_type_from_string,
     synchronized,
@@ -207,24 +206,22 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         if mode == "python":
             # Python mode: keep objects as-is
             data["items"] = [
-                self._items[uid].to_dict(
+                i.to_dict(
                     mode="python",
                     meta_key=item_meta_key,
                     created_at_format=item_created_at_format,
                 )
-                for uid in self._progression
-                if uid in self._items
+                for i in self
             ]
         else:
             # JSON/DB mode: convert to JSON-safe
             data["items"] = [
-                self._items[uid].to_dict(
+                i.to_dict(
                     mode="json",
                     meta_key=item_meta_key,
                     created_at_format=item_created_at_format,
                 )
-                for uid in self._progression
-                if uid in self._items
+                for i in self
             ]
 
         return data
@@ -263,8 +260,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         Raises:
             NotFoundError: If item not found
         """
-
-        uid = Element._coerce_id(item_id)
+        uid = self._coerce_id(item_id)
 
         try:
             item = self._items.pop(uid)
@@ -288,7 +284,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         Raises:
             NotFoundError: If item not found and no default provided
         """
-        uid = Element._coerce_id(item_id)
+        uid = self._coerce_id(item_id)
 
         try:
             item = self._items.pop(uid)
@@ -313,7 +309,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         Raises:
             NotFoundError: If item not found and no default
         """
-        uid = Element._coerce_id(item_id)
+        uid = self._coerce_id(item_id)
 
         try:
             return self._items[uid]
@@ -371,7 +367,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             Use pattern: `if pile.exclude(x): ...` guarantees x is not in pile.
         """
         with contextlib.suppress(Exception):
-            uid = Element._coerce_id(item)
+            uid = self._coerce_id(item)
             if uid in self._items:
                 self.remove(uid)
             return True
@@ -443,21 +439,20 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
                 f"Invalid key type: {type(key)}. Expected UUID, Progression, int, slice, or callable"
             )
 
-    @synchronized
     def _filter_by_progression(self, prog: Progression) -> Pile[T]:
-        """Filter pile by progression order, returns new Pile."""
-        filtered_items = []
-        for uid in prog.order:
-            if uid in self._items:
-                filtered_items.append(self._items[uid])
+        """Filter pile by progression order, returns new Pile.
 
-        # Return NEW Pile with filtered items
-        new_pile = Pile(
-            items=filtered_items,
+        Raises:
+            NotFoundError: If any UUID in progression not found in pile
+        """
+        if any(uid not in self._items for uid in prog):
+            raise NotFoundError("Some items from progression not found in pile")
+
+        return Pile(
+            items=[self._items[uid] for uid in prog],
             item_type=self.item_type,
             strict_type=self.strict_type,
         )
-        return new_pile
 
     @synchronized
     def _get_by_index(self, index: int) -> T:
@@ -473,20 +468,16 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         uids: list[UUID] = self._progression[s]
         return [self._items[uid] for uid in uids]
 
-    @synchronized
     def _filter_by_function(self, func: Callable[[T], bool]) -> Pile[T]:
         """Filter pile by function - returns NEW Pile."""
         filtered_items = [item for item in self if func(item)]
 
-        # Return NEW Pile with filtered items
-        new_pile = Pile(
+        return Pile(
             items=filtered_items,
             item_type=self.item_type,
             strict_type=self.strict_type,
         )
-        return new_pile
 
-    @synchronized
     def filter_by_type(self, item_type: type[T] | set[type] | list[type]) -> Pile[T]:
         """Filter by type(s), returns new Pile.
 
@@ -525,24 +516,18 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
                             f"Type {t} not compatible with allowed types {self.item_type}"
                         )
 
-        # Filter items by type(s)
-        filtered_items = [
-            item
-            for item in self._items.values()
-            if any(isinstance(item, t) for t in types_to_filter)
-        ]
+        # Filter items by type(s) - iterate over self to reuse synchronized iterator
+        filtered_items = [item for item in self if any(isinstance(item, t) for t in types_to_filter)]
 
         # Check if any items found
         if not filtered_items:
             raise NotFoundError(f"No items of type(s) {types_to_filter} found in pile")
 
-        # Return NEW Pile with filtered items
-        new_pile = Pile(
+        return Pile(
             items=filtered_items,
             item_type=self.item_type,
             strict_type=self.strict_type,
         )
-        return new_pile
 
     # ==================== Context Managers ====================
 
@@ -555,48 +540,13 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Release lock for async context manager."""
         self._async_lock.release()
 
-    # ==================== Async Operations ====================
-
-    @async_synchronized
-    async def add_async(self, item: T) -> None:
-        """Async version of add()."""
-        self._validate_type(item)
-
-        if item.id in self._items:
-            raise ExistsError(f"Item {item.id} already exists in pile")
-
-        self._items[item.id] = item
-        self._progression.append(item.id)
-
-    @async_synchronized
-    async def remove_async(self, item_id: UUID | str | Element) -> T:
-        """Async version of remove()."""
-
-        uid = Element._coerce_id(item_id)
-        try:
-            item = self._items.pop(uid)
-        except KeyError:
-            raise NotFoundError(f"Item {uid} not found in pile") from None
-        self._progression.remove(uid)
-        return item
-
-    @async_synchronized
-    async def get_async(self, item_id: UUID | str | Element) -> T:
-        """Async version of get()."""
-
-        uid = Element._coerce_id(item_id)
-        try:
-            return self._items[uid]
-        except KeyError:
-            raise NotFoundError(f"Item {uid} not found in pile") from None
-
     # ==================== Query Operations ====================
 
     @synchronized
     def __contains__(self, item: UUID | str | Element) -> bool:
         """Check if item exists in pile."""
         with contextlib.suppress(Exception):
-            uid = Element._coerce_id(item)
+            uid = self._coerce_id(item)
             return uid in self._items
         return False
 
@@ -605,14 +555,16 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Return number of items."""
         return len(self._items)
 
+    def __bool__(self) -> bool:
+        """Return False if pile is empty, True otherwise."""
+        return len(self._items) > 0
+
     @synchronized
     def __iter__(self) -> Iterator[T]:
         """Iterate items in insertion order."""
         for uid in self._progression:
-            if uid in self._items:
-                yield self._items[uid]
+            yield self._items[uid]
 
-    @synchronized
     def keys(self) -> Iterator[UUID]:
         """Iterate over UUIDs in insertion order.
 
@@ -621,38 +573,18 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """
         return iter(self._progression)
 
-    @synchronized
     def items(self) -> Iterator[tuple[UUID, T]]:
         """Iterate over (UUID, item) pairs in insertion order.
 
         Returns:
             Iterator of (UUID, item) tuples in the order items were added.
         """
-        for uid in self._progression:
-            yield (uid, self._items[uid])
+        for i in self:
+            yield (i.id, i)
 
     def __list__(self) -> list[T]:
         """Return items as list in insertion order."""
-        return [self._items[uid] for uid in self._progression if uid in self._items]
-
-    @synchronized
-    def to_list(self) -> list[T]:
-        """Return items as list in insertion order."""
-        return list(self)
-
-    @synchronized
-    def keys(self):
-        """Yield UUIDs of items."""
-        yield from self._items.keys()
-
-    @synchronized
-    def values(self):
-        """Yield items in insertion order."""
-        yield from self
-
-    def size(self) -> int:
-        """Return number of items (alias for __len__)."""
-        return len(self)
+        return [i for i in self]
 
     def is_empty(self) -> bool:
         """Check if pile is empty."""
@@ -799,13 +731,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
                 - False (default): Treat entire Pile as single object (export Pile + all items)
                 - True: Bulk operation on items within Pile (export items individually)
             **kwargs: Passed to adapter
-
-        Returns:
-            Adapted object (format depends on adapter and many mode)
-
-        Note:
-            For many=True, adapter operates on self.items (bulk insert/export items).
-            For many=False, adapter operates on entire Pile (single object serialization).
         """
         kwargs.setdefault("adapt_meth", "to_dict")
         kwargs.setdefault("adapt_kw", {"mode": "db"})
@@ -822,13 +747,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
                 - False (default): Deserialize entire Pile from single object
                 - True: Bulk load items from external source (construct Pile from items)
             **kwargs: Passed to adapter
-
-        Returns:
-            Pile instance
-
-        Note:
-            For many=True, adapter fetches multiple items and constructs Pile.
-            For many=False, adapter deserializes pre-serialized Pile object.
         """
         kwargs.setdefault("adapt_meth", "from_dict")
         return super().adapt_from(obj, obj_key=obj_key, many=many, **kwargs)
@@ -840,9 +758,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             obj_key: Adapter key
             many: Adaptation mode (see adapt_to for details)
             **kwargs: Passed to adapter
-
-        Returns:
-            Adapted object
         """
         kwargs.setdefault("adapt_meth", "to_dict")
         kwargs.setdefault("adapt_kw", {"mode": "db"})
@@ -859,9 +774,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             obj_key: Adapter key
             many: Adaptation mode (see adapt_from for details)
             **kwargs: Passed to adapter
-
-        Returns:
-            Pile instance
         """
         kwargs.setdefault("adapt_meth", "from_dict")
         return await super().adapt_from_async(obj, obj_key=obj_key, many=many, **kwargs)
