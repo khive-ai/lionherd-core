@@ -177,7 +177,7 @@ class TestProgressionValidation:
             UUID strings converted via UUID(str) constructor.
             Invalid UUIDs raise ValueError (fails fast, no partial state).
 
-        Design rationale:
+        Design Intent:
             Permissive input: Simplifies API usage (accept Elements or UUIDs)
             Strict validation: No silent failures, errors propagate
             JSON-friendly: Handles UUID string deserialization from to_dict/from_dict
@@ -222,7 +222,7 @@ class TestProgressionValidation:
         Expected:
             order=[] (empty list)
 
-        Design Rationale:
+        Design Intent:
             Ergonomics: Simplifies empty progression creation
             Consistency: None and omitted parameter both → []
         """
@@ -277,7 +277,7 @@ class TestProgressionValidation:
         Expected:
             All three result in order=[] (canonical empty state)
 
-        Design Rationale:
+        Design Intent:
             Flexibility: Accept diverse empty representations
             Normalization: Single internal representation (empty list)
             Ergonomics: All patterns produce same result (no surprises)
@@ -1206,7 +1206,7 @@ class TestProgressionEdgeCases:
         pop(out_of_bounds): Raises IndexError
         Rationale: Fail fast, clear error messages, no silent failures
 
-    Design Rationale:
+    Design Intent:
         Empty as valid state: Simplifies initialization, no special cases
         Duplicates allowed: Flexibility for workflow modeling (vs set semantics)
         Negative indices: Pythonic, common pattern for end-relative access

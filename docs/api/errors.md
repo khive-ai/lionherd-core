@@ -143,6 +143,20 @@ except KeyError as e:
         f"Item {uuid} not found in pile",
         details={"uuid": str(uuid)}
     ) from e
+
+# Progression: pop() raises NotFoundError (not IndexError)
+from lionherd_core.base import Progression
+
+prog = Progression(order=[uuid4(), uuid4()])
+
+try:
+    task = prog.pop(10)  # Index out of range
+except NotFoundError as e:
+    print(f"Index not found: {e}")
+    # Error details: {"index": 10, "length": 2}
+
+# Safe fallback with default parameter
+task = prog.pop(10, default=None)  # Returns None, no exception
 ```
 
 **Migration from ValueError:**
@@ -160,6 +174,27 @@ except KeyError as e:
         f"Item {uuid} not found",
         details={"uuid": str(uuid)}
     ) from e
+```
+
+**Migration from IndexError (Progression):**
+
+```python
+# Before (v1.0.0-alpha3 and earlier):
+try:
+    task = progression.pop(index)
+except IndexError:  # Standard Python exception
+    handle_missing()
+
+# After (v1.0.0-alpha4+):
+try:
+    task = progression.pop(index)
+except NotFoundError:  # Semantic exception
+    handle_missing()
+
+# Or use safe fallback (recommended):
+task = progression.pop(index, default=None)
+if task is None:
+    handle_missing()
 ```
 
 ---

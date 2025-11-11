@@ -218,30 +218,38 @@ prog.remove(uid)
 
 #### `pop()`
 
-Remove and return item at index (default: last item).
+Remove and return item at index (default: last item). Optionally provide a default value for safe fallback.
 
 **Signature:**
 
 ```python
-def pop(self, index: int = -1) -> UUID
+def pop(self, index: int = -1, default: Any = ...) -> UUID | Any
 ```
 
 **Parameters:**
 
 - `index` (int, optional): Position to pop from. Default: `-1` (last item)
+- `default` (Any, optional): Value to return if index not found. If not provided, raises `NotFoundError`
 
 **Raises:**
 
-- `IndexError`: If progression is empty
+- `NotFoundError`: If progression is empty or index out of range **and no default provided**
 
-**Returns:** UUID - Removed item
+**Returns:** UUID | Any - Removed item, or default value if index not found
 
 **Example:**
 
 ```python
 prog = Progression(order=[uuid4(), uuid4()])
-last = prog.pop()
-first = prog.pop(0)
+last = prog.pop()           # Remove last item
+first = prog.pop(0)          # Remove first item
+
+# Safe fallback with default
+task = prog.pop(default=None)  # Returns None if empty, no exception
+
+# Production pattern: safe queue processing
+while (task := prog.pop(default=None)) is not None:
+    process(task)
 ```
 
 **Time Complexity:** O(1) for pop(), O(n) for pop(0) due to list shift
@@ -258,7 +266,7 @@ def popleft(self) -> UUID
 
 **Raises:**
 
-- `IndexError`: If progression is empty
+- `NotFoundError`: If progression is empty
 
 **Returns:** UUID - First item
 
@@ -543,7 +551,7 @@ def __getitem__(self, index: int | slice) -> UUID | list[UUID]
 
 **Raises:**
 
-- `IndexError`: If index out of range
+- `IndexError`: If index out of range (standard list behavior)
 
 **Returns:** UUID (for int) or list[UUID] (for slice)
 
@@ -574,7 +582,7 @@ def __setitem__(self, index: int | slice, value: UUID | Element | list) -> None
 
 **Raises:**
 
-- `IndexError`: If index out of range
+- `IndexError`: If index out of range (standard list behavior)
 - `TypeError`: If assigning non-list to slice
 
 **Returns:** None (modifies in place)
