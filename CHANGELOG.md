@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Error Handling**: `Graph` and `Flow` now raise `NotFoundError` and
+  `ExistsError` instead of `ValueError` for missing/duplicate items (#117).
+  Exception metadata (`.details`, `.retryable`, `.__cause__`) is now preserved
+  for retry logic. Update exception handlers from `except ValueError` to
+  `except NotFoundError` or `except ExistsError` as appropriate.
+
 ### Fixed
 
 - **BREAKING**: `Element.to_dict()` `created_at_format` now applies to ALL modes
