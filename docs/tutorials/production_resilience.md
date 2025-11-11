@@ -1,6 +1,6 @@
 # Tutorial: Production-Resilient Systems with Concurrency Primitives
 
-**Time**: 20 min | **Difficulty**: 🟣 Advanced
+**Time**: 25 min | **Difficulty**: 🟠 Advanced
 
 Build production-grade systems with automatic retries, timeouts, error handling, and resource limits using lionherd-core's concurrency primitives.
 
@@ -99,7 +99,7 @@ async def fetch_all_items(item_ids: list[str]) -> list[DataItem]:
         item_ids,
         fetch_with_retry,
         max_concurrent=10,  # Max 10 concurrent API calls
-        timeout=20.0,       # 20s total timeout per item (includes retries)
+        retry_timeout=20.0,       # 20s total timeout per item (includes retries)
         return_exceptions=True  # Don't fail entire batch on errors
     )
 
@@ -139,7 +139,7 @@ async def process_all_items(items: list[DataItem]) -> list[ProcessedItem]:
         items,
         process_item,
         max_concurrent=20,  # Can process more than DB connections
-        timeout=10.0,
+        retry_timeout=10.0,
         return_exceptions=True
     )
 
@@ -318,7 +318,7 @@ async def pipeline_with_deadline(item_ids: list[str], deadline_sec: float):
     processed = await alcall(
         fetched,
         process_item,
-        timeout=remaining * 0.8,  # Leave 20% buffer for storage
+        retry_timeout=remaining * 0.8,  # Leave 20% buffer for storage
         return_exceptions=True
     )
 
