@@ -3,7 +3,10 @@
 
 __version__ = "1.0.0-alpha4"  # pragma: no cover
 
-from . import ln as ln
+from . import (
+    ln as ln,
+    lndl as lndl,
+)
 from .base import (
     Broadcaster,
     Edge,
@@ -80,6 +83,7 @@ __all__ = (
     "concurrency",
     "is_sentinel",
     "ln",
+    "lndl",
     "not_sentinel",
     "schema_handlers",
     "string_handlers",
