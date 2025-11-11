@@ -46,9 +46,7 @@ class Progression(Element):
         """
         # Convert Elements to UUIDs
         if order:
-            from ._utils import to_uuid
-
-            order = [to_uuid(item) for item in order]
+            order = [Element._coerce_id(item) for item in order]
 
         # Pass all field values through **kwargs to satisfy mypy
         super().__init__(**{"name": name, "order": order or [], **data})
@@ -60,38 +58,30 @@ class Progression(Element):
         if value is None:
             return []
 
-        from ._utils import to_uuid
-
         if not isinstance(value, list):
             value = [value]
 
         result = []
         for item in value:
             with contextlib.suppress(Exception):
-                result.append(to_uuid(item))
+                result.append(cls._coerce_id(item))
         return result
 
     # ==================== Core Operations ====================
 
     def append(self, item_id: UUID | Element) -> None:
         """Add item to end of progression."""
-        from ._utils import to_uuid
-
-        uid = to_uuid(item_id)
+        uid = self._coerce_id(item_id)
         self.order.append(uid)
 
     def insert(self, index: int, item_id: UUID | Element) -> None:
         """Insert item at specific position."""
-        from ._utils import to_uuid
-
-        uid = to_uuid(item_id)
+        uid = self._coerce_id(item_id)
         self.order.insert(index, uid)
 
     def remove(self, item_id: UUID | Element) -> None:
         """Remove first occurrence of item from progression."""
-        from ._utils import to_uuid
-
-        uid = to_uuid(item_id)
+        uid = self._coerce_id(item_id)
         self.order.remove(uid)
 
     def pop(self, index: int = -1, default: Any = ...) -> UUID | Any:
@@ -133,18 +123,14 @@ class Progression(Element):
 
     def extend(self, items: list[UUID | Element]) -> None:
         """Extend with multiple items (batch operation)."""
-        from ._utils import to_uuid
-
-        self.order.extend(to_uuid(item) for item in items)
+        self.order.extend(self._coerce_id(item) for item in items)
 
     # ==================== Query Operations ====================
 
     def __contains__(self, item: UUID | Element) -> bool:
         """Check if item is in progression."""
-        from ._utils import to_uuid
-
         with contextlib.suppress(Exception):
-            uid = to_uuid(item)
+            uid = self._coerce_id(item)
             return uid in self.order
         return False
 
@@ -172,21 +158,17 @@ class Progression(Element):
 
     def __setitem__(self, index: int | slice, value: UUID | Element | list) -> None:
         """Set item(s) at index."""
-        from ._utils import to_uuid
-
         if isinstance(index, slice):
             # Type guard: ensure value is a list when using slice
             if not isinstance(value, list):
                 raise TypeError(f"Cannot assign {type(value).__name__} to slice, expected list")
-            self.order[index] = [to_uuid(v) for v in value]
+            self.order[index] = [self._coerce_id(v) for v in value]
         else:
-            self.order[index] = to_uuid(value)
+            self.order[index] = self._coerce_id(value)
 
     def index(self, item_id: UUID | Element) -> int:
         """Get index of item in progression."""
-        from ._utils import to_uuid
-
-        uid = to_uuid(item_id)
+        uid = self._coerce_id(item_id)
         return self.order.index(uid)
 
     def __reversed__(self):
@@ -271,9 +253,7 @@ class Progression(Element):
         Returns:
             True if added, False if already present
         """
-        from ._utils import to_uuid
-
-        uid = to_uuid(item)
+        uid = self._coerce_id(item)
         if uid not in self.order:
             self.order.append(uid)
             return True
@@ -285,9 +265,7 @@ class Progression(Element):
         Returns:
             True if removed, False if not present
         """
-        from ._utils import to_uuid
-
-        uid = to_uuid(item)
+        uid = self._coerce_id(item)
         if uid in self.order:
             self.order.remove(uid)
             return True
