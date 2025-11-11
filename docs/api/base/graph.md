@@ -261,35 +261,6 @@ print(f"Removed node with {len(removed_edges)} connected edges")
 
 ---
 
-#### `get_node()`
-
-Get node by UUID.
-
-**Signature:**
-
-```python
-def get_node(self, node_id: UUID | Node) -> Node
-```
-
-**Parameters:**
-
-- `node_id` (UUID | Node): Node UUID or Node instance
-
-**Returns:** Node instance
-
-**Raises:** ValueError if node not found
-
-**Time Complexity:** O(1)
-
-**Example:**
-
-```python
-node = graph.get_node(node_uuid)
-print(node.content)
-```
-
----
-
 ### Edge Operations
 
 #### `add_edge()`
@@ -354,35 +325,6 @@ def remove_edge(self, edge_id: UUID | Edge) -> Edge
 ```python
 removed_edge = graph.remove_edge(edge_id)
 print(f"Removed edge: {removed_edge.head} → {removed_edge.tail}")
-```
-
----
-
-#### `get_edge()`
-
-Get edge by UUID.
-
-**Signature:**
-
-```python
-def get_edge(self, edge_id: UUID | Edge) -> Edge
-```
-
-**Parameters:**
-
-- `edge_id` (UUID | Edge): Edge UUID or Edge instance
-
-**Returns:** Edge instance
-
-**Raises:** ValueError if edge not found
-
-**Time Complexity:** O(1)
-
-**Example:**
-
-```python
-edge = graph.get_edge(edge_uuid)
-print(edge.label)
 ```
 
 ---
@@ -1305,7 +1247,7 @@ transitions = workflow.get_node_edges(nodes[current], direction="out")
 
 print(f"From '{current}', can:")
 for edge in transitions:
-    target_node = workflow.get_node(edge.tail)
+    target_node = workflow.nodes[edge.tail]
     action = edge.label[0]
     print(f"  {action} → {target_node.content['status']}")
 ```
@@ -1388,7 +1330,7 @@ if path:
     print(f"Shortest path from {start} to {end}:")
     current = start
     for edge in path:
-        next_city = network.get_node(edge.tail).content["city"]
+        next_city = network.nodes[edge.tail].content["city"]
         print(f"  {current} → {next_city}")
         current = next_city
     print(f"Total hops: {len(path)}")
@@ -1413,10 +1355,11 @@ else:
 
 **Core Operations**:
 
-- `add_node()`, `remove_node()`, `get_node()` - O(1) / O(d)
-- `add_edge()`, `remove_edge()`, `get_edge()` - O(1)
+- `add_node()`, `remove_node()` - O(1) / O(d)
+- `add_edge()`, `remove_edge()` - O(1)
 - `get_predecessors()`, `get_successors()` - O(k) where k = degree
 - `get_heads()`, `get_tails()` - O(V)
+- Direct pile access: `graph.nodes[id]`, `graph.edges[id]` - O(1)
 
 **Algorithms**:
 

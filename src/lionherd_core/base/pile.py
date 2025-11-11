@@ -16,6 +16,7 @@ from pydapter import (
 )
 from typing_extensions import override
 
+from ..errors import ExistsError, NotFoundError
 from ..libs.concurrency import Lock as AsyncLock
 from ..protocols import (
     Adaptable,
@@ -148,7 +149,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             # Validate that all UUIDs in order are in items
             for uid in order_list:
                 if uid not in self._items:
-                    raise ValueError(f"UUID {uid} in order not found in items")
+                    raise NotFoundError(f"UUID {uid} in order not found in items")
             # Set progression order
             self._progression = Progression(order=order_list)
 
@@ -234,12 +235,13 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             item: Element to add
 
         Raises:
-            ValueError: If item already exists or type validation fails
+            ExistsError: If item with same ID already exists
+            TypeError: If item type not allowed (when item_type set)
         """
         self._validate_type(item)
 
         if item.id in self._items:
-            raise ValueError(f"Item {item.id} already exists in pile")
+            raise ExistsError(f"Item {item.id} already exists in pile")
 
         self._items[item.id] = item
         self._progression.append(item.id)
@@ -255,21 +257,43 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             Removed item
 
         Raises:
-            ValueError: If item not found
+            NotFoundError: If item not found
         """
 
         uid = to_uuid(item_id)
 
-        if uid not in self._items:
-            raise ValueError(f"Item {uid} not found in pile")
+        try:
+            item = self._items.pop(uid)
+        except KeyError:
+            raise NotFoundError(f"Item {uid} not found in pile") from None
 
-        item = self._items.pop(uid)
         self._progression.remove(uid)
         return item
 
-    def pop(self, item_id: UUID | str | Element) -> T:
-        """Alias for remove() - pop item from pile."""
-        return self.remove(item_id)
+    @synchronized
+    def pop(self, item_id: UUID | str | Element, default: Any = ...) -> T | Any:
+        """Remove and return item from pile with optional default.
+
+        Args:
+            item_id: Item ID or Element instance
+            default: Default value if not found (default: raise NotFoundError)
+
+        Returns:
+            Removed item or default
+
+        Raises:
+            NotFoundError: If item not found and no default provided
+        """
+        uid = to_uuid(item_id)
+
+        try:
+            item = self._items.pop(uid)
+            self._progression.remove(uid)
+            return item
+        except KeyError:
+            if default is ...:
+                raise NotFoundError(f"Item {uid} not found in pile") from None
+            return default
 
     @synchronized
     def get(self, item_id: UUID | str | Element, default: Any = ...) -> T | Any:
@@ -283,17 +307,17 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             Item or default
 
         Raises:
-            ValueError: If item not found and no default
+            NotFoundError: If item not found and no default
         """
 
         uid = to_uuid(item_id)
 
-        if uid not in self._items:
+        try:
+            return self._items[uid]
+        except KeyError:
             if default is ...:
-                raise ValueError(f"Item {uid} not found in pile")
+                raise NotFoundError(f"Item {uid} not found in pile") from None
             return default
-
-        return self._items[uid]
 
     @synchronized
     def update(self, item: T) -> None:
@@ -303,12 +327,13 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
             item: Updated item (must have same ID)
 
         Raises:
-            ValueError: If item not found or type validation fails
+            NotFoundError: If item not found
+            TypeError: If item type not allowed (when item_type set)
         """
         self._validate_type(item)
 
         if item.id not in self._items:
-            raise ValueError(f"Item {item.id} not found in pile")
+            raise NotFoundError(f"Item {item.id} not found in pile")
 
         self._items[item.id] = item
 
@@ -382,7 +407,8 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         Raises:
             TypeError: If key type is not supported
-            ValueError: If item not found
+            NotFoundError: If item not found (UUID/str access)
+            ValueError: If no items match filter or slice is empty
         """
         # Type 1: UUID/str - Get by ID
         if isinstance(key, (UUID, str)):
@@ -500,7 +526,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         # Check if any items found
         if not filtered_items:
-            raise ValueError(f"No items of type(s) {types_to_filter} found in pile")
+            raise NotFoundError(f"No items of type(s) {types_to_filter} found in pile")
 
         # Return NEW Pile with filtered items
         new_pile = Pile(
@@ -529,7 +555,7 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         self._validate_type(item)
 
         if item.id in self._items:
-            raise ValueError(f"Item {item.id} already exists in pile")
+            raise ExistsError(f"Item {item.id} already exists in pile")
 
         self._items[item.id] = item
         self._progression.append(item.id)
@@ -539,11 +565,10 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Async version of remove()."""
 
         uid = to_uuid(item_id)
-
-        if uid not in self._items:
-            raise ValueError(f"Item {uid} not found in pile")
-
-        item = self._items.pop(uid)
+        try:
+            item = self._items.pop(uid)
+        except KeyError:
+            raise NotFoundError(f"Item {uid} not found in pile") from None
         self._progression.remove(uid)
         return item
 
@@ -552,11 +577,10 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Async version of get()."""
 
         uid = to_uuid(item_id)
-
-        if uid not in self._items:
-            raise ValueError(f"Item {uid} not found in pile")
-
-        return self._items[uid]
+        try:
+            return self._items[uid]
+        except KeyError:
+            raise NotFoundError(f"Item {uid} not found in pile") from None
 
     # ==================== Query Operations ====================
 

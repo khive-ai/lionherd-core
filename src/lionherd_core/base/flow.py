@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import Field, PrivateAttr, field_validator
 
+from ..errors import ExistsError, NotFoundError
 from ..protocols import Serializable, implements
 from ._utils import extract_types, synchronized
 from .element import Element
@@ -66,6 +67,50 @@ class Flow(Element, Generic[E, P]):
             if progression.name:
                 self._progression_names[progression.name] = progression.id
 
+    def _check_item_exists(self, item_id: UUID) -> E:
+        """Verify item exists, re-raising NotFoundError with flow context.
+
+        Args:
+            item_id: Item UUID to check
+
+        Returns:
+            Item if found
+
+        Raises:
+            NotFoundError: With flow context and preserved metadata
+        """
+        try:
+            return self.items[item_id]
+        except NotFoundError as e:
+            raise NotFoundError(
+                f"Item {item_id} not found in flow",
+                details=e.details,
+                retryable=e.retryable,
+                cause=e,
+            )
+
+    def _check_progression_exists(self, progression_id: UUID) -> P:
+        """Verify progression exists, re-raising NotFoundError with flow context.
+
+        Args:
+            progression_id: Progression UUID to check
+
+        Returns:
+            Progression if found
+
+        Raises:
+            NotFoundError: With flow context and preserved metadata
+        """
+        try:
+            return self.progressions[progression_id]
+        except NotFoundError as e:
+            raise NotFoundError(
+                f"Progression {progression_id} not found in flow",
+                details=e.details,
+                retryable=e.retryable,
+                cause=e,
+            )
+
     def __init__(
         self,
         items: list[E] | None = None,
@@ -105,10 +150,10 @@ class Flow(Element, Generic[E, P]):
 
     @synchronized
     def add_progression(self, progression: P) -> None:
-        """Add progression with name registration. Raises ValueError if UUID or name exists."""
+        """Add progression with name registration. Raises ExistsError if UUID or name exists."""
         # Check name uniqueness
         if progression.name and progression.name in self._progression_names:
-            raise ValueError(
+            raise ExistsError(
                 f"Progression with name '{progression.name}' already exists. Names must be unique."
             )
 
@@ -121,18 +166,18 @@ class Flow(Element, Generic[E, P]):
 
     @synchronized
     def remove_progression(self, progression_id: UUID | str | P) -> P:
-        """Remove progression by UUID or name. Raises ValueError if not found."""
+        """Remove progression by UUID or name. Raises NotFoundError if not found."""
         # Resolve name to UUID if needed
         if isinstance(progression_id, str) and progression_id in self._progression_names:
             uid = self._progression_names[progression_id]
             del self._progression_names[progression_id]
+            # Use helper to verify and remove (not catching - let NotFoundError bubble with context)
+            prog = self._check_progression_exists(uid)
             return self.progressions.remove(uid)
 
         # Convert to UUID for type-safe removal
-        from ._utils import to_uuid
-
-        uid = to_uuid(progression_id)
-        prog: P = self.progressions[uid]
+        uid = self._coerce_id(progression_id)
+        prog = self._check_progression_exists(uid)
 
         if prog.name and prog.name in self._progression_names:
             del self._progression_names[prog.name]
@@ -148,10 +193,8 @@ class Flow(Element, Generic[E, P]):
                 return self.progressions[uid]
 
             # Try parsing as UUID string
-            from ._utils import to_uuid
-
             try:
-                uid = to_uuid(key)
+                uid = self._coerce_id(key)
                 return self.progressions[uid]
             except (ValueError, TypeError):
                 raise KeyError(f"Progression '{key}' not found in flow")
@@ -166,8 +209,8 @@ class Flow(Element, Generic[E, P]):
         item: E,
         progression_ids: list[UUID | str] | UUID | str | None = None,
     ) -> None:
-        """Add item to items pile and optionally to progressions. Raises ValueError if exists."""
-        # Add to items pile
+        """Add item to items pile and optionally to progressions. Raises ExistsError if exists."""
+        # Add to items pile (let ExistsError bubble)
         self.items.add(item)
 
         # Add to specified progressions
@@ -184,10 +227,11 @@ class Flow(Element, Generic[E, P]):
         item_id: UUID | str | Element,
         remove_from_progressions: bool = True,
     ) -> E:
-        """Remove item from items pile and optionally from progressions. Raises ValueError if not found."""
-        from ._utils import to_uuid
+        """Remove item from items pile and optionally from progressions. Raises NotFoundError if not found."""
+        uid = self._coerce_id(item_id)
 
-        uid = to_uuid(item_id)
+        # Verify item exists first
+        self._check_item_exists(uid)
 
         # Remove from progressions first
         if remove_from_progressions:

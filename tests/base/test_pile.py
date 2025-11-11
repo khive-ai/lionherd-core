@@ -130,6 +130,7 @@ from uuid import UUID
 import pytest
 
 from lionherd_core.base import Element, Pile, Progression
+from lionherd_core.errors import ExistsError, NotFoundError
 from lionherd_core.libs.concurrency import gather
 
 # =============================================================================
@@ -242,7 +243,7 @@ def test_pile_order_validation_invalid_uuid(simple_items):
     from uuid import uuid4
 
     invalid_order = [uuid4()]  # UUID not in items
-    with pytest.raises(ValueError, match=r"UUID .* not found in items"):
+    with pytest.raises(NotFoundError, match=r"UUID .* not found in items"):
         Pile(items=simple_items, order=invalid_order)
 
 
@@ -278,12 +279,12 @@ def test_add_item():
 
 
 def test_add_duplicate_raises_error():
-    """Test adding duplicate item raises ValueError."""
+    """Test adding duplicate item raises ExistsError."""
     pile = Pile()
     item = SimpleElement(value=42)
 
     pile.add(item)
-    with pytest.raises(ValueError, match="already exists"):
+    with pytest.raises(ExistsError, match="already exists"):
         pile.add(item)
 
 
@@ -341,11 +342,11 @@ def test_remove_by_element():
 
 
 def test_remove_nonexistent_raises_error():
-    """Test removing nonexistent item raises ValueError."""
+    """Test removing nonexistent item raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         pile.remove(uuid4())
 
 
@@ -357,6 +358,50 @@ def test_pop_alias():
 
     popped = pile.pop(item.id)
     assert popped == item
+    assert len(pile) == 0
+
+
+def test_pop_without_default_not_found():
+    """Test pop() raises NotFoundError when item not found and no default."""
+    from uuid import uuid4
+
+    pile = Pile()
+
+    with pytest.raises(NotFoundError, match="not found in pile"):
+        pile.pop(uuid4())
+
+
+def test_pop_with_default_none():
+    """Test pop() returns None when item not found with default=None."""
+    from uuid import uuid4
+
+    pile = Pile()
+    result = pile.pop(uuid4(), default=None)
+    assert result is None
+
+
+def test_pop_with_custom_default():
+    """Test pop() returns custom default when item not found."""
+    from uuid import uuid4
+
+    pile = Pile()
+    default_item = SimpleElement(value=999)
+
+    result = pile.pop(uuid4(), default=default_item)
+    assert result == default_item
+
+
+def test_pop_with_default_when_exists():
+    """Test pop() returns and removes item when it exists, ignoring default."""
+    pile = Pile()
+    item = SimpleElement(value=42)
+    pile.add(item)
+
+    default_item = SimpleElement(value=999)
+    popped = pile.pop(item.id, default=default_item)
+
+    assert popped == item
+    assert popped != default_item
     assert len(pile) == 0
 
 
@@ -382,11 +427,11 @@ def test_get_with_default():
 
 
 def test_get_nonexistent_raises_error():
-    """Test get without default raises ValueError."""
+    """Test get without default raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         pile.get(uuid4())
 
 
@@ -405,11 +450,11 @@ def test_update_item():
 
 
 def test_update_nonexistent_raises_error():
-    """Test updating nonexistent item raises ValueError."""
+    """Test updating nonexistent item raises NotFoundError."""
     pile = Pile()
     item = SimpleElement(value=42)
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         pile.update(item)
 
 
@@ -699,10 +744,10 @@ def test_filter_by_type_with_strict_validation():
 
 
 def test_filter_by_type_no_matches():
-    """Test filter_by_type raises ValueError when no matches."""
+    """Test filter_by_type raises NotFoundError when no matches."""
     pile = Pile(items=[SimpleElement(value=1)])
 
-    with pytest.raises(ValueError, match="No items of type"):
+    with pytest.raises(NotFoundError, match="No items of type"):
         pile.filter_by_type(TypedElement)
 
 
@@ -733,12 +778,12 @@ async def test_add_async():
 
 @pytest.mark.asyncio
 async def test_add_async_duplicate_raises_error():
-    """Test async add of duplicate raises ValueError."""
+    """Test async add of duplicate raises ExistsError."""
     pile = Pile()
     item = SimpleElement(value=42)
 
     await pile.add_async(item)
-    with pytest.raises(ValueError, match="already exists"):
+    with pytest.raises(ExistsError, match="already exists"):
         await pile.add_async(item)
 
 
@@ -756,11 +801,11 @@ async def test_remove_async():
 
 @pytest.mark.asyncio
 async def test_remove_async_nonexistent_raises_error():
-    """Test async remove of nonexistent item raises ValueError."""
+    """Test async remove of nonexistent item raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         await pile.remove_async(uuid4())
 
 
@@ -777,11 +822,11 @@ async def test_get_async():
 
 @pytest.mark.asyncio
 async def test_get_async_nonexistent_raises_error():
-    """Test async get of nonexistent item raises ValueError."""
+    """Test async get of nonexistent item raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(NotFoundError, match="not found"):
         await pile.get_async(uuid4())
 
 
@@ -815,6 +860,86 @@ async def test_concurrent_async_operations():
     results = await gather(*[pile.get_async(item.id) for item in items])
     assert len(results) == 10
     assert all(r in items for r in results)
+
+
+# =============================================================================
+# Pile Error Handling Tests (Traceback Suppression)
+# =============================================================================
+
+
+def test_remove_suppresses_keyerror():
+    """Verify Pile.remove uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        pile.remove(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        # Should NOT contain KeyError or "During handling" context
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+def test_get_suppresses_keyerror():
+    """Verify Pile.get uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        pile.get(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+@pytest.mark.asyncio
+async def test_remove_async_suppresses_keyerror():
+    """Verify Pile.remove_async uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        await pile.remove_async(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
+
+
+@pytest.mark.asyncio
+async def test_get_async_suppresses_keyerror():
+    """Verify Pile.get_async uses 'from None' to suppress KeyError traceback."""
+    import traceback
+    from uuid import uuid4
+
+    pile = Pile()
+    fake_id = uuid4()
+
+    try:
+        await pile.get_async(fake_id)
+    except NotFoundError as e:
+        tb = traceback.format_exception(type(e), e, e.__traceback__)
+        tb_str = "".join(tb)
+
+        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
+        assert "During handling" not in tb_str, "Exception context should be suppressed"
 
 
 # =============================================================================
