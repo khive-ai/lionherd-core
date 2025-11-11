@@ -489,44 +489,44 @@ def test_clear():
 
 
 def test_include_new_item():
-    """Test include adds new item."""
+    """Test include adds new item and returns True (membership guaranteed)."""
     pile = Pile()
     item = SimpleElement(value=42)
 
     result = pile.include(item)
-    assert result is True
+    assert result is True  # Membership guaranteed
     assert item.id in pile
 
 
 def test_include_existing_item():
-    """Test include is idempotent."""
+    """Test include is idempotent - returns True even if already present."""
     pile = Pile()
     item = SimpleElement(value=42)
     pile.add(item)
 
     result = pile.include(item)
-    assert result is False
-    assert len(pile) == 1
+    assert result is True  # Still returns True (membership guaranteed)
+    assert len(pile) == 1  # Not duplicated
 
 
 def test_exclude_existing_item():
-    """Test exclude removes item."""
+    """Test exclude removes item and returns True (absence guaranteed)."""
     pile = Pile()
     item = SimpleElement(value=42)
     pile.add(item)
 
     result = pile.exclude(item.id)
-    assert result is True
+    assert result is True  # Absence guaranteed
     assert item.id not in pile
 
 
 def test_exclude_nonexistent_item():
-    """Test exclude is idempotent."""
+    """Test exclude is idempotent - returns True even if not present."""
     from uuid import uuid4
 
     pile = Pile()
     result = pile.exclude(uuid4())
-    assert result is False
+    assert result is True  # Returns True (absence guaranteed)
 
 
 def test_exclude_by_element():
@@ -538,6 +538,29 @@ def test_exclude_by_element():
     result = pile.exclude(item)
     assert result is True
     assert len(pile) == 0
+
+
+def test_include_validation_failure():
+    """Test include returns False on validation failure."""
+    pile = Pile(item_type=SimpleElement, strict_type=True)
+
+    # Create incompatible item (different type)
+    class OtherElement(Element):
+        pass
+
+    item = OtherElement()
+    result = pile.include(item)
+    assert result is False  # Validation failed
+    assert len(pile) == 0  # Item not added
+
+
+def test_exclude_invalid_id():
+    """Test exclude returns False on ID coercion failure."""
+    pile = Pile()
+
+    # Invalid ID that cannot be coerced
+    result = pile.exclude(12345)  # Not a valid UUID/str/Element
+    assert result is False  # ID coercion failed
 
 
 # =============================================================================
@@ -766,68 +789,77 @@ def test_filter_by_type_strict_mode_invalid_types():
 
 
 @pytest.mark.asyncio
-async def test_add_async():
-    """Test async add operation."""
+async def test_async_add():
+    """Test async add operation using context manager."""
     pile = Pile()
     item = SimpleElement(value=42)
 
-    await pile.add_async(item)
+    async with pile:
+        pile.add(item)
+
     assert len(pile) == 1
     assert item.id in pile
 
 
 @pytest.mark.asyncio
-async def test_add_async_duplicate_raises_error():
+async def test_async_add_duplicate_raises_error():
     """Test async add of duplicate raises ExistsError."""
     pile = Pile()
     item = SimpleElement(value=42)
 
-    await pile.add_async(item)
-    with pytest.raises(ExistsError, match="already exists"):
-        await pile.add_async(item)
+    async with pile:
+        pile.add(item)
+        with pytest.raises(ExistsError, match="already exists"):
+            pile.add(item)
 
 
 @pytest.mark.asyncio
-async def test_remove_async():
-    """Test async remove operation."""
+async def test_async_remove():
+    """Test async remove operation using context manager."""
     pile = Pile()
     item = SimpleElement(value=42)
-    await pile.add_async(item)
 
-    removed = await pile.remove_async(item.id)
+    async with pile:
+        pile.add(item)
+        removed = pile.remove(item.id)
+
     assert removed == item
     assert len(pile) == 0
 
 
 @pytest.mark.asyncio
-async def test_remove_async_nonexistent_raises_error():
+async def test_async_remove_nonexistent_raises_error():
     """Test async remove of nonexistent item raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(NotFoundError, match="not found"):
-        await pile.remove_async(uuid4())
+    async with pile:
+        with pytest.raises(NotFoundError, match="not found"):
+            pile.remove(uuid4())
 
 
 @pytest.mark.asyncio
-async def test_get_async():
-    """Test async get operation."""
+async def test_async_get():
+    """Test async get operation using context manager."""
     pile = Pile()
     item = SimpleElement(value=42)
-    await pile.add_async(item)
 
-    retrieved = await pile.get_async(item.id)
+    async with pile:
+        pile.add(item)
+        retrieved = pile.get(item.id)
+
     assert retrieved == item
 
 
 @pytest.mark.asyncio
-async def test_get_async_nonexistent_raises_error():
+async def test_async_get_nonexistent_raises_error():
     """Test async get of nonexistent item raises NotFoundError."""
     from uuid import uuid4
 
     pile = Pile()
-    with pytest.raises(NotFoundError, match="not found"):
-        await pile.get_async(uuid4())
+    async with pile:
+        with pytest.raises(NotFoundError, match="not found"):
+            pile.get(uuid4())
 
 
 @pytest.mark.asyncio
@@ -848,16 +880,21 @@ async def test_async_context_manager():
 
 @pytest.mark.asyncio
 async def test_concurrent_async_operations():
-    """Test concurrent async operations using gather."""
+    """Test concurrent async operations using context manager."""
     pile = Pile()
     items = [SimpleElement(value=i) for i in range(10)]
 
-    # Add items concurrently
-    await gather(*[pile.add_async(item) for item in items])
+    # Add items in async context
+    async with pile:
+        for item in items:
+            pile.add(item)
+
     assert len(pile) == 10
 
-    # Get items concurrently
-    results = await gather(*[pile.get_async(item.id) for item in items])
+    # Get items in async context
+    async with pile:
+        results = [pile.get(item.id) for item in items]
+
     assert len(results) == 10
     assert all(r in items for r in results)
 
@@ -896,44 +933,6 @@ def test_get_suppresses_keyerror():
 
     try:
         pile.get(fake_id)
-    except NotFoundError as e:
-        tb = traceback.format_exception(type(e), e, e.__traceback__)
-        tb_str = "".join(tb)
-
-        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
-        assert "During handling" not in tb_str, "Exception context should be suppressed"
-
-
-@pytest.mark.asyncio
-async def test_remove_async_suppresses_keyerror():
-    """Verify Pile.remove_async uses 'from None' to suppress KeyError traceback."""
-    import traceback
-    from uuid import uuid4
-
-    pile = Pile()
-    fake_id = uuid4()
-
-    try:
-        await pile.remove_async(fake_id)
-    except NotFoundError as e:
-        tb = traceback.format_exception(type(e), e, e.__traceback__)
-        tb_str = "".join(tb)
-
-        assert "KeyError" not in tb_str, "KeyError should be suppressed by 'from None'"
-        assert "During handling" not in tb_str, "Exception context should be suppressed"
-
-
-@pytest.mark.asyncio
-async def test_get_async_suppresses_keyerror():
-    """Verify Pile.get_async uses 'from None' to suppress KeyError traceback."""
-    import traceback
-    from uuid import uuid4
-
-    pile = Pile()
-    fake_id = uuid4()
-
-    try:
-        await pile.get_async(fake_id)
     except NotFoundError as e:
         tb = traceback.format_exception(type(e), e, e.__traceback__)
         tb_str = "".join(tb)
@@ -2065,8 +2064,8 @@ def test_list_conversion(simple_items):
     items_list = pile.__list__()
     assert items_list == simple_items
 
-    # to_list()
-    items_list2 = pile.to_list()
+    # list() uses __list__()
+    items_list2 = list(pile)
     assert items_list2 == simple_items
 
 
@@ -2081,27 +2080,30 @@ def test_keys(simple_items):
 
 
 def test_values(simple_items):
-    """Test values() yields items."""
+    """Test __iter__ yields items (values)."""
     pile = Pile(items=simple_items)
-    values_list = list(pile.values())
+    values_list = list(pile)  # __iter__ yields items
 
     assert len(values_list) == 5
     assert values_list == simple_items
 
 
-def test_size(simple_items):
-    """Test size() alias for __len__."""
+def test_len_and_bool(simple_items):
+    """Test __len__ and __bool__."""
     pile = Pile(items=simple_items)
-    assert pile.size() == 5
+    assert len(pile) == 5
+    assert pile  # __bool__ returns True for non-empty pile
 
 
 def test_is_empty():
     """Test is_empty()."""
     pile = Pile()
     assert pile.is_empty()
+    assert not pile  # __bool__ returns False for empty pile
 
     pile.add(SimpleElement(value=42))
     assert not pile.is_empty()
+    assert pile  # __bool__ returns True for non-empty pile
 
     pile.clear()
     assert pile.is_empty()
@@ -2112,19 +2114,36 @@ def test_is_empty():
 # =============================================================================
 
 
-def test_items_property_immutable(simple_items):
-    """Test items property returns immutable view."""
+def test_keys_method(simple_items):
+    """Test keys() method returns UUID iterator."""
     pile = Pile(items=simple_items)
-    items_view = pile.items
+    keys_list = list(pile.keys())
 
-    # Should be MappingProxyType (read-only)
-    from types import MappingProxyType
+    # Should return all UUIDs
+    assert len(keys_list) == len(simple_items)
+    assert all(item.id in keys_list for item in simple_items)
 
-    assert isinstance(items_view, MappingProxyType)
+    # Should be in insertion order
+    expected_order = [item.id for item in simple_items]
+    assert keys_list == expected_order
 
-    # Should not be modifiable
-    with pytest.raises(TypeError):
-        items_view[simple_items[0].id] = SimpleElement(value=999)
+
+def test_items_method(simple_items):
+    """Test items() method returns (UUID, item) iterator."""
+    pile = Pile(items=simple_items)
+    items_list = list(pile.items())
+
+    # Should return all (UUID, item) pairs
+    assert len(items_list) == len(simple_items)
+
+    # Each item should be a tuple
+    for uuid, item in items_list:
+        assert isinstance(uuid, UUID)
+        assert pile[uuid] == item
+
+    # Should be in insertion order
+    expected_order = [(item.id, item) for item in simple_items]
+    assert items_list == expected_order
 
 
 def test_progression_property_copy(simple_items):
@@ -2150,12 +2169,12 @@ def test_empty_pile_operations():
     # Iteration
     assert list(pile) == []
     assert list(pile.keys()) == []
-    assert list(pile.values()) == []
+    assert list(pile.items()) == []
 
     # Size checks
     assert len(pile) == 0
-    assert pile.size() == 0
     assert pile.is_empty()
+    assert not pile  # __bool__ returns False for empty pile
 
     # Clear on empty
     pile.clear()
@@ -2197,12 +2216,15 @@ async def test_async_operations_with_type_validation():
     pile = Pile(item_type=TypedElement)
 
     valid_item = TypedElement(name="valid")
-    await pile.add_async(valid_item)
+    async with pile:
+        pile.add(valid_item)
+
     assert len(pile) == 1
 
     invalid_item = SimpleElement(value=42)
-    with pytest.raises(TypeError, match="not a subclass"):
-        await pile.add_async(invalid_item)
+    async with pile:
+        with pytest.raises(TypeError, match="not a subclass"):
+            pile.add(invalid_item)
 
 
 def test_filter_operations_preserve_config(simple_items):
@@ -2223,3 +2245,56 @@ def test_filter_operations_preserve_config(simple_items):
     filtered2 = pile[prog]
     assert filtered2.item_type == pile.item_type
     assert filtered2.strict_type == pile.strict_type
+
+
+# ==================== Coverage Tests for Missing Lines ====================
+
+
+def test_pile_to_dict_with_name_and_none_meta(simple_items):
+    """Test Pile.to_dict with name and meta_key=None path (line 202)."""
+    pile = Pile[Element](items=simple_items[:2])
+    # Give the progression a name
+    pile._progression.name = "test_pile"
+
+    # Serialize with mode that creates None meta dict
+    result = pile.to_dict(mode="db", meta_key="meta")
+
+    # Should have created meta dict and added progression_name
+    assert "meta" in result
+    assert result["meta"] is not None
+    assert result["meta"]["progression_name"] == "test_pile"
+
+
+def test_pile_getitem_progression_with_missing_uuid(simple_items):
+    """Test pile[progression] raises NotFoundError for missing UUID (line 449)."""
+    from lionherd_core.errors import NotFoundError
+
+    pile = Pile[Element](items=simple_items[:2])
+
+    # Create progression with a UUID not in pile
+    from uuid import uuid4
+
+    missing_uuid = uuid4()
+    prog = Progression(order=[simple_items[0].id, missing_uuid])
+
+    # Should raise NotFoundError
+    with pytest.raises(NotFoundError) as exc_info:
+        _ = pile[prog]
+
+    assert "not found in pile" in str(exc_info.value)
+
+
+def test_pile_from_dict_runtime_extract_types(simple_items):
+    """Test Pile.from_dict with item_type at runtime (line 667)."""
+    # Create a Pile and serialize it
+    pile = Pile[Element](items=simple_items[:2])
+    pile_dict = pile.to_dict()
+
+    # Add item_type as a type object (not string) - forces runtime extract_types path
+    pile_dict["item_type"] = [Element]  # Type object, not string
+
+    # Deserialize - should use extract_types for runtime case
+    restored = Pile.from_dict(pile_dict)
+
+    assert len(restored) == 2
+    assert restored.item_type == {Element}  # extract_types normalizes to set
