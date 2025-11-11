@@ -52,15 +52,6 @@ jobs:
             --max-redirects=5
             --max-retries=3
             --retry-wait-time=5
-            --exclude 'file:///docs/.*'
-            --exclude 'file:///tmp/.*'
-            --exclude 'file:///lndl/.*'
-            --exclude 'file:///references/.*'
-            --exclude 'file:///home/runner/work/lionherd-core/lionherd-core/docs/(user_guide|api/user_guide|api/graph|api/libs/concurrency\.md|api/utils|libs|tutorials|notebooks/references)/.*'
-            --exclude 'file:///home/runner/work/lionherd-core/lionherd-core/user_guide/.*'
-            --exclude 'file:///home/runner/work/lionherd-core/lionherd-core/docs/api/ln/(alcall|rcall)\.md'
-            --exclude 'https://github.com/khive-ai/lionherd-core/discussions'
-            --exclude 'https://www\.ons\.gov\.uk/methodology/methodologicalpublications/.*'
             notebooks/**/*.md
             /tmp/nb-markdown/*.md
             docs/**/*.md
