@@ -225,7 +225,11 @@ def test_flow_validate_piles_converts_dict():
     def mock_handler(v):  # Mock handler that returns input
         return v
 
-    result = Flow._validate_piles(pile_dict, mock_handler)
+    # Mock info object
+    class MockInfo:
+        field_name = "items"
+
+    result = Flow._validate_piles(pile_dict, mock_handler, MockInfo())
     assert isinstance(result, Pile)
 
 
@@ -237,7 +241,11 @@ def test_flow_validate_piles_preserves_pile():
     def mock_handler(v):  # Mock handler that returns input
         return v
 
-    result = Flow._validate_piles(pile, mock_handler)
+    # Mock info object
+    class MockInfo:
+        field_name = "items"
+
+    result = Flow._validate_piles(pile, mock_handler, MockInfo())
     assert result is pile
 
 

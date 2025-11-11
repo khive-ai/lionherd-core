@@ -7,7 +7,7 @@ import threading
 from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import Field, PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from ..errors import ExistsError, NotFoundError
 from ..protocols import Serializable, implements
@@ -52,8 +52,8 @@ class Flow(Element, Generic[E, P]):
 
     def __init__(
         self,
-        items: list[E] | None = None,
-        progressions: list[P] | None = None,
+        items: list[E] | Pile[E] | Element | None = None,
+        progressions: list[P] | Pile[P] | None = None,
         name: str | None = None,
         item_type: type[E] | set[type] | list[type] | None = None,
         strict_type: bool = False,
@@ -61,81 +61,84 @@ class Flow(Element, Generic[E, P]):
     ):
         """Initialize Flow with optional items and type validation.
 
+        Field validator handles dict/list conversion. Model validator validates
+        referential integrity after construction.
+
         Args:
-            items: Initial items to add to items pile
-            progressions: Initial progressions to add
+            items: Initial items (Element, list[Element], Pile, or list[dict])
+            progressions: Initial progressions (Progression, list, Pile, or list[dict])
             name: Flow name
-            item_type: Type(s) for validation
-            strict_type: Enforce exact type match (no subclasses)
+            item_type: Type(s) for validation (passed to items Pile)
+            strict_type: Enforce exact type match (passed to items Pile)
             **data: Additional Element fields
         """
-        # Check if items/progressions are dicts (from deserialization)
-        # Field validator will convert them to Piles
-        if isinstance(items, dict) or isinstance(progressions, dict):
-            # Deserialization path - pass dicts through, field_validator will convert
-            data["items"] = items
-            data["progressions"] = progressions
-            data["name"] = name
-            super().__init__(**data)
-            return
+        # Extract and normalize item_type
+        item_type = extract_types(item_type) if item_type else None
 
-        # Normalize item_type to set and extract types from unions
-        if item_type is not None:
-            item_type = extract_types(item_type)
-
-        # Normalize items input
+        # Handle items - create configured Pile if needed
         if isinstance(items, Pile):
-            # Already a Pile, use directly
-            items_pile = items
-        else:
-            # Create new Pile with validation
-            items_pile = Pile(item_type=item_type, strict_type=strict_type)
-
-            # Normalize items to list
+            data["items"] = items
+        elif isinstance(items, dict):
+            # Dict from deserialization - let field validator handle it
+            data["items"] = items
+        elif items is not None or item_type is not None or strict_type:
+            # Normalize to list
             if isinstance(items, Element):
                 items = [items]
 
-            # Add items to pile
-            if items:
-                for i in items:
-                    items_pile.add(i)
+            # Create Pile with items and type validation (item_type/strict_type are frozen)
+            # Even if items=None, create Pile if item_type/strict_type specified
+            data["items"] = Pile(items=items, item_type=item_type, strict_type=strict_type)
 
-        # Normalize progressions input
-        if isinstance(progressions, Pile):
-            # Already a Pile, use directly
-            progressions_pile = progressions
-        else:
-            # Create new Pile for progressions
-            progressions_pile = Pile[P]()
+        # Handle progressions - let field validator convert dict/list to Pile
+        if progressions is not None:
+            data["progressions"] = progressions
 
-            # Add progressions and validate against items
-            if progressions:
-                for prog in progressions:
-                    # Validate that all UUIDs in progression exist in items
-                    if any(uid not in items_pile for uid in prog):
-                        raise NotFoundError(
-                            f"Progression '{prog.name}' contains UUIDs not in items pile"
-                        )
-                    progressions_pile.add(prog)
+        if name is not None:
+            data["name"] = name
 
-        # Put everything in data and call super once
-        data["items"] = items_pile
-        data["progressions"] = progressions_pile
-        data["name"] = name
         super().__init__(**data)
 
     @field_validator("items", "progressions", mode="wrap")
     @classmethod
-    def _validate_piles(cls, v: Any, handler: Any) -> Any:
-        """Handle Pile and dict inputs - preserve Piles, convert dicts."""
+    def _validate_piles(cls, v: Any, handler: Any, info) -> Any:
+        """Handle Pile, dict, and list inputs - convert to Pile as needed."""
         if isinstance(v, Pile):
             # Already a Pile from __init__, use it directly
             return v
         if isinstance(v, dict):
             # Dict from deserialization, convert to Pile
             return Pile.from_dict(v)
+        if isinstance(v, list):
+            # List input (can be list[Element] or list[dict]), convert to Pile
+            pile = Pile()
+            for item in v:
+                if isinstance(item, dict):
+                    pile.add(Element.from_dict(item))
+                else:
+                    pile.add(item)
+            return pile
         # Let Pydantic handle other cases (default_factory)
         return handler(v)
+
+    @model_validator(mode="after")
+    def _validate_referential_integrity(self) -> Flow:
+        """Validate that all progression UUIDs exist in items pile.
+
+        Runs after model construction (both __init__ and deserialization).
+        Uses set operations for O(1) membership checks.
+        """
+        item_ids = set(self.items.keys())
+
+        # Validate each progression
+        for prog in self.progressions:
+            missing_ids = set(list(prog)) - item_ids
+            if missing_ids:
+                raise NotFoundError(
+                    f"Progression '{prog.name}' contains UUIDs not in items pile: {missing_ids}"
+                )
+
+        return self
 
     def model_post_init(self, __context: Any) -> None:
         """Rebuild _progression_names index after deserialization."""
