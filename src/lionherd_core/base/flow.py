@@ -149,17 +149,7 @@ class Flow(Element, Generic[E, P]):
                 self._progression_names[progression.name] = progression.id
 
     def _check_item_exists(self, item_id: UUID) -> E:
-        """Verify item exists, re-raising NotFoundError with flow context.
-
-        Args:
-            item_id: Item UUID to check
-
-        Returns:
-            Item if found
-
-        Raises:
-            NotFoundError: With flow context and preserved metadata
-        """
+        """Verify item exists, re-raising NotFoundError with flow context."""
         try:
             return self.items[item_id]
         except NotFoundError as e:
@@ -171,17 +161,7 @@ class Flow(Element, Generic[E, P]):
             )
 
     def _check_progression_exists(self, progression_id: UUID) -> P:
-        """Verify progression exists, re-raising NotFoundError with flow context.
-
-        Args:
-            progression_id: Progression UUID to check
-
-        Returns:
-            Progression if found
-
-        Raises:
-            NotFoundError: With flow context and preserved metadata
-        """
+        """Verify progression exists, re-raising NotFoundError with flow context."""
         try:
             return self.progressions[progression_id]
         except NotFoundError as e:
