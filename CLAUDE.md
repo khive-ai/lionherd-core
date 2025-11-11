@@ -1,140 +1,142 @@
-# CLAUDE.md
+# CLAUDE.md - Claude Code Guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides specific guidance for Claude Code (claude.ai/code) when working with this repository.
 
 **Repository**: <https://github.com/khive-ai/lionherd-core>
 **Copyright**: © 2025 HaiyangLi (Ocean) - Apache 2.0 License
 
-## Repository Structure
+---
 
-```text
-lionherd-core/
-├── docs/api/           # Sphinx API reference
-├── notebooks/          # tutorials/ (CI validated), references/ (advanced)
-├── src/lionherd_core/
-│   ├── base/           # Element, Node, Pile, Graph, Flow, Progression
-│   ├── libs/           # concurrency, schema_handlers, string_handlers
-│   ├── lndl/           # parser, resolver, fuzzy (LLM output parsing)
-│   ├── types/          # Spec, Operable (Pydantic integration)
-│   └── protocols.py    # Observable, Serializable, Adaptable
-└── tests/              # 99% coverage, property-based + unit
-```
-
-## Essential Commands
+## Quick Commands Reference
 
 ```bash
 # Setup
 uv sync --all-extras
 uv run pre-commit install
 
-# Testing
-uv run pytest                                              # All tests
-uv run pytest --cov=lionherd_core --cov-report=term-missing  # Coverage (≥80%)
-uv run pytest -m unit                                      # Unit only
-uv run pytest --nbmake notebooks/tutorials/                # Validate notebooks
-
-# Quality
+# Testing & Quality
+uv run pytest --cov=lionherd_core --cov-report=term-missing  # Coverage ≥80%
 uv run ruff format .   # Format (line length: 100)
 uv run ruff check .    # Lint (must pass)
 uv run mypy src/       # Type check (all public functions)
 ```
 
-## Architecture Overview
+---
 
-### Core Philosophy: Protocol-Based Composition
+## Architecture Philosophy
 
-Structural typing (Rust traits, Go interfaces) → loose coupling, no inheritance.
+**Core Principle**: Protocol-based composition over inheritance (Rust traits, Go interfaces).
+
+### Protocol Pattern
 
 ```python
 from uuid import uuid4
 from lionherd_core.protocols import Observable, Serializable, implements
 
-# ❌ Inheritance: Multiple inheritance complexity
-class Agent(Observable, Serializable, Adaptable): pass
+# ❌ WRONG: Inheritance creates tight coupling
+class Agent(Observable, Serializable): pass
 
-# ✅ Protocol: No inheritance, explicit capabilities
+# ✅ CORRECT: Structural typing, explicit capabilities
 @implements(Observable, Serializable)
 class Agent:
     def __init__(self):
-        self.id = uuid4()                # Observable
-    def to_dict(self, **kwargs):         # Serializable
+        self.id = uuid4()                # Observable requirement
+    def to_dict(self, **kwargs):         # Serializable requirement
         return {"id": str(self.id)}
 ```
 
-**Design intent**: `@implements()` declares class implements protocol methods in its body (not via inheritance). Enforces explicit capability declaration.
+**Design Intent**: `@implements()` enforces that the class defines protocol methods in its body, not via inheritance.
 
-### Three-Layer Architecture
+---
+
+## Three-Layer Architecture
 
 ```text
-1. Protocols: Observable, Serializable, Adaptable
-2. Base: Element (UUID+metadata), Node (polymorphic content), Pile[T] (type-safe collections),
-         Graph (directed+conditional edges), Flow (Pile of Progressions), Progression (UUID sequences)
-3. Types: Spec (Pydantic schema), Operable (Spec collection), LNDL Parser (LLM output → Python)
+1. Protocols: Observable, Serializable, Adaptable (structural typing)
+2. Base: Element, Node, Pile[T], Graph, Flow, Progression (core data structures)
+3. Types: Spec, Operable, LNDL Parser (Pydantic integration + LLM output parsing)
 ```
 
-### LNDL (Language InterOperable Network Directive Language)
+---
 
-Fuzzy parser for LLM output → tolerates typos, formatting inconsistencies, missing tags.
+## LNDL Parser
 
-**Syntax**: `<lvar ModelName.field var_name>value</lvar>` | `OUT{result_name: [var1, ...]}`
+**Purpose**: Fuzzy parser for LLM output with high tolerance for errors.
 
-**Workflow**: Define Pydantic model → `Spec(MyModel, name="result")` → `Operable([specs])` → `parse_lndl_fuzzy(llm_response, operable)` → access `result.result_name.field`
+**Trade-off**: +10-50ms overhead, <5% failure rate (vs 40-60% with strict JSON)
 
-**Trade-off**: +10-50ms for <5% failure (vs 40-60% strict JSON). Pipeline: parser.py (tokenize) → resolver.py (map fields) → fuzzy.py (handle variations) → `parse_lndl_fuzzy()` (entry point).
+**Workflow**:
 
-### Key Data Structures
+```python
+# Define Pydantic model
+Spec(MyModel, name="result") → Operable([specs]) → parse_lndl_fuzzy(llm_response, operable)
+```
 
-- **Element**: UUID identity, timestamps, metadata (foundation)
-- **Pile[T]**: Type-safe collection, O(1) lookup (`pile[uuid]`), predicate queries, thread-safe
-- **Graph**: Directed graph, conditional edges, `await find_path()`, storage via `nodes`/`edges` (Piles)
-- **Flow**: Composition pattern (`items` Pile + `progressions` Pile), NOT inheritance
-- **Progression**: Ordered UUID sequence, thread-safe, represents execution order
+**Pipeline**: parser.py (tokenize) → resolver.py (map fields) → fuzzy.py (handle variations)
 
-### Adapter Pattern
+---
 
-Per-class registries (isolated state). **Supported**: Node, Pile, Graph. **NOT**: Element, Flow, Progression, Edge.
+## Key Data Structures
+
+### Node - Polymorphic Content Container
 
 ```python
 from lionherd_core import Node
-from pydapter import Adapter, to_json, to_dict
 
-Node.register_adapter(Adapter(to_json=to_json(), to_dict=to_dict()))
-node = Node(content="x")
-data = node.adapt_to("json")  # Sync
-data = await node.adapt_to_async("postgres")  # Async
+# Node has toml/yaml adapters by default
+node = Node(content={"key": "value"})  # Content must be dict/Serializable/BaseModel
+toml_str = node.adapt_to("toml")  # Works out of the box
+yaml_str = node.adapt_to("yaml")  # Works out of the box
+
+# Subclasses have isolated registries - must register explicitly
+from pydapter.adapters import TomlAdapter
+
+class CustomNode(Node):
+    custom_field: str = "data"
+
+CustomNode.register_adapter(TomlAdapter)  # Required for subclasses
+custom = CustomNode(content={"x": 1})
+custom.adapt_to("toml")  # Now works
 ```
 
-## Important Conventions
+### Pile[T] - Type-Safe Collections
 
-### Breaking Changes (v1.0.0-alpha4)
+- O(1) lookup: `pile[uuid]`
+- Predicate queries, thread-safe
+- Generic type support
 
-1. `ValueError` → `NotFoundError`/`ExistsError` (`lionherd_core.errors`)
-2. `graph.get_node()` removed → `graph.nodes[uuid]`
-3. `flow.pile` removed → `flow.items` or `flow.add_item()`
+### Graph - Directed with Conditional Edges
 
-### Type Hints, Testing, Docstrings
+```python
+# ❌ WRONG: Removed in v1.0.0-alpha4
+node = graph.get_node(uuid)
 
-- **Types**: Required for public functions, `from __future__ import annotations`, protocol types, generics (`Pile[Agent]`)
-- **Testing**: Hypothesis property tests, markers (`@pytest.mark.unit/property/slow`), 80%+ coverage, async auto-enabled
-- **Docstrings**: Google-style (Args, Returns, Raises)
+# ✅ CORRECT: Direct Pile access
+node = graph.nodes[uuid]
 
-### Commit Messages
-
-`type(scope): subject` where type ∈ {feat, fix, docs, test, refactor, perf, chore}
-
-```text
-feat(lndl): add fuzzy parsing for malformed tags
-
-Handles typos in LNDL tag names and missing closing tags.
-
-Closes #123
+# Async operations
+path = await graph.find_path(start, end)
 ```
 
-## Code Structure Insights
+### Flow - Composition Pattern
 
-**libs/**: Low-level utilities (concurrency: async primitives; schema_handlers: TS schema, YAML; string_handlers: conversions, JSON extraction)
+```python
+# ❌ WRONG: Removed in v1.0.0-alpha4
+flow.pile.add(item)
 
-**Protocol Semantics**: Runtime checkable via `isinstance(obj, Protocol)` → structural typing, no inheritance needed.
+# ✅ CORRECT: Explicit composition API
+flow.items.add(item)  # or flow.add_item(item)
+```
+
+---
+
+## Breaking Changes (v1.0.0-alpha4)
+
+1. **Exceptions**: `ValueError` → `NotFoundError`/`ExistsError` (from `lionherd_core.errors`)
+2. **Graph access**: `graph.get_node()` removed → `graph.nodes[uuid]`
+3. **Flow composition**: `flow.pile` removed → `flow.items` or `flow.add_item()`
+
+---
 
 ## Common Pitfalls
 
@@ -159,43 +161,73 @@ class Child(Parent): pass          class Child(Parent):
                                        def to_dict(self): return super().to_dict()
 ```
 
-### 3. Don't access Flow via `self.pile`
+### 3. Node.content type constraint
 
 ```python
-# ❌ flow.pile.add(item)            # ✅ flow.items.add(item) or flow.add_item(item)
+# ❌ WRONG: String not allowed
+Node(content="x")
+
+# ✅ CORRECT: Dict, Serializable, or BaseModel
+Node(content={"key": "value"})
 ```
 
-### 4. Don't use `graph.get_node()`
+### 4. Remember async
 
 ```python
-# ❌ node = graph.get_node(uuid)    # ✅ node = graph.nodes[uuid]
+# ❌ WRONG
+path = graph.find_path(start, end)
+
+# ✅ CORRECT
+path = await graph.find_path(start, end)
 ```
 
-### 5. Remember async
+---
 
-```python
-# ✅ path = await graph.find_path(start, end)    # ❌ path = graph.find_path(start, end)
-```
+## Adapter Pattern Details
+
+**Supported**: Node, Pile, Graph
+**NOT Supported**: Element, Flow, Progression, Edge
+
+**Isolation**: Each subclass has isolated adapter registry (no inheritance from parent).
+
+**Rationale**: Prevents adapter pollution, explicit over implicit (Rust-like).
+
+---
 
 ## CI/CD Expectations
 
-PRs must pass: ✅ Tests | ✅ Coverage ≥80% | ✅ mypy | ✅ ruff check | ✅ ruff format | ✅ Notebooks (if modified) | ✅ Links (if docs modified)
+PRs must pass:
 
-**Workflows**: `validate-notebooks.yml` (tutorials strict, references lenient), `validate-links.yml` (markdown links)
+- ✅ Tests (pytest)
+- ✅ Coverage ≥80%
+- ✅ Type checking (mypy)
+- ✅ Linting (ruff check)
+- ✅ Formatting (ruff format)
+- ✅ Notebooks (if modified)
+- ✅ Links (if docs modified)
 
-## When Contributing
+**Workflows**: `.github/workflows/validate-notebooks.yml`, `validate-links.yml`
+
+---
+
+## Contributing Guidelines
 
 1. Check existing patterns (multi-alpha evolution)
 2. Read related tests (behavior + edge cases)
-3. Maintain type safety (runtime validation core)
+3. Maintain type safety (runtime validation is core)
 4. Preserve protocol semantics (`@implements()` strict)
 5. Minimal dependencies (pydapter + anyio only)
 6. Document breaking changes (CHANGELOG.md)
 
-## Related Resources
+**Commit Format**: `type(scope): subject` where type ∈ {feat, fix, docs, test, refactor, perf, chore}
+
+---
+
+## Additional Resources
 
 - **README.md**: Use cases, examples, installation
-- **CONTRIBUTING.md**: Workflow details
+- **CONTRIBUTING.md**: Full contribution workflow
+- **AGENTS.md**: Quick reference for AI agents
 - **CHANGELOG.md**: API evolution
 - **notebooks/tutorials/**: Executable examples
-- **docs/api/**: API reference
+- **docs/api/**: API reference (Sphinx)
