@@ -18,7 +18,9 @@ from typing_extensions import override
 from ..errors import NotFoundError
 from ..protocols import (
     Adaptable,
+    AdapterRegistry,
     AsyncAdaptable,
+    AsyncAdapterRegistry,
     Containable,
     Deserializable,
     Serializable,
@@ -93,7 +95,15 @@ class Edge(Element):
 # ==================== Graph ====================
 
 
-@implements(Serializable, Deserializable, Containable, Adaptable, AsyncAdaptable)
+@implements(
+    Serializable,
+    Deserializable,
+    Containable,
+    Adaptable,
+    AdapterRegistry,
+    AsyncAdaptable,
+    AsyncAdapterRegistry,
+)
 class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     """Directed graph with Pile-backed storage, O(1) operations, graph algorithms.
 
@@ -547,6 +557,16 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         return graph
 
     # ==================== Adapter Methods ====================
+
+    @classmethod
+    def register_adapter(cls, adapter: Any) -> None:  # pragma: no cover
+        """Register adapter for this class."""
+        super().register_adapter(adapter)
+
+    @classmethod
+    def register_async_adapter(cls, adapter: Any) -> None:  # pragma: no cover
+        """Register async adapter for this class."""
+        super().register_async_adapter(adapter)
 
     def adapt_to(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any:
         """Convert to external format via pydapter adapter.

@@ -20,7 +20,9 @@ from ..errors import ExistsError, NotFoundError
 from ..libs.concurrency import Lock as AsyncLock
 from ..protocols import (
     Adaptable,
+    AdapterRegistry,
     AsyncAdaptable,
+    AsyncAdapterRegistry,
     Containable,
     Deserializable,
     Serializable,
@@ -41,7 +43,15 @@ __all__ = ("Pile",)
 T = TypeVar("T", bound=Element)
 
 
-@implements(Containable, Adaptable, AsyncAdaptable, Serializable, Deserializable)
+@implements(
+    Containable,
+    Adaptable,
+    AdapterRegistry,
+    AsyncAdaptable,
+    AsyncAdapterRegistry,
+    Serializable,
+    Deserializable,
+)
 class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     """Thread-safe typed collection with rich query interface.
 
@@ -752,6 +762,16 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         return pile
 
     # ==================== Adapter Methods ====================
+
+    @classmethod
+    def register_adapter(cls, adapter: Any) -> None:
+        """Register adapter for this class."""
+        super().register_adapter(adapter)
+
+    @classmethod
+    def register_async_adapter(cls, adapter: Any) -> None:
+        """Register async adapter for this class."""
+        super().register_async_adapter(adapter)
 
     def adapt_to(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any:
         """Convert to external format via pydapter adapter.

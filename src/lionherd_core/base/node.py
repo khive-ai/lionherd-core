@@ -15,7 +15,9 @@ from pydapter import (
 
 from ..protocols import (
     Adaptable,
+    AdapterRegistry,
     AsyncAdaptable,
+    AsyncAdapterRegistry,
     Deserializable,
     Serializable,
     implements,
@@ -25,7 +27,14 @@ from .element import Element
 NODE_REGISTRY: dict[str, type[Node]] = {}
 
 
-@implements(Adaptable, AsyncAdaptable, Deserializable, Serializable)
+@implements(
+    Adaptable,
+    AdapterRegistry,
+    AsyncAdaptable,
+    AsyncAdapterRegistry,
+    Deserializable,
+    Serializable,
+)
 class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
     """Polymorphic container for structured, composable data with embeddings.
 
@@ -291,6 +300,16 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
                 )
 
         return cls.model_validate(data, **kwargs)
+
+    @classmethod
+    def register_adapter(cls, adapter: Any) -> None:  # pragma: no cover
+        """Register adapter for this class."""
+        super().register_adapter(adapter)
+
+    @classmethod
+    def register_async_adapter(cls, adapter: Any) -> None:  # pragma: no cover
+        """Register async adapter for this class."""
+        super().register_async_adapter(adapter)
 
     def adapt_to(self, obj_key: str, many: bool = False, **kwargs: Any) -> Any:
         """Convert to external format via pydapter (defaults to mode='db')."""

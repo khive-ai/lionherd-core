@@ -6,8 +6,10 @@ from uuid import UUID
 
 __all__ = (
     "Adaptable",
+    "AdapterRegistry",
     "Allowable",
     "AsyncAdaptable",
+    "AsyncAdapterRegistry",
     "Containable",
     "Deserializable",
     "Hashable",
@@ -60,6 +62,11 @@ class Adaptable(Protocol):
         """Create from external format. Args: source object, adapter key, many flag."""
         ...
 
+
+@runtime_checkable
+class AdapterRegistry(Protocol):
+    """Mutable adapter registry. Compose with Adaptable for configurable adapters."""
+
     @classmethod
     def register_adapter(cls, adapter: Any) -> None:
         """Register adapter for this class."""
@@ -80,6 +87,11 @@ class AsyncAdaptable(Protocol):
     ) -> Any:
         """Async create from external format. Args: source object, adapter key, many flag."""
         ...
+
+
+@runtime_checkable
+class AsyncAdapterRegistry(Protocol):
+    """Mutable async adapter registry. Compose with AsyncAdaptable for configurable async adapters."""
 
     @classmethod
     def register_async_adapter(cls, adapter: Any) -> None:
@@ -148,6 +160,9 @@ def implements(*protocols: type):
     Returns:
         Class decorator that stores protocols on cls.__protocols__
 
+    Raises:
+        TypeError: If class does not define required protocol members in its class body
+
     Usage:
         ✓ CORRECT: Literal implementation
         @implements(Serializable, Deserializable)
@@ -175,6 +190,36 @@ def implements(*protocols: type):
     """
 
     def decorator(cls):
+        # Validate that all protocol members are defined in class body
+        for protocol in protocols:
+            # Get protocol members from protocol class annotations
+            import inspect
+
+            protocol_members = {}
+            for name, obj in inspect.getmembers(protocol):
+                if name.startswith("_"):
+                    continue
+                # Include methods, properties, classmethods
+                if callable(obj) or isinstance(obj, (property, classmethod)):
+                    protocol_members[name] = obj
+
+            # Check each required member is in cls.__dict__ (not inherited)
+            for member_name in protocol_members:
+                # Check if member is in class body
+                # For Pydantic models, also check __annotations__ for fields
+                in_class_body = member_name in cls.__dict__
+
+                # For Pydantic models, check if it's a field annotation
+                if not in_class_body and hasattr(cls, "__annotations__"):
+                    in_class_body = member_name in cls.__annotations__
+
+                if not in_class_body:
+                    protocol_name = protocol.__name__
+                    raise TypeError(
+                        f"{cls.__name__} declares @implements({protocol_name}) but does not "
+                        f"define '{member_name}' in its class body (inheritance not allowed)"
+                    )
+
         cls.__protocols__ = protocols
         return cls
 
