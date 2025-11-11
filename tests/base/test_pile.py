@@ -2245,3 +2245,56 @@ def test_filter_operations_preserve_config(simple_items):
     filtered2 = pile[prog]
     assert filtered2.item_type == pile.item_type
     assert filtered2.strict_type == pile.strict_type
+
+
+# ==================== Coverage Tests for Missing Lines ====================
+
+
+def test_pile_to_dict_with_name_and_none_meta(simple_items):
+    """Test Pile.to_dict with name and meta_key=None path (line 202)."""
+    pile = Pile[Element](items=simple_items[:2])
+    # Give the progression a name
+    pile._progression.name = "test_pile"
+
+    # Serialize with mode that creates None meta dict
+    result = pile.to_dict(mode="db", meta_key="meta")
+
+    # Should have created meta dict and added progression_name
+    assert "meta" in result
+    assert result["meta"] is not None
+    assert result["meta"]["progression_name"] == "test_pile"
+
+
+def test_pile_getitem_progression_with_missing_uuid(simple_items):
+    """Test pile[progression] raises NotFoundError for missing UUID (line 449)."""
+    from lionherd_core.errors import NotFoundError
+
+    pile = Pile[Element](items=simple_items[:2])
+
+    # Create progression with a UUID not in pile
+    from uuid import uuid4
+
+    missing_uuid = uuid4()
+    prog = Progression(order=[simple_items[0].id, missing_uuid])
+
+    # Should raise NotFoundError
+    with pytest.raises(NotFoundError) as exc_info:
+        _ = pile[prog]
+
+    assert "not found in pile" in str(exc_info.value)
+
+
+def test_pile_from_dict_runtime_extract_types(simple_items):
+    """Test Pile.from_dict with item_type at runtime (line 667)."""
+    # Create a Pile and serialize it
+    pile = Pile[Element](items=simple_items[:2])
+    pile_dict = pile.to_dict()
+
+    # Add item_type as a type object (not string) - forces runtime extract_types path
+    pile_dict["item_type"] = [Element]  # Type object, not string
+
+    # Deserialize - should use extract_types for runtime case
+    restored = Pile.from_dict(pile_dict)
+
+    assert len(restored) == 2
+    assert restored.item_type == {Element}  # extract_types normalizes to set

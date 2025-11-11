@@ -1370,3 +1370,27 @@ def test_flow_check_item_exists_error_path():
     # Verify error message includes flow context
     assert "not found in flow" in str(exc_info.value)
     assert str(missing_uuid) in str(exc_info.value)
+
+
+def test_flow_field_validator_default_factory():
+    """Test field validator default factory path (line 125).
+
+    When neither items nor progressions are provided (not even None),
+    Pydantic should call default_factory=Pile, which goes through
+    handler(v) path in the validator.
+    """
+    # Create Flow using model_validate with minimal fields
+    # This forces Pydantic to use default_factory for items/progressions
+    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+        {
+            "id": str(uuid4()),
+            "created_at": "2024-01-01T00:00:00Z",
+            # No items or progressions fields -> default_factory triggered
+        }
+    )
+
+    # Verify default factories created empty Piles
+    assert isinstance(flow.items, Pile)
+    assert isinstance(flow.progressions, Pile)
+    assert len(flow.items) == 0
+    assert len(flow.progressions) == 0

@@ -34,38 +34,29 @@ class Progression(Element):
         description="Ordered sequence of UUIDs",
     )
 
-    def __init__(
-        self, order: list[UUID] | list[Element] | None = None, name: str | None = None, **data
-    ):
-        """Initialize progression with optional items.
-
-        Args:
-            order: Initial items (UUIDs or Elements)
-            name: Optional name
-            **data: Additional Element fields
-        """
-        # Convert Elements to UUIDs
-        if order:
-            order = [Element._coerce_id(item) for item in order]
-
-        # Pass all field values through **kwargs to satisfy mypy
-        super().__init__(**{"name": name, "order": order or [], **data})
-
     @field_validator("order", mode="before")
     @classmethod
     def _validate_order(cls, value: Any) -> list[UUID]:
-        """Validate and coerce order field."""
+        """Validate and coerce order field.
+
+        Handles:
+        - None -> []
+        - Single UUID/str/Element -> [coerced_uuid]
+        - List/tuple/iterable -> [coerced_uuid, ...]
+
+        All items are coerced to UUID via _coerce_id.
+        """
         if value is None:
             return []
 
-        if not isinstance(value, list):
+        # Normalize single values to list
+        if isinstance(value, (UUID, str, Element)):
             value = [value]
+        elif not isinstance(value, list):
+            value = list(value)
 
-        result = []
-        for item in value:
-            with contextlib.suppress(Exception):
-                result.append(cls._coerce_id(item))
-        return result
+        # Coerce all items to UUIDs (let coercion errors raise)
+        return [cls._coerce_id(item) for item in value]
 
     # ==================== Core Operations ====================
 
