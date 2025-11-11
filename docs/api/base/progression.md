@@ -232,7 +232,7 @@ def pop(self, index: int = -1) -> UUID
 
 **Raises:**
 
-- `IndexError`: If progression is empty
+- `NotFoundError`: If progression is empty or index out of range (without default)
 
 **Returns:** UUID - Removed item
 
@@ -258,7 +258,7 @@ def popleft(self) -> UUID
 
 **Raises:**
 
-- `IndexError`: If progression is empty
+- `NotFoundError`: If progression is empty
 
 **Returns:** UUID - First item
 
@@ -543,7 +543,7 @@ def __getitem__(self, index: int | slice) -> UUID | list[UUID]
 
 **Raises:**
 
-- `IndexError`: If index out of range
+- `IndexError`: If index out of range (standard list behavior)
 
 **Returns:** UUID (for int) or list[UUID] (for slice)
 
@@ -574,7 +574,7 @@ def __setitem__(self, index: int | slice, value: UUID | Element | list) -> None
 
 **Raises:**
 
-- `IndexError`: If index out of range
+- `IndexError`: If index out of range (standard list behavior)
 - `TypeError`: If assigning non-list to slice
 
 **Returns:** None (modifies in place)
