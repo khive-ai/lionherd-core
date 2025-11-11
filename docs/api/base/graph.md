@@ -210,7 +210,7 @@ def add_node(self, node: Node) -> None
 
 **Raises:**
 
-- `ValueError`: If node already exists in graph
+- `ExistsError`: If node already exists in graph
 
 **Thread Safety:** Synchronized via @synchronized decorator
 
@@ -244,7 +244,9 @@ def remove_node(self, node_id: UUID | Node) -> Node
 
 **Returns:** Node - The removed node
 
-**Raises:** ValueError if node not found
+**Raises:**
+
+- `NotFoundError`: If node not found in graph
 
 **Thread Safety:** Synchronized with RLock (allows nested remove_edge calls)
 
@@ -280,7 +282,8 @@ def add_edge(self, edge: Edge) -> None
 
 **Raises:**
 
-- `ValueError`: If edge already exists, or head/tail nodes not in graph
+- `ExistsError`: If edge already exists in graph
+- `NotFoundError`: If head or tail node not in graph
 
 **Thread Safety:** Synchronized via @synchronized decorator
 
@@ -314,7 +317,9 @@ def remove_edge(self, edge_id: UUID | Edge) -> Edge
 
 **Returns:** Edge - The removed edge
 
-**Raises:** ValueError if edge not found
+**Raises:**
+
+- `NotFoundError`: If edge not found in graph
 
 **Thread Safety:** Synchronized (RLock allows calls from remove_node)
 
@@ -578,7 +583,9 @@ async def find_path(
 
 **Returns:** list[Edge] | None - List of edges forming path, or None if no path exists
 
-**Raises:** ValueError if start or end node not in graph
+**Raises:**
+
+- `NotFoundError`: If start or end node not in graph
 
 **Algorithm:** Breadth-First Search (BFS)
 
@@ -1080,7 +1087,7 @@ else:
 ```python
 graph = Graph()
 edge = Edge(head=node1.id, tail=node2.id)
-graph.add_edge(edge)  # ❌ ValueError: Head node not in graph
+graph.add_edge(edge)  # ❌ NotFoundError: Head node not in graph
 ```
 
 **Solution**: Always add nodes before connecting them with edges.
@@ -1142,7 +1149,7 @@ graph.add_edge(Edge(head=b.id, tail=a.id))
 graph.add_edge(Edge(head=a.id, tail=b.id))
 graph.add_edge(Edge(head=b.id, tail=a.id))
 
-sorted_nodes = graph.topological_sort()  # ❌ ValueError
+sorted_nodes = graph.topological_sort()  # ❌ ValueError: Cannot topologically sort graph with cycles
 ```
 
 **Solution**: Check acyclicity before sorting.

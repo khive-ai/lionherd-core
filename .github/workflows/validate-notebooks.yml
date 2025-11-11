@@ -14,12 +14,16 @@ concurrency:
 
 jobs:
   # =============================================================================
-  # Execute tutorial notebooks with strict validation (must pass)
+  # Execute all notebooks in parallel across Python versions
   # =============================================================================
-  execute-tutorials:
-    name: Execute Tutorials (Strict)
+  execute-notebooks:
+    name: Notebooks (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -35,32 +39,46 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py${{ matrix.python-version }}-
+
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute tutorial notebooks
+      - name: Execute all notebooks (parallel)
         run: |
-          uv run pytest --nbmake notebooks/tutorials/ \
+          uv run pytest --nbmake notebooks/ \
             --nbmake-timeout=300 \
             --tb=short \
+            -n 4 \
             -v
 
-      - name: Upload tutorial execution artifacts
+      - name: Upload execution artifacts
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: tutorial-execution-failures
+          name: notebook-failures-py${{ matrix.python-version }}
           path: |
             .pytest_cache/
             **/*.nbconvert.ipynb
 
   # =============================================================================
-  # Execute reference notebooks with lenient validation (experimental)
+  # Run pre-commit hooks on notebooks
   # =============================================================================
-  execute-references:
-    name: Execute References (Experimental)
+  pre-commit:
+    name: Pre-commit (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: execute-notebooks
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +86,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -76,22 +94,24 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py${{ matrix.python-version }}-
+
       - name: Install dependencies
         run: uv sync --group dev --all-extras
 
-      - name: Execute reference notebooks
-        run: |
-          uv run pytest --nbmake notebooks/references/ \
-            --nbmake-timeout=300 \
-            --tb=short \
-            -v
-        continue-on-error: true # References may contain experimental code
-
-      - name: Upload reference execution artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v4
         with:
-          name: reference-execution-results
-          path: |
-            .pytest_cache/
-            **/*.nbconvert.ipynb
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-py${{ matrix.python-version }}-
+
+      - name: Run pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure

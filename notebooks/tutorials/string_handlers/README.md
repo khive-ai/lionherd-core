@@ -30,7 +30,7 @@ jupyter notebook cli_fuzzy_matching.ipynb
 | [**CLI Fuzzy Matching**](./cli_fuzzy_matching.ipynb) | 15-20min | Match user commands to valid options using Jaro-Winkler similarity |
 | [**Fuzzy Deduplication**](./fuzzy_deduplication.ipynb) | 15-25min | Detect and merge near-duplicate records using similarity thresholds |
 | [**Consensus Matching**](./consensus_matching.ipynb) | 15-20min | Combine multiple algorithms (voting) for confident matching |
-| [**Phonetic Matching**](./phonetic_matching.ipynb) | 15-30min | Match names that sound similar using Soundex algorithm |
+| [**Phonetic Matching**](./phonetic_matching.ipynb) | 15-30 min | Match names that sound similar using Soundex algorithm |
 
 ## Learning Path
 
