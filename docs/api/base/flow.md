@@ -593,16 +593,16 @@ stage_counts = {
 **Issue**: Removing item from pile but not from progressions creates orphan UUID references.
 
 ```python
-# ❌ WRONG: Orphan references remain in progressions
-flow.remove_item(task_id, remove_from_progressions=False)
-# progressions still reference task_id, will raise KeyError on access
+# ❌ WRONG: Manual pile removal leaves orphan references
+removed = flow.items.remove(task_id)
+# progressions still reference task_id, will raise NotFoundError on access
 ```
 
-**Solution**: Use default `remove_from_progressions=True` unless implementing lazy cleanup.
+**Solution**: Use `remove_item()` which ensures clean removal from both pile and progressions.
 
 ```python
 # ✓ CORRECT: Clean removal from everywhere
-flow.remove_item(task_id)  # Default removes from progressions
+flow.remove_item(task_id)  # Removes from pile + all progressions
 ```
 
 ---

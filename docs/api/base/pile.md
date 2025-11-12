@@ -425,22 +425,6 @@ for uuid, item in pile.items():  # Method - returns iterator
 item = pile[uuid]
 ```
 
-#### `values()`
-
-Get all items in progression order (not changed).
-
-**Returns:** Iterator[T]
-
-**Time Complexity:** O(1) to start, O(n) for all values
-
-#### `size()`
-
-Get number of items (alias for `len()`).
-
-**Returns:** int
-
-**Time Complexity:** O(1)
-
 #### `is_empty()`
 
 Check if pile is empty.
@@ -744,16 +728,17 @@ from lionherd_core.libs.concurrency import gather
 async def async_workflow():
     pile = Pile()
 
-    # Concurrent async add
+    # Concurrent add (synchronous - efficient for CPU-bound ops)
     items = [Element() for _ in range(10)]
-    await gather(*[pile.add_async(item) for item in items])
+    for item in items:
+        pile.add(item)
 
-    # Concurrent async get
-    results = await gather(*[pile.get_async(item.id) for item in items[:5]])
+    # Concurrent get
+    results = [pile.get(item.id) for item in items[:5]]
 
     return pile
 
-pile = await async_workflow()
+pile = async_workflow()
 ```
 
 ---
@@ -909,18 +894,19 @@ async def async_example():
     # Create items
     items = [Element(metadata={"index": i}) for i in range(20)]
 
-    # Concurrent async add
-    await gather(*[pile.add_async(item) for item in items])
-    print(f"Added {len(pile)} items concurrently")
+    # Add items (synchronous - efficient for CPU-bound ops)
+    for item in items:
+        pile.add(item)
+    print(f"Added {len(pile)} items")
 
-    # Concurrent async get
+    # Retrieve items
     uuids = [item.id for item in items[:10]]
-    results = await gather(*[pile.get_async(uid) for uid in uuids])
+    results = [pile.get(uid) for uid in uuids]
     print(f"Retrieved {len(results)} items")
 
     return pile
 
-pile = await async_example()
+pile = async_example()
 ```
 
 ### Example 5: Serialization with Type Preservation
