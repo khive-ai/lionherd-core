@@ -107,9 +107,7 @@ def is_executable_example(code: str) -> bool:
         return False
 
     # Check for indicators of executable code
-    has_import = any(
-        line.startswith(("from ", "import ")) for line in lines
-    )
+    has_import = any(line.startswith(("from ", "import ")) for line in lines)
     has_complete_function = False
     has_instantiation = False
     has_method_call = False
@@ -159,8 +157,7 @@ def normalize_code_for_validation(code: str) -> str:
 
     # Check if code has async keywords but no async function definition
     has_async_keywords = any(
-        keyword in code_text
-        for keyword in ["await ", "async with ", "async for "]
+        keyword in code_text for keyword in ["await ", "async with ", "async for "]
     )
     has_async_def = "async def " in code_text
 
@@ -257,9 +254,8 @@ def extract_imports(code: str) -> list[str]:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     imports.append(alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imports.append(node.module.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.append(node.module.split(".")[0])
     except SyntaxError:
         # If we can't parse, skip import validation
         pass
@@ -306,7 +302,7 @@ def validate_imports(block: CodeBlock) -> list[ValidationError]:
                     message=f"Cannot import '{module_name}': {e}",
                 )
             )
-        except Exception as e:
+        except Exception:
             # Some imports might fail for other reasons (circular imports, etc.)
             # We'll log these but not fail the validation
             pass
@@ -332,8 +328,10 @@ def validate_file(file_path: Path) -> list[ValidationError]:
             continue
 
         # Skip short code blocks with async keywords (likely pattern demonstrations)
-        lines = [l for l in block.content.split("\n") if l.strip()]
-        if len(lines) < 5 and any(kw in block.content for kw in ["await ", "async with ", "async for "]):
+        lines = [line for line in block.content.split("\n") if line.strip()]
+        if len(lines) < 5 and any(
+            kw in block.content for kw in ["await ", "async with ", "async for "]
+        ):
             continue
 
         # Validate syntax
@@ -394,15 +392,13 @@ def validate_docs(docs_dir: Path, pattern: str = "**/*.md") -> tuple[int, int]:
         return files_checked, files_with_errors
     else:
         print(f"✅ All {files_checked} markdown files validated successfully!")
-        print(f"   No syntax or import errors found in Python code blocks.")
+        print("   No syntax or import errors found in Python code blocks.")
         return files_checked, 0
 
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Validate Python code blocks in documentation"
-    )
+    parser = argparse.ArgumentParser(description="Validate Python code blocks in documentation")
     parser.add_argument(
         "docs_dir",
         type=Path,
@@ -420,7 +416,7 @@ def main():
         print(f"Error: Directory not found: {args.docs_dir}", file=sys.stderr)
         sys.exit(1)
 
-    total_files, files_with_errors = validate_docs(args.docs_dir, args.pattern)
+    _total_files, files_with_errors = validate_docs(args.docs_dir, args.pattern)
 
     # Exit with error code if validation failed
     sys.exit(1 if files_with_errors > 0 else 0)
