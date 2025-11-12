@@ -83,14 +83,14 @@ class Agent(Element):
     status: str = "idle"
 
 # Type-safe collection
-agents = Pile[Agent](item_type=Agent)
+agents = Pile(item_type=Agent)
 researcher = Agent(id=uuid4(), name="Alice", role="researcher")
-agents.include(researcher)
+agents.include(researcher)  # Returns True if in pile
 
 # O(1) UUID lookup
 found = agents[researcher.id]
 
-# Predicate queries
+# Predicate queries return new Pile
 idle_agents = agents[lambda a: a.status == "idle"]
 ```
 
@@ -154,6 +154,8 @@ print(result.research.query)       # "AI architectures"
 
 ```python
 from lionherd_core.protocols import Observable, Serializable, Adaptable
+from lionherd_core.protocols import implements
+from uuid import uuid4
 
 # Check capabilities at runtime
 if isinstance(obj, Observable):
@@ -163,14 +165,12 @@ if isinstance(obj, Serializable):
     data = obj.to_dict()  # Serialization guaranteed
 
 # Compose capabilities without inheritance
-from lionherd_core.protocols import implements
-
 @implements(Observable, Serializable, Adaptable)
 class CustomAgent:
     def __init__(self):
         self.id = uuid4()
 
-    def to_dict(self):
+    def to_dict(self, **kwargs):
         return {"id": str(self.id)}
 ```
 
@@ -184,7 +184,7 @@ class CustomAgent:
 | **Node** | Polymorphic content | You need flexible content storage |
 | **Pile[T]** | Type-safe collections | You need thread-safe typed collections |
 | **Graph** | Directed graph with edges | You need workflow DAGs |
-| **Flow** | Pile of progressions + items | You need ordered sequences |
+| **Flow** | Pile of progressions + items | You need multi-stage workflows |
 | **Progression** | Ordered UUID sequence | You need to track execution order |
 | **LNDL** | LLM output parser | You need structured LLM outputs |
 
@@ -224,8 +224,8 @@ class AnalystAgent(Element):
     status: str
 
 # Type-safe agent registry
-researchers = Pile[ResearchAgent](item_type=ResearchAgent)
-analysts = Pile[AnalystAgent](item_type=AnalystAgent)
+researchers = Pile(item_type=ResearchAgent)
+analysts = Pile(item_type=AnalystAgent)
 
 # Workflow orchestration with Graph
 workflow = Graph()
@@ -256,7 +256,7 @@ while current:
 from lionherd_core import Element, Pile, Spec, Operable
 from lionherd_core.lndl import parse_lndl_fuzzy
 from collections.abc import Callable
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any
 
 class Tool(Element):
@@ -264,15 +264,12 @@ class Tool(Element):
     description: str
     func: Callable[..., Any]
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Tool registry
-tools = Pile[Tool](item_type=Tool)
-tools.include([
-    Tool(name="search", description="Search web", func=search_fn),
-    Tool(name="calculate", description="Math ops", func=calc_fn),
-])
+tools = Pile(item_type=Tool)
+tools.include(Tool(name="search", description="Search web", func=search_fn))
+tools.include(Tool(name="calculate", description="Math ops", func=calc_fn))
 
 # Parse LLM tool call
 class ToolCall(BaseModel):
@@ -289,9 +286,11 @@ OUT{call: [t, a]}
 
 parsed = parse_lndl_fuzzy(llm_output, operable)
 
-# Execute
-tool = tools.get(lambda t: t.name == parsed.call.tool)[0]
-result = tool.func(**parsed.call.args)
+# Execute - use predicate query with [] not get()
+matching_tools = tools[lambda t: t.name == parsed.call.tool]
+if matching_tools:
+    tool = list(matching_tools)[0]
+    result = tool.func(**parsed.call.args)
 ```
 
 ### Memory Systems
@@ -328,8 +327,8 @@ memory_graph.add_node(mem2)
 # Connect related memories
 memory_graph.add_edge(Edge(head=mem1.id, tail=mem2.id, label=["preference"]))
 
-# Query by importance
-important_memories = memory_graph.nodes.get(lambda m: m.importance > 0.8)
+# Query by importance using predicate (returns new Pile)
+important_memories = memory_graph.nodes[lambda m: m.importance > 0.8]
 
 # Traverse connections
 related = memory_graph.get_successors(mem1.id)
@@ -346,7 +345,7 @@ class Document(Element):
     metadata: dict
 
 # Document store
-docs = Pile[Document](item_type=Document)
+docs = Pile(item_type=Document)
 
 # Add documents with embeddings
 doc = Document(
@@ -356,8 +355,8 @@ doc = Document(
 )
 docs.include(doc)
 
-# Retrieve by predicate
-results = docs.get(lambda d: d.metadata["source"] == "paper.pdf")
+# Retrieve by predicate - use [] not get()
+results = docs[lambda d: d.metadata["source"] == "paper.pdf"]
 
 # Integrate with vector DB via adapters
 doc_dict = doc.to_dict()
