@@ -97,6 +97,53 @@ lychee notebooks/**/*.md docs/**/*.md
 - Use correct relative paths from notebook location to target
 - Verify links resolve correctly (especially internal API docs)
 
+### Documentation Validation
+
+If you're contributing to documentation (`docs/**/*.md`):
+
+```bash
+# Validate Python code blocks in documentation
+uv run python scripts/validate_docs.py docs/
+```
+
+**CI Automation**: Pull requests modifying documentation trigger automated validation:
+
+- **Code Block Validation** (validate-docs.yml): Validates Python code blocks for syntax errors and import issues
+
+**What is validated**:
+
+- ✅ Syntax correctness (compiles without SyntaxError)
+- ✅ Import statements (can be imported without errors)
+- ✅ Only validates executable examples (imports + instantiation/method calls)
+
+**What is NOT validated** (intentionally skipped):
+
+- API signatures and method stubs (partial code showing interfaces)
+- Short pattern demonstrations (< 5 lines with async keywords)
+- Code blocks marked with `# noqa: validation`
+
+**Skipping Validation**:
+
+For intentional partial examples, add a skip comment:
+
+```python
+# Example: Async pattern demonstration
+# noqa: validation
+await some_operation()
+```
+
+**Common Issues**:
+
+- ❌ Import errors: Missing imports in examples
+- ❌ Syntax errors: Typos in variable names, unclosed brackets
+- ❌ Breaking API changes: Examples using old API
+
+**Best Practices**:
+
+- Run validation locally before submitting PR
+- Ensure all executable examples have necessary imports
+- Use `# noqa: validation` sparingly for pattern demonstrations only
+
 ## Code Style
 
 ### Formatting
