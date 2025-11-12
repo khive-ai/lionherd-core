@@ -2,6 +2,12 @@
 
 > Ordered sequence of UUIDs with Element identity for workflow construction
 
+---
+
+> **⚠️ Migration Notice**: Breaking changes in v1.0.0-alpha5. See the [comprehensive migration guide](../../migration/v1.0.0-alpha5.md) for detailed upgrade instructions.
+
+---
+
 ## Overview
 
 `Progression` is an ordered sequence container that combines list-like operations with workflow-specific functionality. It extends Element to provide UUID ordering with identity, serialization, and metadata tracking.
@@ -33,6 +39,72 @@
 - Single-value state tracking (use simple attributes)
 
 See [Element](element.md) for identity-based base class.
+
+## Migration Guide (v1.0.0a4 → v1.0.0a5)
+
+**Breaking Changes from PR #156:**
+
+### 1. Custom __init__ Removed - Field Validator Normalization
+
+```python
+# Before (v1.0.0a4) - Custom __init__ accepted invalid items
+prog = Progression(order=[uuid1, "invalid", None])  # Silently dropped invalid items
+
+# After (v1.0.0a5+) - Stricter validation, raises ValidationError
+prog = Progression(order=[uuid1, "invalid", None])
+# ValidationError: Invalid item in order (cannot coerce to UUID)
+
+# Migration: Ensure all items are valid UUIDs or Elements
+prog = Progression(order=[uuid1, uuid2, element])  # Valid
+```
+
+### 2. Exception Changes - IndexError → NotFoundError
+
+```python
+# Before (v1.0.0a4) - Raised IndexError
+prog = Progression()
+try:
+    item = prog.pop()
+except IndexError:
+    pass
+
+try:
+    item = prog.popleft()
+except IndexError:
+    pass
+
+# After (v1.0.0a5+) - Raises NotFoundError for semantic consistency
+from lionherd_core.errors import NotFoundError
+
+prog = Progression()
+try:
+    item = prog.pop()
+except NotFoundError:  # Changed from IndexError
+    pass
+
+try:
+    item = prog.popleft()
+except NotFoundError:  # Changed from IndexError
+    pass
+```
+
+### 3. __bool__() Protocol Added
+
+```python
+# Before (v1.0.0a4) - No __bool__ support
+prog = Progression()
+if len(prog) == 0:  # Had to use len()
+    print("Empty")
+
+# After (v1.0.0a5+) - Supports boolean context
+prog = Progression()
+if not prog:  # Pythonic empty check
+    print("Empty")
+
+prog.append(uuid1)
+if prog:  # True when non-empty
+    print("Has items")
+```
 
 ## Class Signature
 
@@ -233,13 +305,17 @@ def pop(self, index: int = -1, default: Any = ...) -> UUID | Any
 
 **Raises:**
 
-- `NotFoundError`: If progression is empty or index out of range **and no default provided**
+- **`NotFoundError`**: If progression is empty or index out of range **and no default provided** (Changed from `IndexError` in PR #156)
 
 **Returns:** UUID | Any - Removed item, or default value if index not found
+
+**⚠️ BREAKING CHANGE (PR #156):** Exception changed from `IndexError` to `NotFoundError` for semantic consistency with Pile/Graph/Flow.
 
 **Example:**
 
 ```python
+from lionherd_core.errors import NotFoundError
+
 prog = Progression(order=[uuid4(), uuid4()])
 last = prog.pop()           # Remove last item
 first = prog.pop(0)          # Remove first item
@@ -250,6 +326,12 @@ task = prog.pop(default=None)  # Returns None if empty, no exception
 # Production pattern: safe queue processing
 while (task := prog.pop(default=None)) is not None:
     process(task)
+
+# Exception handling (updated)
+try:
+    item = prog.pop()
+except NotFoundError:  # Before: IndexError
+    handle_empty()
 ```
 
 **Time Complexity:** O(1) for pop(), O(n) for pop(0) due to list shift
@@ -266,16 +348,26 @@ def popleft(self) -> UUID
 
 **Raises:**
 
-- `NotFoundError`: If progression is empty
+- **`NotFoundError`**: If progression is empty (Changed from `IndexError` in PR #156)
 
 **Returns:** UUID - First item
+
+**⚠️ BREAKING CHANGE (PR #156):** Exception changed from `IndexError` to `NotFoundError` for semantic consistency.
 
 **Example:**
 
 ```python
+from lionherd_core.errors import NotFoundError
+
 # FIFO queue
 pending = Progression(order=[uuid4(), uuid4()])
 next_task = pending.popleft()
+
+# Exception handling (updated)
+try:
+    task = pending.popleft()
+except NotFoundError:  # Before: IndexError
+    handle_empty()
 ```
 
 **Time Complexity:** O(n) - removes from front, requires shifting all elements
@@ -508,6 +600,36 @@ def __len__(self) -> int
 ```python
 print(len(prog))  # 5
 ```
+
+#### `__bool__()`
+
+Check if progression is non-empty (supports `if prog:` idiom).
+
+**Signature:**
+
+```python
+def __bool__(self) -> bool
+```
+
+**Returns:** bool - `False` if progression is empty, `True` otherwise
+
+**Example:**
+
+```python
+prog = Progression()
+if not prog:
+    print("Progression is empty")
+
+prog.append(uuid4())
+if prog:
+    print("Progression has items")
+```
+
+**Time Complexity:** O(1)
+
+**Added in:** v1.0.0a5 (PR #156)
+
+**Pattern:** Prefer `if prog:` over `if len(prog) > 0:` for empty checks
 
 #### `__contains__()`
 

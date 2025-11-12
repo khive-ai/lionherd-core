@@ -4,6 +4,10 @@
 
 ---
 
+> **⚠️ Migration Notice**: Breaking changes in v1.0.0-alpha5. See the [comprehensive migration guide](../../migration/v1.0.0-alpha5.md) for detailed upgrade instructions.
+
+---
+
 ## Overview
 
 **Flow** is a state machine built from two specialized [Pile](pile.md) instances:
@@ -36,6 +40,85 @@ This dual-pile architecture enables M:N relationships where items can exist in m
 
 ---
 
+## Migration Guide (v1.0.0a4 → v1.0.0a5)
+
+**Breaking Changes from PR #156:**
+
+### 1. Constructor Signature - New `progressions` Parameter
+
+```python
+# Before (v1.0.0a4) - No progressions parameter
+flow = Flow[Task, Progression](items=[task1, task2])
+flow.add_progression(Progression(name="pending"))
+
+# After (v1.0.0a5+) - progressions parameter available
+flow = Flow[Task, Progression](
+    items=[task1, task2],
+    progressions=[Progression(name="pending")],  # New parameter
+    item_type=Task,        # Now respected (creates configured Pile)
+    strict_type=False
+)
+```
+
+### 2. Type Configuration - Frozen Fields
+
+```python
+# Before (v1.0.0a4) - item_type/strict_type not properly applied to items Pile
+flow = Flow(items=[task1], item_type=Task)
+flow.items.item_type  # None (bug - not set)
+
+# After (v1.0.0a5+) - Type configuration properly applied and frozen
+flow = Flow(items=[task1], item_type=Task, strict_type=True)
+flow.items.item_type   # {Task} (correctly set)
+flow.items.strict_type # True
+# flow.items.item_type = {Event}  # ValidationError: frozen field
+```
+
+### 3. Referential Integrity Validation
+
+```python
+# Before (v1.0.0a4) - No validation at construction
+prog = Progression(order=[uuid1, uuid2, uuid3])  # uuid3 not in items
+flow = Flow(items=[item1, item2], progressions=[prog])  # Silently accepted
+
+# After (v1.0.0a5+) - Validates at construction
+prog = Progression(order=[uuid1, uuid2, uuid3])
+flow = Flow(items=[item1, item2], progressions=[prog])
+# NotFoundError: Progression 'None' contains UUIDs not in items pile: {uuid3}
+
+# Migration: Ensure all progression UUIDs exist in items
+flow = Flow(items=[item1, item2], progressions=[prog_with_valid_uuids])
+```
+
+### 4. add_item() Parameter Renamed
+
+```python
+# Before (v1.0.0a4)
+flow.add_item(task, progression_ids="pending")
+flow.add_item(task, progression_ids=["pending", "active"])
+
+# After (v1.0.0a5+)
+flow.add_item(task, progressions="pending")  # Parameter renamed
+flow.add_item(task, progressions=["pending", "active"])
+```
+
+### 5. remove_item() - Always Removes from Progressions
+
+```python
+# Before (v1.0.0a4) - Optional parameter
+flow.remove_item(task_id, remove_from_progressions=False)  # Keep in progressions
+flow.remove_item(task_id, remove_from_progressions=True)   # Remove everywhere
+
+# After (v1.0.0a5+) - Always removes from progressions
+flow.remove_item(task_id)  # Always removes from pile AND all progressions
+
+# Migration: If you need to keep item in progressions, don't use remove_item
+# Instead: manually remove from pile only (not recommended - creates orphan refs)
+flow.items.remove(task_id)  # Manual approach (leaves orphan UUIDs in progressions)
+```
+
+---
+
 ## Class Signature
 
 ```python
@@ -55,7 +138,8 @@ class Flow(Element, Generic[E, P]):
 ```python
 def __init__(
     self,
-    items: list[E] | None = None,
+    items: list[E] | Pile[E] | Element | None = None,
+    progressions: list[P] | Pile[P] | None = None,  # New in v1.0.0a5 (PR #156)
     name: str | None = None,
     item_type: type[E] | set[type] | list[type] | None = None,
     strict_type: bool = False,
@@ -65,11 +149,18 @@ def __init__(
 
 **Parameters:**
 
-- `items` (list[E] | None): Initial items to add to items pile
+- `items` (list[E] | Pile[E] | Element | None): Initial items to add to items pile
+- **`progressions` (list[P] | Pile[P] | None)**: Initial workflow stages (progressions). **New in v1.0.0a5**
 - `name` (str | None): Flow identifier (e.g., "deployment_pipeline")
-- `item_type` (type[E] | set[type] | list[type] | None): Type constraint for items pile validation
+- `item_type` (type[E] | set[type] | list[type] | None): Type constraint for items pile validation (creates configured Pile with frozen fields)
 - `strict_type` (bool): Enforce exact type match (no subclasses) for items. Default: False
 - `**data`: Additional Element fields (id, created_at, metadata)
+
+**⚠️ BREAKING CHANGE (PR #156):**
+
+- Constructor now accepts `progressions` parameter for initializing workflow stages upfront
+- `item_type` and `strict_type` are now correctly applied to items Pile (frozen fields)
+- Referential integrity is validated at construction via `@model_validator` (all progression UUIDs must exist in items)
 
 **Example:**
 
@@ -80,13 +171,23 @@ class Task(Element):
     description: str = "task"
     priority: int = 0
 
-# Create flow with type validation
+task1 = Task(description="task1")
+task2 = Task(description="task2")
+
+# Create flow with type validation and initial progressions
 flow = Flow[Task, Progression](
-    items=[Task(description="task1"), Task(description="task2")],
+    items=[task1, task2],
+    progressions=[
+        Progression(name="pending", order=[task1.id]),
+        Progression(name="active", order=[task2.id])
+    ],
     name="workflow",
     item_type=Task,
     strict_type=False
 )
+
+# Referential integrity validated at construction
+# All UUIDs in progressions must exist in items pile
 ```
 
 ---
@@ -261,21 +362,23 @@ Add item to items pile and optionally assign to progression stages.
 def add_item(
     self,
     item: E,
-    progression_ids: list[UUID | str] | UUID | str | None = None,
+    progressions: list[UUID | str] | UUID | str | None = None,  # Renamed in v1.0.0a5
 ) -> None
 ```
 
 **Parameters:**
 
 - `item` (E): Element to add to items pile
-- `progression_ids` (list[UUID | str] | UUID | str | None): Optional progression(s) to add item to (by UUID or name)
+- **`progressions`** (list[UUID | str] | UUID | str | None): Optional progression(s) to add item to (by UUID or name). **Parameter renamed from `progression_ids` in PR #156**
 
 **Raises:**
 
 - `ExistsError`: If item already exists in items pile
-- `KeyError`: If progression_ids references non-existent progression
+- `KeyError`: If progressions references non-existent progression
 
 **Time Complexity:** O(1) for pile add, O(k) for k progression assignments
+
+**⚠️ BREAKING CHANGE (PR #156):** Parameter renamed `progression_ids` → `progressions`
 
 **Example:**
 
@@ -285,11 +388,11 @@ task = Task(description="Deploy API")
 # Add to pile only (no stage assignment)
 flow.add_item(task)
 
-# Add to pile and specific stage
-flow.add_item(task, progression_ids="pending")
+# Add to pile and specific stage (parameter name changed)
+flow.add_item(task, progressions="pending")  # Before: progression_ids="pending"
 
 # Add to multiple stages (M:N relationship)
-flow.add_item(task, progression_ids=["testing", "documentation"])
+flow.add_item(task, progressions=["testing", "documentation"])
 ```
 
 **Pattern**: Items exist in pile independently of progression membership. This enables flexible state transitions without data duplication.
@@ -298,7 +401,7 @@ flow.add_item(task, progression_ids=["testing", "documentation"])
 
 #### `remove_item()`
 
-Remove item from items pile and optionally from all progressions.
+Remove item from items pile and all progressions.
 
 **Signature:**
 
@@ -306,14 +409,12 @@ Remove item from items pile and optionally from all progressions.
 def remove_item(
     self,
     item_id: UUID | str | Element,
-    remove_from_progressions: bool = True,
 ) -> E
 ```
 
 **Parameters:**
 
 - `item_id` (UUID | str | Element): Item UUID, string UUID, or Element instance
-- `remove_from_progressions` (bool): If True, remove from all progressions before removing from pile. Default: True
 
 **Returns:** E - The removed item
 
@@ -321,19 +422,26 @@ def remove_item(
 
 - `NotFoundError`: If item not found in flow
 
-**Time Complexity:** O(p × n) where p = number of progressions, n = items per progression (if remove_from_progressions=True)
+**Time Complexity:** O(p × n) where p = number of progressions, n = items per progression
+
+**⚠️ BREAKING CHANGE (PR #156):** `remove_from_progressions` parameter removed. Method now **always** removes item from all progressions before removing from pile.
 
 **Example:**
 
 ```python
-# Remove from everywhere (pile + all progressions)
+# After PR #156: Always removes from pile + all progressions
 removed = flow.remove_item(task_id)
 
-# Remove from pile only, keep in progressions (orphan references)
-removed = flow.remove_item(task_id, remove_from_progressions=False)
+# Before PR #156: Had optional parameter
+# removed = flow.remove_item(task_id, remove_from_progressions=False)  # No longer supported
 ```
 
-**Warning**: Setting `remove_from_progressions=False` creates orphan UUID references in progressions. This is valid for lazy cleanup patterns but requires manual progression cleanup later.
+**Migration:** If you need to keep item in progressions (not recommended - creates orphan references), manually remove from pile only:
+
+```python
+# Not recommended: Manual pile removal (leaves orphan UUIDs in progressions)
+removed = flow.items.remove(task_id)
+```
 
 ---
 

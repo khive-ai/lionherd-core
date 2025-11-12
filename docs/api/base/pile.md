@@ -2,6 +2,12 @@
 
 > Thread-safe typed collection with rich query interface
 
+---
+
+> **⚠️ Migration Notice**: Breaking changes in v1.0.0-alpha5. See the [comprehensive migration guide](../../migration/v1.0.0-alpha5.md) for detailed upgrade instructions.
+
+---
+
 ## Overview
 
 `Pile` is a thread-safe collection for managing Element instances with type validation and rich querying capabilities. It combines dict-like keyed access with list-like insertion order preservation and provides a powerful type-dispatched `__getitem__` interface.
@@ -34,6 +40,74 @@
 - Single-threaded scenarios where thread safety overhead is unnecessary
 
 See [Element](element.md) for identity-based base class.
+
+## Migration Guide (v1.0.0a4 → v1.0.0a5)
+
+**Breaking Changes from PR #156, #157, #159:**
+
+### 1. Frozen Type Configuration (#156)
+
+```python
+# Before (v1.0.0a4) - Allowed mutation
+pile = Pile(item_type=Task)
+pile.item_type = {Task, Event}  # Worked (dangerous!)
+
+# After (v1.0.0a5+) - Frozen fields
+pile = Pile(item_type=Task)
+pile.item_type = {Task, Event}  # ValidationError: Field is frozen
+
+# Migration: Set type configuration at initialization
+pile = Pile(item_type={Task, Event}, strict_type=False)
+```
+
+### 2. include()/exclude() Return Semantics (#157)
+
+```python
+# Before (v1.0.0a4) - "Action taken"
+added = pile.include(item)      # True = was added, False = already present
+removed = pile.exclude(item)    # True = was removed, False = not present
+
+# After (v1.0.0a5+) - "Guaranteed state"
+in_pile = pile.include(item)    # True = IS in pile, False = validation failed
+not_in_pile = pile.exclude(item) # True = IS NOT in pile, False = coercion failed
+
+# Migration: Use new semantics
+if pile.include(item):
+    # Guaranteed: item is in pile (regardless of whether it was just added)
+    process(item)
+```
+
+### 3. items Property → Method (#159)
+
+```python
+# Before (v1.0.0a4) - Property returning MappingProxyType
+items_dict = pile.items  # Property
+item = items_dict[uuid]
+
+# After (v1.0.0a5+) - Method returning iterator
+for uuid, item in pile.items():  # Method - note the ()
+    process(uuid, item)
+
+# Migration for direct access: Use pile[uuid]
+item = pile[uuid]  # Direct UUID access
+```
+
+### 4. Async Methods Removed (#156)
+
+```python
+# Before (v1.0.0a4)
+await pile.add_async(item)
+item = await pile.get_async(uuid)
+
+# After (v1.0.0a5+)
+pile.add(item)       # Synchronous (Pile ops are CPU-bound)
+item = pile.get(uuid)
+```
+
+### 5. Removed Methods
+
+- `__list__()` - Use `list(pile)` instead
+- `to_list()` - Use `list(pile)` instead
 
 ## Class Signature
 
@@ -108,8 +182,8 @@ See [Element](element.md) documentation.
 
 | Attribute     | Type              | Mutable | Inherited | Description                          |
 |---------------|-------------------|---------|-----------|--------------------------------------|
-| `item_type`   | `set[type] \| None` | Yes     | No        | Type constraints (None = any Element) |
-| `strict_type` | `bool`            | Yes     | No        | Exact type enforcement               |
+| `item_type`   | `set[type] \| None` | **No (frozen)** | No | Type constraints (None = any Element) |
+| `strict_type` | `bool`            | **No (frozen)** | No | Exact type enforcement               |
 | `id`          | `UUID`            | No      | Yes       | Unique identifier (frozen)           |
 | `created_at`  | `datetime`        | No      | Yes       | Creation timestamp (frozen)          |
 | `metadata`    | `dict[str, Any]`  | Yes     | Yes       | Additional metadata                  |
@@ -118,8 +192,9 @@ See [Element](element.md) documentation.
 
 | Property      | Type                  | Description                              |
 |---------------|-----------------------|------------------------------------------|
-| `items`       | `MappingProxyType[UUID, T]` | Read-only view of internal dict    |
 | `progression` | `Progression`         | Copy of insertion order (prevents mutation) |
+
+**Important**: `item_type` and `strict_type` are **frozen fields** (PR #156). Type configuration must be set at initialization and cannot be mutated afterward. This prevents runtime type confusion.
 
 ## Methods
 
@@ -313,14 +388,26 @@ def include(self, item: T) -> bool
 
 - `item` (Element): Item to add
 
-**Returns:** bool - `True` if added, `False` if already present
+**Returns:** bool - **`True` if item IS in pile (guaranteed state), `False` only if validation fails**
+
+**⚠️ BREAKING CHANGE (PR #157):** Semantics changed from "action taken" to "guaranteed state":
+
+- **Before (v1.0.0a4)**: `True` = item was added, `False` = already present
+- **After (v1.0.0a5+)**: `True` = item IS in pile (membership guaranteed), `False` = validation failed
 
 **Example:**
 
 ```python
 item = Element()
-added1 = pile.include(item)  # True (added)
-added2 = pile.include(item)  # False (already present)
+
+# After PR #157: Returns guaranteed state
+result1 = pile.include(item)  # True (item IS in pile - was added)
+result2 = pile.include(item)  # True (item IS in pile - already present)
+
+# Pattern: Use boolean to verify inclusion
+if pile.include(item):
+    # Guaranteed: item is in pile
+    process(item)
 ```
 
 **Use Cases:**
@@ -347,13 +434,24 @@ def exclude(self, item: UUID | str | Element) -> bool
 
 - `item` (UUID | str | Element): Item to remove
 
-**Returns:** bool - `True` if removed, `False` if not present
+**Returns:** bool - **`True` if item IS NOT in pile (guaranteed state), `False` only if ID coercion fails**
+
+**⚠️ BREAKING CHANGE (PR #157):** Semantics changed from "action taken" to "guaranteed state":
+
+- **Before (v1.0.0a4)**: `True` = item was removed, `False` = not present
+- **After (v1.0.0a5+)**: `True` = item IS NOT in pile (absence guaranteed), `False` = ID coercion failed
 
 **Example:**
 
 ```python
-removed1 = pile.exclude(item)  # True (removed)
-removed2 = pile.exclude(item)  # False (not present)
+# After PR #157: Returns guaranteed state
+result1 = pile.exclude(item)  # True (item IS NOT in pile - was removed)
+result2 = pile.exclude(item)  # True (item IS NOT in pile - already absent)
+
+# Pattern: Use boolean to verify absence
+if pile.exclude(item):
+    # Guaranteed: item is not in pile
+    cleanup(item)
 ```
 
 **Time Complexity:** O(n) - must update progression if found
@@ -459,29 +557,104 @@ for item in pile:
 
 **Time Complexity:** O(1) to start, O(n) to iterate all
 
+#### `__bool__()`
+
+Check if pile is non-empty (supports `if pile:` idiom).
+
+**Signature:**
+
+```python
+def __bool__(self) -> bool
+```
+
+**Returns:** bool - `False` if pile is empty, `True` otherwise
+
+**Example:**
+
+```python
+pile = Pile()
+if not pile:
+    print("Pile is empty")
+
+pile.add(Element())
+if pile:
+    print("Pile has items")
+```
+
+**Time Complexity:** O(1)
+
+**Added in:** v1.0.0a5 (PR #159)
+
 #### `keys()`
 
-Get all UUIDs.
+Iterate over UUIDs in insertion order (dict-like interface).
 
-**Returns:** Iterator[UUID]
+**Signature:**
+
+```python
+def keys(self) -> Iterator[UUID]
+```
+
+**Returns:** Iterator[UUID] - UUIDs in the order items were added
+
+**Example:**
+
+```python
+for uuid in pile.keys():
+    print(f"Item ID: {uuid}")
+```
 
 **Time Complexity:** O(1) to start, O(n) for all keys
 
+**Added in:** v1.0.0a5 (PR #159)
+
+#### `items()`
+
+Iterate over (UUID, item) pairs in insertion order (dict-like interface).
+
+**Signature:**
+
+```python
+def items(self) -> Iterator[tuple[UUID, T]]
+```
+
+**Returns:** Iterator[tuple[UUID, T]] - (UUID, item) tuples in insertion order
+
+**Example:**
+
+```python
+for uuid, item in pile.items():
+    print(f"{uuid}: {item}")
+```
+
+**Time Complexity:** O(1) to start, O(n) for all items
+
+**Added in:** v1.0.0a5 (PR #159)
+
+**⚠️ BREAKING CHANGE:** Before PR #159, `items` was a read-only property returning `MappingProxyType[UUID, T]`. Now it's a method returning an iterator.
+
+**Migration:**
+
+```python
+# Before (v1.0.0a4)
+items_dict = pile.items  # Property - returns MappingProxyType
+item = items_dict[uuid]
+
+# After (v1.0.0a5+)
+for uuid, item in pile.items():  # Method - returns iterator
+    process(uuid, item)
+
+# Alternative: Use pile[uuid] for direct access
+item = pile[uuid]
+```
+
 #### `values()`
 
-Get all items in progression order.
+Get all items in progression order (not changed).
 
 **Returns:** Iterator[T]
 
 **Time Complexity:** O(1) to start, O(n) for all values
-
-#### `to_list()`
-
-Convert to list in progression order.
-
-**Returns:** list[T]
-
-**Time Complexity:** O(n)
 
 #### `size()`
 
@@ -498,6 +671,8 @@ Check if pile is empty.
 **Returns:** bool
 
 **Time Complexity:** O(1)
+
+**Note:** Prefer `if not pile:` using the `__bool__()` protocol instead of `if pile.is_empty():`.
 
 ---
 
@@ -540,68 +715,35 @@ print(len(tasks_only))  # 1
 
 ---
 
-### Async Operations
+### Async Support
 
-#### `add_async()`
+**⚠️ BREAKING CHANGE (PR #156):** Async methods `add_async()`, `remove_async()`, and `get_async()` have been removed.
 
-Add item asynchronously (thread-safe with async lock).
+**Rationale:** Pile operations are O(1) CPU-bound (dict/list operations), not I/O-bound. Async overhead provides no benefit.
 
-**Signature:**
-
-```python
-async def add_async(self, item: T) -> None
-```
-
-**Time Complexity:** O(1)
-
-#### `get_async()`
-
-Get item asynchronously.
-
-**Signature:**
+**Migration:**
 
 ```python
-async def get_async(self, item_id: UUID | str | Element, default: Any = ...) -> T | None
-```
+# Before (v1.0.0a4)
+await pile.add_async(item)
+item = await pile.get_async(uuid)
+removed = await pile.remove_async(uuid)
 
-**Time Complexity:** O(1)
-
-#### `remove_async()`
-
-Remove item asynchronously (thread-safe with async lock).
-
-**Signature:**
-
-```python
-async def remove_async(self, item_id: UUID | str | Element) -> T
-```
-
-**Parameters:**
-
-- `item_id`: Item UUID, string UUID, or Element to remove
-
-**Returns:** T - The removed item
-
-**Raises:** ValueError if item not found
-
-**Time Complexity:** O(n) - progression linear scan
-
-**Example:**
-
-```python
-removed = await pile.remove_async(item_id)
-print(f"Removed: {removed}")
+# After (v1.0.0a5+)
+pile.add(item)       # Synchronous - efficient for CPU-bound ops
+item = pile.get(uuid)
+removed = pile.remove(uuid)
 ```
 
 #### Async Context Manager
 
-Use pile as async context manager for manual lock control.
+Pile still supports async context manager for manual lock control in async workflows:
 
 **Example:**
 
 ```python
 async with pile as p:
-    # Lock held during context
+    # Async lock held during context
     items = list(p)
 ```
 
