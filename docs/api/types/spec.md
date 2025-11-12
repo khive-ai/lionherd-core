@@ -1252,9 +1252,9 @@ Enumeration of common metadata keys provides:
 - **Related Modules**:
   - `_sentinel`: Undefined and sentinel value handling
   - `lionherd_core.protocols`: Hashable, Allowable protocols
-- **Related Guides** (documentation pending):
-  - Protocols Guide: Protocol system overview
-  - Validation Guide: Validation patterns with Spec
+- **Related Guides**:
+  - [Protocols Guide](../../user_guide/protocols.md): Protocol system overview
+  - [Validation Guide](../../user_guide/validation.md): Validation patterns with Spec
 
 ## Examples
 
