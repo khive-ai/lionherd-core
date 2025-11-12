@@ -24,7 +24,7 @@ lionherd-core provides **sentinel values** (Undefined, Unset) for building APIs 
 
 ## Sentinels vs Optional: Decision Framework
 
-### Use `Optional[T]` When...
+### Use `Optional[T]` When
 
 **1. Absence is the only special case**
 
@@ -65,7 +65,7 @@ class Config:
             self.debug = debug
 ```
 
-### Use Sentinels When...
+### Use Sentinels When
 
 **1. `None` is a valid, distinct value**
 
