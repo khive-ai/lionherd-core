@@ -91,7 +91,7 @@ agents.include(researcher)
 found = agents[researcher.id]
 
 # Predicate queries
-idle_agents = agents.get(lambda a: a.status == "idle")
+idle_agents = agents[lambda a: a.status == "idle"]
 ```
 
 ### 2. Directed Graphs
