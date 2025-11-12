@@ -67,7 +67,7 @@ except NotFoundError:  # Changed from IndexError
     pass
 ```
 
-### 3. __bool__() Protocol Added
+### 3. **bool**() Protocol Added
 
 ```python
 # Before: if len(prog) == 0
@@ -98,6 +98,7 @@ class Progression(Element):
 ## Parameters
 
 **order**: `list[UUID | Element] | None = None` - Ordered sequence (auto-converts Elements to UUIDs, duplicates allowed)
+
 - Default: `[]` (empty progression)
 
 **name** : str, optional

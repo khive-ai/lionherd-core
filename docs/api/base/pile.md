@@ -44,6 +44,7 @@ See [Element](element.md) for identity-based base class.
 ## Migration Guide (v1.0.0a4 → v1.0.0a5)
 
 ### 1. Frozen Type Configuration
+
 ```python
 # Before: pile.item_type = {Task, Event}  # Mutation allowed
 # After:  pile.item_type = ...            # ValidationError: frozen field
@@ -51,6 +52,7 @@ pile = Pile(item_type={Task, Event})      # Set at init
 ```
 
 ### 2. include()/exclude() Return Semantics
+
 ```python
 # Before: True = action taken (added/removed)
 # After:  True = guaranteed state (in pile / not in pile)
@@ -59,12 +61,14 @@ if pile.include(item):  # True = item IS in pile now
 ```
 
 ### 3. items Property → Method
+
 ```python
 # Before: pile.items[uuid]
 # After:  pile[uuid] or for uuid, item in pile.items(): ...
 ```
 
 ### 4. Async Methods Removed
+
 ```python
 # Before: await pile.add_async(item)
 # After:  pile.add(item)  # Synchronous (CPU-bound ops)
