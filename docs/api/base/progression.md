@@ -42,41 +42,20 @@ See [Element](element.md) for identity-based base class.
 
 ## Migration Guide (v1.0.0a4 → v1.0.0a5)
 
-**Breaking Changes from PR #156:**
-
-### 1. Custom __init__ Removed - Field Validator Normalization
+### 1. Field Validator - Stricter Validation
 
 ```python
-# Before (v1.0.0a4) - Custom __init__ accepted invalid items
-prog = Progression(order=[uuid1, "invalid", None])  # Silently dropped invalid items
-
-# After (v1.0.0a5+) - Stricter validation, raises ValidationError
-prog = Progression(order=[uuid1, "invalid", None])
-# ValidationError: Invalid item in order (cannot coerce to UUID)
-
-# Migration: Ensure all items are valid UUIDs or Elements
-prog = Progression(order=[uuid1, uuid2, element])  # Valid
+# Before: Progression(order=[uuid1, "invalid", None])  # Silently dropped invalid
+# After:  Progression(order=[uuid1, "invalid", None])  # ValidationError
+# Use:    Progression(order=[uuid1, uuid2, element])   # Valid UUIDs/Elements only
 ```
 
 ### 2. Exception Changes - IndexError → NotFoundError
 
 ```python
-# Before (v1.0.0a4) - Raised IndexError
-prog = Progression()
-try:
-    item = prog.pop()
-except IndexError:
-    pass
-
-try:
-    item = prog.popleft()
-except IndexError:
-    pass
-
-# After (v1.0.0a5+) - Raises NotFoundError for semantic consistency
+# Before: except IndexError  # pop(), popleft(), __bool__
+# After:  except NotFoundError
 from lionherd_core.errors import NotFoundError
-
-prog = Progression()
 try:
     item = prog.pop()
 except NotFoundError:  # Changed from IndexError
@@ -91,19 +70,8 @@ except NotFoundError:  # Changed from IndexError
 ### 3. __bool__() Protocol Added
 
 ```python
-# Before (v1.0.0a4) - No __bool__ support
-prog = Progression()
-if len(prog) == 0:  # Had to use len()
-    print("Empty")
-
-# After (v1.0.0a5+) - Supports boolean context
-prog = Progression()
-if not prog:  # Pythonic empty check
-    print("Empty")
-
-prog.append(uuid1)
-if prog:  # True when non-empty
-    print("Has items")
+# Before: if len(prog) == 0
+# After:  if not prog  # Pythonic empty check
 ```
 
 ## Class Signature
@@ -129,15 +97,7 @@ class Progression(Element):
 
 ## Parameters
 
-### Constructor Parameters
-
-**order** : list of UUID or Element, optional
-
-Ordered sequence of identifiers. Accepts UUIDs or Elements (auto-converts to UUIDs).
-
-- Type: `list[UUID | Element]`
-- Auto-conversion: Element instances automatically extract `.id`
-- Duplicates: Allowed (list semantics)
+**order**: `list[UUID | Element] | None = None` - Ordered sequence (auto-converts Elements to UUIDs, duplicates allowed)
 - Default: `[]` (empty progression)
 
 **name** : str, optional

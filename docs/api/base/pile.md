@@ -43,71 +43,34 @@ See [Element](element.md) for identity-based base class.
 
 ## Migration Guide (v1.0.0a4 → v1.0.0a5)
 
-**Breaking Changes from PR #156, #157, #159:**
-
-### 1. Frozen Type Configuration (#156)
-
+### 1. Frozen Type Configuration
 ```python
-# Before (v1.0.0a4) - Allowed mutation
-pile = Pile(item_type=Task)
-pile.item_type = {Task, Event}  # Worked (dangerous!)
-
-# After (v1.0.0a5+) - Frozen fields
-pile = Pile(item_type=Task)
-pile.item_type = {Task, Event}  # ValidationError: Field is frozen
-
-# Migration: Set type configuration at initialization
-pile = Pile(item_type={Task, Event}, strict_type=False)
+# Before: pile.item_type = {Task, Event}  # Mutation allowed
+# After:  pile.item_type = ...            # ValidationError: frozen field
+pile = Pile(item_type={Task, Event})      # Set at init
 ```
 
-### 2. include()/exclude() Return Semantics (#157)
-
+### 2. include()/exclude() Return Semantics
 ```python
-# Before (v1.0.0a4) - "Action taken"
-added = pile.include(item)      # True = was added, False = already present
-removed = pile.exclude(item)    # True = was removed, False = not present
-
-# After (v1.0.0a5+) - "Guaranteed state"
-in_pile = pile.include(item)    # True = IS in pile, False = validation failed
-not_in_pile = pile.exclude(item) # True = IS NOT in pile, False = coercion failed
-
-# Migration: Use new semantics
-if pile.include(item):
-    # Guaranteed: item is in pile (regardless of whether it was just added)
+# Before: True = action taken (added/removed)
+# After:  True = guaranteed state (in pile / not in pile)
+if pile.include(item):  # True = item IS in pile now
     process(item)
 ```
 
-### 3. items Property → Method (#159)
-
+### 3. items Property → Method
 ```python
-# Before (v1.0.0a4) - Property returning MappingProxyType
-items_dict = pile.items  # Property
-item = items_dict[uuid]
-
-# After (v1.0.0a5+) - Method returning iterator
-for uuid, item in pile.items():  # Method - note the ()
-    process(uuid, item)
-
-# Migration for direct access: Use pile[uuid]
-item = pile[uuid]  # Direct UUID access
+# Before: pile.items[uuid]
+# After:  pile[uuid] or for uuid, item in pile.items(): ...
 ```
 
-### 4. Async Methods Removed (#156)
-
+### 4. Async Methods Removed
 ```python
-# Before (v1.0.0a4)
-await pile.add_async(item)
-item = await pile.get_async(uuid)
-
-# After (v1.0.0a5+)
-pile.add(item)       # Synchronous (Pile ops are CPU-bound)
-item = pile.get(uuid)
+# Before: await pile.add_async(item)
+# After:  pile.add(item)  # Synchronous (CPU-bound ops)
 ```
 
-### 5. Removed Methods
-
-- `__list__()` - Use `list(pile)` instead
-- `to_list()` - Use `list(pile)` instead
+### 5. Removed: `__list__()`, `to_list()` → use `list(pile)`
 
 ## Class Signature
 
@@ -136,47 +99,15 @@ class Pile(Element, Generic[T]):
 
 ## Parameters
 
-### Constructor Parameters
+**items**: `list[T] | None = None` - Initial items (auto-validated against `item_type`)
 
-**items** : list of Elements, optional
+**item_type**: `type[T] | set[type] | None = None` - Type constraint(s). Single type, set/Union, or None (any Element). O(1) check per add/update.
 
-Initial items to add to the pile.
+**order**: `list[UUID] | Progression | None = None` - Custom insertion order (validates UUIDs present)
 
-- Type: `list[T]`
-- Auto-validation: Items validated against `item_type` if specified
-- Default: `None` (empty pile)
+**strict_type**: `bool = False` - Exact type match (no subclasses) when True
 
-**item_type** : type or set of types, optional
-
-Type constraint(s) for validation. Accepts single type, set, list, or Union.
-
-- Type: `type[T] | set[type] | list[type] | None`
-- Single type: `Pile(item_type=Task)` - only Task instances
-- Union types: `Pile(item_type=Union[Task, Event])` - Task or Event
-- Set/list: `Pile(item_type={Task, Event})` - equivalent to Union
-- None (default): Any Element subclass allowed
-- **Time Complexity**: O(1) type check on each add/update
-
-**order** : list of UUID or Progression, optional
-
-Custom insertion order. If provided, overrides natural insertion order.
-
-- Type: `list[UUID] | Progression | None`
-- Validates all UUIDs are present in items
-- Default: `None` (insertion order)
-
-**strict_type** : bool, optional
-
-Enforce exact type match (no subclasses).
-
-- Type: `bool`
-- `False` (default): Allow subclasses (permissive)
-- `True`: Exact type only (strict validation)
-- Default: `False`
-
-**id**, **created_at**, **metadata** (inherited from Element)
-
-See [Element](element.md) documentation.
+**id**, **created_at**, **metadata** - Inherited from Element, see [Element](element.md)
 
 ## Attributes
 
@@ -281,61 +212,17 @@ def pop(self, item_id: UUID | str | Element) -> T
 
 **Time Complexity:** O(n) - same as remove()
 
-#### `get()`
+#### `get(item_id, default=...) -> T | None`
 
-Get item by ID with optional default (thread-safe).
-
-**Signature:**
-
-```python
-def get(self, item_id: UUID | str | Element, default: Any = ...) -> T | None
-```
-
-**Parameters:**
-
-- `item_id` (UUID | str | Element): Item to retrieve
-- `default` (Any, optional): Return value if not found
-
-**Raises:**
-
-- `ValueError`: If item not found and no default provided
-
-**Returns:** T | None - Item or default
-
-**Example:**
+Get item by ID with optional default. O(1), thread-safe. Raises ValueError if not found and no default.
 
 ```python
 item = pile.get(uuid, default=None)
-if item is None:
-    print("Not found")
 ```
 
-**Time Complexity:** O(1) - dict lookup
+#### `update(item) -> None`
 
-**Thread Safety:** Yes - uses RLock synchronization
-
-#### `update()`
-
-Update existing item (thread-safe).
-
-**Signature:**
-
-```python
-def update(self, item: T) -> None
-```
-
-**Parameters:**
-
-- `item` (Element): Updated item (must have same ID as existing)
-
-**Raises:**
-
-- `ValueError`: If item not found
-- `TypeError`: If type validation fails
-
-**Returns:** None (modifies in place)
-
-**Example:**
+Update existing item. O(1), thread-safe. Raises ValueError if not found, TypeError if type validation fails.
 
 ```python
 item = pile.get(uuid)
@@ -343,159 +230,45 @@ item.metadata["updated"] = True
 pile.update(item)
 ```
 
-**Time Complexity:** O(1) - dict update
+#### `clear() -> None`
 
-**Thread Safety:** Yes - uses RLock synchronization
-
-#### `clear()`
-
-Remove all items (thread-safe).
-
-**Signature:**
-
-```python
-def clear(self) -> None
-```
-
-**Returns:** None (modifies in place)
-
-**Example:**
-
-```python
-pile.clear()
-print(len(pile))  # 0
-```
-
-**Time Complexity:** O(1) - clears dict and progression
-
-**Thread Safety:** Yes - uses RLock synchronization
+Remove all items. O(1), thread-safe.
 
 ---
 
 ### Idempotent Operations
 
-#### `include()`
+#### `include(item) -> bool`
 
-Add item if not present (idempotent, safe for retries).
-
-**Signature:**
+Add item if not present (idempotent). Returns True if item IS in pile (guaranteed state), False if validation fails. Changed from "action taken" to "guaranteed state" semantics.
 
 ```python
-def include(self, item: T) -> bool
+pile.include(item)  # True both times (idempotent)
+pile.include(item)  # Item is guaranteed in pile
 ```
-
-**Parameters:**
-
-- `item` (Element): Item to add
-
-**Returns:** bool - **`True` if item IS in pile (guaranteed state), `False` only if validation fails**
-
-**⚠️ BREAKING CHANGE (PR #157):** Semantics changed from "action taken" to "guaranteed state":
-
-- **Before (v1.0.0a4)**: `True` = item was added, `False` = already present
-- **After (v1.0.0a5+)**: `True` = item IS in pile (membership guaranteed), `False` = validation failed
-
-**Example:**
-
-```python
-item = Element()
-
-# After PR #157: Returns guaranteed state
-result1 = pile.include(item)  # True (item IS in pile - was added)
-result2 = pile.include(item)  # True (item IS in pile - already present)
-
-# Pattern: Use boolean to verify inclusion
-if pile.include(item):
-    # Guaranteed: item is in pile
-    process(item)
-```
-
-**Use Cases:**
-
-- Retry-safe item registration
-- Idempotent event processing
-- Task deduplication in workflow systems
 
 **Time Complexity:** O(1) for membership check, O(1) for add if needed
 
 **Note**: Not thread-safe for concurrent calls with same item (check-then-act race condition). Use external synchronization for concurrent access.
 
-#### `exclude()`
+#### `exclude(item) -> bool`
 
-Remove item if present (idempotent, safe for retries).
-
-**Signature:**
-
-```python
-def exclude(self, item: UUID | str | Element) -> bool
-```
-
-**Parameters:**
-
-- `item` (UUID | str | Element): Item to remove
-
-**Returns:** bool - **`True` if item IS NOT in pile (guaranteed state), `False` only if ID coercion fails**
-
-**⚠️ BREAKING CHANGE (PR #157):** Semantics changed from "action taken" to "guaranteed state":
-
-- **Before (v1.0.0a4)**: `True` = item was removed, `False` = not present
-- **After (v1.0.0a5+)**: `True` = item IS NOT in pile (absence guaranteed), `False` = ID coercion failed
-
-**Example:**
-
-```python
-# After PR #157: Returns guaranteed state
-result1 = pile.exclude(item)  # True (item IS NOT in pile - was removed)
-result2 = pile.exclude(item)  # True (item IS NOT in pile - already absent)
-
-# Pattern: Use boolean to verify absence
-if pile.exclude(item):
-    # Guaranteed: item is not in pile
-    cleanup(item)
-```
-
-**Time Complexity:** O(n) - must update progression if found
-
-**Note**: Not thread-safe for concurrent calls with same item (check-then-act race condition). Use external synchronization for concurrent access.
+Remove item if present (idempotent). Returns True if item IS NOT in pile (guaranteed state), False if ID coercion fails. O(n). Not thread-safe for concurrent same-item calls.
 
 ---
 
 ### Rich Query Interface
 
-#### `__getitem__()` - Type-Dispatched Queries
+#### `__getitem__(key)` - Type-Dispatched Queries
 
 Get items by UUID, index, slice, callable, or Progression.
 
-**Signature (overloaded):**
-
 ```python
-# Get by UUID or string ID
-def __getitem__(self, key: UUID | str) -> T: ...
-
-# Get by index (progression order)
-def __getitem__(self, key: int) -> T: ...
-
-# Get by slice (progression order)
-def __getitem__(self, key: slice) -> list[T]: ...
-
-# Filter by callable predicate
-def __getitem__(self, key: Callable[[T], bool]) -> Pile[T]: ...
-
-# Filter by progression
-def __getitem__(self, key: Progression) -> Pile[T]: ...
-```
-
-**Examples:**
-
-```python
-# Query by UUID
-item = pile[uuid_obj]
-
-# Query by index (progression order)
-first = pile[0]
-last = pile[-1]
-
-# Query by slice
+item = pile[uuid]           # By UUID: O(1)
+first = pile[0]             # By index: O(1)
+recent = pile[-5:]          # By slice: O(k)
+tasks = pile[lambda x: ...]  # By callable: O(n), returns new Pile
+subset = pile[progression]   # By Progression: O(k), returns new Pile
 middle = pile[1:3]  # Returns list[T]
 
 # Filter by callable (returns new Pile)
