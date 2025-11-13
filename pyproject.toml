@@ -51,7 +51,7 @@ artifacts = ["src/lionherd_core/py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "benchmarks"]
 addopts = "--tb=short --no-header -q"
 markers = [
   "unit: Unit tests",
@@ -70,6 +70,8 @@ dev = [
   "pytest>=8.4.2",
   "pytest-asyncio>=1.2.0",
   "pytest-anyio>=0.0.0",
+  "pytest-benchmark>=5.1.0",
+  "memory-profiler>=0.61.0",
   "pytest-cov>=7.0.0",
   "pytest-timeout>=2.3.1",
   "pytest-xdist>=3.5.0",
