@@ -22,11 +22,34 @@ from .base import (
     Pile,
     Progression,
 )
-from .errors import LionherdError
+from .errors import (
+    ConfigurationError,
+    ConnectionError,
+    ExecutionError,
+    ExistsError,
+    LionherdError,
+    NotFoundError,
+    TimeoutError,
+    ValidationError,
+)
 from .libs import (
     concurrency as concurrency,
     schema_handlers as schema_handlers,
     string_handlers as string_handlers,
+)
+from .protocols import (
+    Adaptable,
+    AdapterRegisterable,
+    Allowable,
+    AsyncAdaptable,
+    AsyncAdapterRegisterable,
+    Containable,
+    Deserializable,
+    Hashable,
+    Invocable,
+    Observable,
+    Serializable,
+    implements,
 )
 from .types import (
     CommonMeta,
@@ -50,9 +73,22 @@ from .types import (
 )
 
 __all__ = (
+    # Protocols
+    "Adaptable",
+    "AdapterRegisterable",
+    "Allowable",
+    "AsyncAdaptable",
+    "AsyncAdapterRegisterable",
+    # Base structures
     "Broadcaster",
+    # Types
     "CommonMeta",
+    # Errors
+    "ConfigurationError",
+    "ConnectionError",
+    "Containable",
     "DataClass",
+    "Deserializable",
     "Edge",
     "EdgeCondition",
     "Element",
@@ -61,9 +97,13 @@ __all__ = (
     "EventBus",
     "EventStatus",
     "Execution",
+    "ExecutionError",
+    "ExistsError",
     "Flow",
     "Graph",
+    "Hashable",
     "HashableModel",
+    "Invocable",
     "LionherdError",
     "MaybeSentinel",
     "MaybeUndefined",
@@ -71,16 +111,23 @@ __all__ = (
     "Meta",
     "ModelConfig",
     "Node",
+    "NotFoundError",
+    "Observable",
     "Operable",
     "Params",
     "Pile",
     "Progression",
+    "Serializable",
     "Spec",
+    "TimeoutError",
     "Undefined",
     "UndefinedType",
     "Unset",
     "UnsetType",
+    "ValidationError",
+    # Namespaces
     "concurrency",
+    "implements",
     "is_sentinel",
     "ln",
     "lndl",
