@@ -39,14 +39,27 @@ Each component follows the same structure:
 └── baselines/            # Saved benchmark results
 ```
 
-## Future: CI Integration
+## CI Integration
 
-Planned benchmark automation for regression detection:
+Automated benchmark regression detection runs on every PR:
 
-Benchmarks run on every PR to detect performance regressions:
+**Regression Thresholds:**
+>
+- >10% slower: ❌ Fails PR
+- 5-10% slower: ⚠️ Warning (doesn't fail)
+- >5% faster: ✅ Improvement
 
-- Baseline: Previous release version
-- Threshold: <10% regression allowed
-- Alert: >10% regression requires justification
+**Workflow:**
 
-See `GUIDE.md` for detailed benchmarking best practices and CI integration examples.
+1. PR triggers benchmark run
+2. Compares against baseline (main branch)
+3. Comments on PR with results
+4. Fails PR if >10% regression detected
+
+**Baseline Management:**
+
+- Baseline updated on merge to main
+- Stored as GitHub artifact (90 days retention)
+- Accessible via workflow dispatch for manual runs
+
+See `GUIDE.md` for detailed benchmarking best practices.
