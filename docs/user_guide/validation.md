@@ -906,7 +906,8 @@ class User(BaseModel):
 Create validator libraries:
 
 ```python
-# validators.py
+# noqa:validation
+# validators.py - Example reusable validator module
 """Reusable validator functions."""
 
 def not_empty(v: str) -> str:

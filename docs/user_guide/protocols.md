@@ -404,6 +404,7 @@ class Task:
 async def work():
     return "done"
 
+# noqa:validation
 task = Task(work)
 result = await task.invoke()
 print(result)  # "done"
