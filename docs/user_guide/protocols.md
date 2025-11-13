@@ -1022,4 +1022,4 @@ def test_element_implements_observable():
 - [PEP 544 – Protocols: Structural subtyping](https://peps.python.org/pep-0544/)
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)
 - [Go Interfaces](https://go.dev/tour/methods/9)
-- [Protocol-Oriented Programming](https://developer.apple.com/videos/play/wwdc2015/408/)
+- [Protocol-Oriented Programming](https://developer.apple.com/videos/wwdc2015/)
