@@ -43,16 +43,16 @@ Pile will be slower for:
 Usage
 -----
 Run all benchmarks:
-    uv run pytest tests/benchmarks/test_pile_benchmarks.py
+    uv run pytest benchmarks/pile/ --benchmark-only
 
 Run specific benchmark:
-    uv run pytest tests/benchmarks/test_pile_benchmarks.py::test_pile_add
+    uv run pytest benchmarks/pile/test_benchmarks.py::test_pile_add
 
 Save results:
-    uv run pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-save=pile
+    uv run pytest benchmarks/pile/ --benchmark-save=pile
 
 Compare results:
-    uv run pytest-benchmark compare pile_*
+    pytest-benchmark compare pile_*
 
 """
 
@@ -212,7 +212,7 @@ class TestCoreOperations:
 
         def run():
             for uuid in uuids:
-                uuid in pile
+                _ = uuid in pile
 
         benchmark(run)
 
@@ -222,7 +222,7 @@ class TestCoreOperations:
 
         def run():
             for uuid in uuids:
-                uuid in dict_baseline
+                _ = uuid in dict_baseline
 
         benchmark(run)
 
@@ -313,7 +313,7 @@ class TestBulkOperations:
     def test_pile_filter_by_progression(self, benchmark, pile, elements):
         """Benchmark Pile.__getitem__[Progression] - progression filtering."""
         # Filter to 50% of items
-        subset_ids = [elem.id for elem in elements[:: 2]]
+        subset_ids = [elem.id for elem in elements[::2]]
         prog = Progression(order=subset_ids)
 
         def run():
@@ -408,7 +408,7 @@ class TestPandasComparison:
 
         def run():
             for uuid in uuids:
-                uuid in pandas_baseline
+                _ = uuid in pandas_baseline
 
         benchmark(run)
 
@@ -514,7 +514,7 @@ class TestSpecialOperations:
         """Benchmark Pile.keys() iteration."""
 
         def run():
-            for _ in pile.keys():
+            for _ in pile.keys():  # noqa: SIM118
                 pass
 
         benchmark(run)
@@ -582,8 +582,8 @@ def analyze_results():
     """Utility to print analysis of benchmark results.
 
     Run after benchmarks complete:
-        pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-save=pile
-        python -c "from tests.benchmarks.test_pile_benchmarks import analyze_results; analyze_results()"
+        pytest benchmarks/pile/ --benchmark-save=pile
+        python -c "from benchmarks.pile.test_benchmarks import analyze_results; analyze_results()"
     """
     try:
         import json
@@ -595,7 +595,7 @@ def analyze_results():
         print("PILE BENCHMARK ANALYSIS")
         print("=" * 80)
         print("\nTo analyze results:")
-        print("  1. Run: pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-save=pile")
+        print("  1. Run: pytest benchmarks/pile/ --benchmark-save=pile")
         print("  2. View: .benchmarks/*/0001_pile.json")
         print("  3. Compare: pytest-benchmark compare pile_*")
         print("\nKey Questions:")
