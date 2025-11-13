@@ -1,0 +1,59 @@
+name: Create Benchmark Baselines
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-baselines:
+    name: Generate Baseline Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run benchmarks and save baseline
+        run: |
+          # Run all benchmarks and save to baseline JSON
+          uv run pytest benchmarks/ \
+            --benchmark-only \
+            --benchmark-json=baseline.json \
+            --benchmark-columns=min,max,mean,stddev,median \
+            --benchmark-sort=name \
+            -v
+
+      - name: Upload baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline.json
+          retention-days: 90
+
+      - name: Workflow complete
+        run: |
+          echo "✅ Baseline benchmarks created and uploaded as artifact"
+          echo "📊 Artifact name: benchmark-baseline"
+          echo "⏳ Retention: 90 days"
+          echo ""
+          echo "Next steps:"
+          echo "1. Verify artifact upload in Actions UI"
+          echo "2. Merge PR #182 (regression detection workflow)"
+          echo "3. Future PRs will compare against this baseline"
