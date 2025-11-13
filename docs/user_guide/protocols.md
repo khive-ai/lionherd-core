@@ -384,6 +384,7 @@ class Invocable(Protocol):
 **Implementation:**
 
 ```python
+from lionherd_core.libs.concurrency import is_coro_func
 from lionherd_core.protocols import Invocable, implements
 
 @implements(Invocable)
@@ -395,7 +396,7 @@ class Task:
 
     async def invoke(self):
         """Execute task function."""
-        if asyncio.iscoroutinefunction(self.fn):
+        if is_coro_func(self.fn):
             return await self.fn(*self.args, **self.kwargs)
         return self.fn(*self.args, **self.kwargs)
 

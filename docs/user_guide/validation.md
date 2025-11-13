@@ -756,13 +756,13 @@ print(value, errors)  # None, ["Age out of range"]
 Validators can be async for I/O-bound validation:
 
 ```python
-import asyncio
+from lionherd_core.libs.concurrency import is_coro_func, sleep
 from lionherd_core.types import Spec
 
 async def validate_unique_email(email: str) -> str:
     """Async validator: check email uniqueness in database."""
     # Simulate database query
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     existing_emails = ["alice@example.com", "bob@example.com"]
 
     if email in existing_emails:
@@ -775,7 +775,7 @@ email_spec = Spec(str, name="email", validator=validate_unique_email)
 # Apply async validation
 async def validate_user_email(email: str) -> str:
     validator = email_spec.get("validator")
-    if asyncio.iscoroutinefunction(validator):
+    if is_coro_func(validator):
         return await validator(email)
     return validator(email)
 
@@ -801,7 +801,7 @@ anyio.run(main)
 Chain async validators for complex validation:
 
 ```python
-import asyncio
+from lionherd_core.libs.concurrency import sleep
 
 async def validate_email_format(email: str) -> str:
     """Validate email format."""
@@ -812,7 +812,7 @@ async def validate_email_format(email: str) -> str:
 async def validate_email_domain(email: str) -> str:
     """Validate email domain exists (simulated DNS lookup)."""
     domain = email.split("@")[1]
-    await asyncio.sleep(0.1)  # Simulate DNS lookup
+    await sleep(0.1)  # Simulate DNS lookup
 
     valid_domains = ["example.com", "test.com"]
     if domain not in valid_domains:
@@ -821,7 +821,7 @@ async def validate_email_domain(email: str) -> str:
 
 async def validate_email_unique(email: str) -> str:
     """Validate email is unique (simulated DB query)."""
-    await asyncio.sleep(0.1)  # Simulate DB query
+    await sleep(0.1)  # Simulate DB query
 
     existing = ["alice@example.com"]
     if email in existing:
