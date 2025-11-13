@@ -522,7 +522,7 @@ The `@implements()` decorator enforces **literal implementation**: methods/prope
 
 ### Rules
 
-**Rule 1: Methods must be in class body**
+#### Rule 1: Methods must be in class body
 
 ```python
 # ❌ WRONG: Relies on inheritance
@@ -541,7 +541,7 @@ class Child(Parent):
         return super().to_dict(**kwargs)  # Can call parent
 ```
 
-**Rule 2: Properties must be declared in class body**
+#### Rule 2: Properties must be declared in class body
 
 ```python
 # ❌ WRONG: Inherits property
@@ -562,7 +562,7 @@ class Child(Parent):
         return super().id
 ```
 
-**Rule 3: Pydantic fields in annotations count**
+#### Rule 3: Pydantic fields in annotations count
 
 ```python
 from pydantic import BaseModel
@@ -860,7 +860,7 @@ if user.validate():
 
 ### Protocol Guidelines
 
-**1. Single Responsibility**
+#### 1. Single Responsibility
 
 Each protocol should define one capability:
 
@@ -880,7 +880,7 @@ class SerializableDeserializable(Protocol):
     def from_dict(cls, data, **kwargs): ...
 ```
 
-**2. Clear Naming**
+#### 2. Clear Naming
 
 Protocol names should describe capability:
 
@@ -896,7 +896,7 @@ class Manager(Protocol): ...
 class Helper(Protocol): ...
 ```
 
-**3. Minimal Interface**
+#### 3. Minimal Interface
 
 Keep protocols minimal:
 

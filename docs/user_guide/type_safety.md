@@ -233,7 +233,7 @@ print(process_items([]))          # 0 (empty list treated as sentinel)
 
 You can create custom TypeGuards for domain-specific narrowing:
 
-**Example: Email validation**
+#### Example: Email validation
 
 ```python
 from typing import TypeGuard
@@ -252,7 +252,7 @@ def send_email(email: str) -> None:
     ...
 ```
 
-**Example: Non-empty list**
+#### Example: Non-empty list
 
 ```python
 from typing import TypeGuard, TypeVar
@@ -278,7 +278,7 @@ def process_batch(items: list[int]) -> int:
 
 Sentinels enable type-safe three-state logic: value / None / missing.
 
-**Pattern: Optional parameter with None as valid value**
+#### Pattern: Optional parameter with None as valid value
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset, not_sentinel
@@ -312,7 +312,7 @@ print(configure(timeout=60.0))        # {'timeout': 60.0}
 print(configure(timeout=None))        # {'timeout': inf}
 ```
 
-**Pattern: Dictionary lookup with missing key detection**
+#### Pattern: Dictionary lookup with missing key detection
 
 ```python
 from lionherd_core.types import Undefined, MaybeUndefined, not_sentinel
@@ -346,7 +346,7 @@ print(process_config("retries"))  # "retries: not configured"
 
 Use `not_sentinel()` to filter collections while preserving type information:
 
-**Example: Filter sentinel values from list**
+#### Example: Filter sentinel values from list
 
 ```python
 from lionherd_core.types import Undefined, Unset, MaybeSentinel, not_sentinel
@@ -361,7 +361,7 @@ print(real_values)  # [1, 2, 3, 4]
 print(sum(real_values))  # 10 - type-safe sum()
 ```
 
-**Example: Filter both sentinels and None**
+#### Example: Filter both sentinels and None
 
 ```python
 from lionherd_core.types import Unset, not_sentinel
@@ -382,7 +382,7 @@ print(real_values)  # [1, 2, 3]
 
 lionherd-core uses **Pydantic V2** for runtime validation. Combine with type narrowing for robust validation:
 
-**Example: Validated configuration**
+#### Example: Validated configuration
 
 ```python
 from pydantic import BaseModel, Field, field_validator
@@ -434,7 +434,7 @@ except Exception as e:
 
 Use `isinstance()` with runtime-checkable protocols for structural typing:
 
-**Example: Checking protocol implementation**
+#### Example: Checking protocol implementation
 
 ```python
 from lionherd_core.protocols import Serializable, Observable
@@ -455,7 +455,7 @@ elem = Element(metadata={"key": "value"})
 save_to_db(elem)  # Works - Element implements Serializable
 ```
 
-**Example: Multi-protocol check**
+#### Example: Multi-protocol check
 
 ```python
 from lionherd_core.protocols import Observable, Serializable

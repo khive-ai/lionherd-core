@@ -26,7 +26,7 @@ lionherd-core provides **sentinel values** (Undefined, Unset) for building APIs 
 
 ### Use `Optional[T]` When
 
-**1. Absence is the only special case**
+#### 1. Absence is the only special case
 
 ```python
 # ✅ CORRECT: None means "no value"
@@ -37,7 +37,7 @@ def get_user(user_id: str) -> User | None:
 # No need for sentinel - None adequately represents absence
 ```
 
-**2. Two states suffice**
+#### 2. Two states suffice
 
 ```python
 # ✅ CORRECT: Two states (value | None)
@@ -48,7 +48,7 @@ def format_date(date: datetime | None = None) -> str:
     return date.strftime("%Y-%m-%d")
 ```
 
-**3. Public API simplicity matters**
+#### 3. Public API simplicity matters
 
 ```python
 # ✅ CORRECT: Simple public API
@@ -67,7 +67,7 @@ class Config:
 
 ### Use Sentinels When
 
-**1. `None` is a valid, distinct value**
+#### 1. `None` is a valid, distinct value
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset
@@ -91,7 +91,7 @@ def set_timeout(
 
 **Why sentinels?** Because `None` has a specific meaning (infinite timeout), distinct from "don't change current value".
 
-**2. Partial updates (PATCH semantics)**
+#### 2. Partial updates (PATCH semantics)
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset
@@ -122,7 +122,7 @@ def update_user(
 
 **Why sentinels?** Distinguishes "field not provided" (Unset) from "clear field" (None).
 
-**3. Missing vs present-but-null in data**
+#### 3. Missing vs present-but-null in data
 
 ```python
 from lionherd_core.types import Undefined, MaybeUndefined
@@ -344,7 +344,7 @@ def create_user(name: str, email: str | None = None) -> User:
     ...
 ```
 
-**✅ Better: Use sentinel for "not provided"**
+#### ✅ Better: Use sentinel for "not provided"
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset
@@ -716,7 +716,7 @@ def update_user(user_id: str, update: UserUpdate) -> User:
 
 ### Anti-Pattern 1: Overusing Sentinels
 
-**❌ Bad: Sentinels where `None` suffices**
+#### ❌ Bad: Sentinels where `None` suffices
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset
@@ -728,7 +728,7 @@ def greet(name: MaybeUnset[str] = Unset) -> str:
     return f"Hello, {name}"
 ```
 
-**✅ Good: Use `None` for simple optional**
+#### ✅ Good: Use `None` for simple optional
 
 ```python
 def greet(name: str | None = None) -> str:
@@ -740,7 +740,7 @@ def greet(name: str | None = None) -> str:
 
 ### Anti-Pattern 2: Inconsistent Sentinel Semantics
 
-**❌ Bad: Mixed sentinel meanings**
+#### ❌ Bad: Mixed sentinel meanings
 
 ```python
 from lionherd_core.types import Unset, Undefined
@@ -753,7 +753,7 @@ def update(
     ...
 ```
 
-**✅ Good: Consistent usage**
+#### ✅ Good: Consistent usage
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset
@@ -768,7 +768,7 @@ def update(
 
 ### Anti-Pattern 3: Hidden Sentinel Logic
 
-**❌ Bad: Sentinel logic buried in implementation**
+#### ❌ Bad: Sentinel logic buried in implementation
 
 ```python
 def configure(timeout=Unset) -> Config:
@@ -778,7 +778,7 @@ def configure(timeout=Unset) -> Config:
     ...
 ```
 
-**✅ Good: Document sentinel behavior**
+#### ✅ Good: Document sentinel behavior
 
 ```python
 from lionherd_core.types import Unset, MaybeUnset

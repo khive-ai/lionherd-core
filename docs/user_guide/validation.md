@@ -80,7 +80,7 @@ print(validators)  # [<function min_length>, <function max_length>]
 
 `Spec` enforces validator metadata constraints at construction:
 
-**Constraint 1: Validators must be callable**
+#### Constraint 1: Validators must be callable
 
 ```python
 # ❌ WRONG: Non-callable validator
@@ -92,7 +92,7 @@ except ExceptionGroup as e:
     #   ValueError: Validators must be a list of functions or a function
 ```
 
-**Constraint 2: Validator list must contain callables**
+#### Constraint 2: Validator list must contain callables
 
 ```python
 # ❌ WRONG: List with non-callable
