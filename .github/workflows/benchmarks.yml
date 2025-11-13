@@ -178,10 +178,16 @@ jobs:
 
       - name: Upload benchmark results (for baseline)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Rename to baseline.json to match download expectations
+          mv benchmark-results.json baseline.json
+
+      - name: Upload baseline artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-baseline
-          path: benchmark-results.json
+          path: baseline.json
           retention-days: 90
 
       - name: Fail on regression
