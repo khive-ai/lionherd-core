@@ -11,50 +11,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING**: `Pile.item_type` and `Pile.strict_type` are now frozen fields (#156). Type configuration must be set at initialization and cannot be mutated afterward. Prevents runtime type confusion.
-- **BREAKING**: `Pile.include()` and `Pile.exclude()` return value semantics changed (#157). Now return guaranteed state (True = in pile) rather than action taken (True = was added).
-- **BREAKING**: `Pile.items` changed from property to method (#159). Returns `Iterator[tuple[UUID, T]]`.
-- **BREAKING**: `Progression.__init__` removed—all normalization moved to `@field_validator` (#156). Validation is stricter: invalid items raise `ValidationError` instead of being silently dropped.
-- **BREAKING**: `Flow.__init__` signature redesigned to accept `progressions` parameter and create configured `Pile` upfront (#156). Respects frozen `item_type`/`strict_type`.
-- **BREAKING**: `Flow` now validates referential integrity at construction (#156). All UUIDs in progressions must exist in items pile.
-- **BREAKING**: `Flow.add_item()` parameter renamed: `progression_ids` → `progressions`.
-- **BREAKING**: `Flow.remove_item()` parameter removed: `remove_from_progressions` no longer supported. Always removes item from all progressions.
-- **Progression exceptions**: Migrate `IndexError` → `NotFoundError` for semantic consistency
-  - `pop()` without default raises `NotFoundError` instead of `IndexError`
-  - `popleft()` on empty raises `NotFoundError` instead of `IndexError`
-  - `_validate_index()` raises `NotFoundError` for out-of-bounds/empty
-  - Rationale: "Index not found" is semantically same as "item not found" (consistent with Pile/Graph/Flow)
-- **Progression docstrings**: Trimmed to API contract only (params, returns, raises)
-  - Moved design rationale and "why" explanations to test docstrings
-  - Pattern: Source code = what/how, tests = why/design intent
-- **BREAKING**: Protocol separation - `Adaptable`/`AsyncAdaptable` split from registry mutation (#147). Classes now explicitly compose capabilities:
-  - `Adaptable` / `AsyncAdaptable` - read-only adaptation (adapt_to/from)
-  - `AdapterRegisterable` / `AsyncAdapterRegisterable` - mutable registry (register_adapter)
+**Pile API**:
+- **BREAKING**: `item_type` and `strict_type` now frozen (#156). Set at initialization only.
+- **BREAKING**: `include()`/`exclude()` return guaranteed state (True = in pile) not action taken (#157).
+- **BREAKING**: `items` changed from property to method (#159). Returns `Iterator[tuple[UUID, T]]`.
 
-  **Migration**: Update `@implements()` declarations on custom classes inheriting from Node/Pile/Graph to include both protocols if registering adapters.
+**Flow API**:
+- **BREAKING**: `__init__` accepts `progressions` parameter, creates configured Pile upfront (#156).
+- **BREAKING**: Validates referential integrity at construction (#156). All progression UUIDs must exist in items.
+- **BREAKING**: `add_item()` parameter renamed: `progression_ids` → `progressions` (#162).
+- **BREAKING**: `remove_item()` always removes from all progressions. `remove_from_progressions` parameter removed (#162).
+
+**Progression API**:
+- **BREAKING**: `__init__` removed—validation moved to `@field_validator` (#156). Invalid items raise `ValidationError` (no silent drops).
+- **BREAKING**: `IndexError` → `NotFoundError` for `pop()`, `popleft()`, `_validate_index()` (#153). Consistent with Pile/Graph/Flow.
+
+**Protocol System**:
+- **BREAKING**: Protocol separation (#147, #149). Adaptable protocols split from registry mutation:
+  - `Adaptable`/`AsyncAdaptable` - read-only adaptation
+  - `AdapterRegisterable`/`AsyncAdapterRegisterable` - mutable registry
+  - **Migration**: Update `@implements()` declarations to include both if registering adapters.
+- **BREAKING**: `@implements()` strict runtime enforcement (#149). Methods must be in class body (inheritance doesn't count). Raises `TypeError` on violation.
 
 ### Removed
 
-- **BREAKING**: Async Pile methods removed: `add_async()`, `remove_async()`, `get_async()`. Use sync methods (Pile operations are O(1) CPU-bound, not I/O).
-- **BREAKING**: `Pile.__list__()` and `Pile.to_list()` removed. Use built-in `list(pile)`.
+- **BREAKING**: Async Pile methods: `add_async()`, `remove_async()`, `get_async()` (#162). Use sync methods (O(1) CPU-bound).
+- **BREAKING**: `Pile.__list__()` and `to_list()` (#162). Use built-in `list(pile)`.
 
 ### Added
 
-- **API Exports**: All protocols and errors now exported at top level for simplified imports (#148, #171). Backwards compatible - old import paths still work.
-  - Protocols: `Observable`, `Serializable`, `Adaptable`, `AdapterRegisterable`, `AsyncAdaptable`, `AsyncAdapterRegisterable`, `Deserializable`, `Containable`, `Allowable`, `Invocable`, `Hashable`, `implements`
-  - Errors: `NotFoundError`, `ExistsError`, `ValidationError`, `ConfigurationError`, `ConnectionError`, `ExecutionError`, `TimeoutError`
-  - Migration: `from lionherd_core import Observable, NotFoundError` (was `from lionherd_core.protocols import Observable`)
-- `Pile.__bool__` protocol for empty checks (#159). `if pile:` is False when empty.
-- `Pile` dict-like iteration protocol (#159): `keys()` and `items()` methods for dict-like access.
-- `Progression.__bool__` protocol for empty checks (#156). Empty progressions are falsy.
-- `Flow` referential integrity validation via `@model_validator` (#156).
-- **BREAKING**: `@implements()` strict runtime enforcement (#147). Classes MUST define protocol methods in class body (inheritance doesn't count). Enforces Rust-like explicit trait implementation. Raises `TypeError` on violation with clear error message.
-- **Documentation**: Comprehensive migration guide (`docs/migration/v1.0.0-alpha5.md`), user guides (type safety, API design, validation, protocols), and updated notebooks for all API changes (#165-#169).
+- **Top-level exports** (#148, #171): All protocols/errors exported at top level. Backwards compatible.
+  - Import: `from lionherd_core import Observable, NotFoundError` (was `from lionherd_core.protocols import ...`)
+- **Bool protocols** (#156, #159): `Pile.__bool__`, `Progression.__bool__` for empty checks.
+- **Pile iteration** (#159): `keys()` and `items()` methods for dict-like access.
+- **Comprehensive documentation** (#165-#169): Migration guide, user guides (type safety, API design, validation, protocols), updated notebooks.
 
 ### Fixed
 
-- **Flow**: `item_type`/`strict_type` now correctly applied to items `Pile` (#156). Previous design created default Pile then mutated frozen fields.
-- **Flow**: `add_progression()` now validates referential integrity before adding to pile (#164, #170). Prevents inconsistent state if progression contains invalid UUIDs. Consistent with `@model_validator` pattern.
+- **Flow**: `item_type`/`strict_type` correctly applied to items Pile (#156). Previous design mutated frozen fields.
+- **Flow**: `add_progression()` validates referential integrity before mutation (#164, #170). Prevents inconsistent state.
 
 ## [1.0.0a4](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha4) - 2025-11-11
 
