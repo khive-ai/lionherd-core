@@ -1,0 +1,102 @@
+name: Create Benchmark Baselines
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-baselines:
+    name: Generate Baseline Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Create baselines directory
+        run: mkdir -p benchmarks/baselines
+
+      - name: Run benchmarks and save baselines
+        run: |
+          # Run all benchmarks and save to baseline JSON
+          uv run pytest benchmarks/ \
+            --benchmark-only \
+            --benchmark-json=benchmarks/baselines/baseline.json \
+            --benchmark-columns=min,max,mean,stddev,median \
+            --benchmark-sort=name \
+            -v
+
+      - name: Create PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create new branch from current
+          BRANCH="ci/baseline-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+
+          # Add and commit baseline
+          git add benchmarks/baselines/baseline.json
+
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          git commit -m "chore: add benchmark baselines" -m "Generated from CI run on $TIMESTAMP" -m "This establishes the baseline for benchmark regression detection." -m "🤖 Generated via GitHub Actions"
+
+          # Push branch
+          git push origin "$BRANCH"
+
+          # Save branch name for PR creation
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          gh pr create \
+            --title "chore: add benchmark baselines" \
+            --body "## Summary
+
+          This PR adds baseline benchmark results generated in CI.
+
+          ## Details
+
+          - **Generated**: $TIMESTAMP
+          - **Python**: 3.11
+          - **Platform**: ubuntu-latest
+          - **Benchmarks**: All suites (pile, flow, lndl)
+
+          ## Purpose
+
+          Establishes the baseline for automated benchmark regression detection (#179).
+
+          ## Files
+
+          - \`benchmarks/baselines/baseline.json\` - Complete benchmark results
+
+          ## Next Steps
+
+          - Merge this PR to main
+          - Merge main into PR #182 (benchmark regression detection)
+          - Future PRs will compare against this baseline
+
+          🤖 Generated via GitHub Actions" \
+            --base main \
+            --head "$BRANCH"
