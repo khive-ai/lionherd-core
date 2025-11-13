@@ -22,7 +22,7 @@ Comprehensive guide to performance benchmarking in lionherd-core.
 
 ```bash
 # Run Pile benchmarks
-uv run pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-only
+uv run pytest benchmarks/test_pile_benchmarks.py --benchmark-only
 ```
 
 ### 2. Flow Benchmarks
@@ -41,7 +41,7 @@ uv run pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-only
 
 ```bash
 # Run Flow benchmarks
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only
+uv run pytest benchmarks/test_flow_benchmarks.py --benchmark-only
 ```
 
 ## Quick Start
@@ -50,30 +50,30 @@ uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only
 
 ```bash
 # All benchmarks in directory
-uv run pytest tests/benchmarks/ --benchmark-only
+uv run pytest benchmarks/ --benchmark-only
 
 # With better stability
-uv run pytest tests/benchmarks/ --benchmark-only --benchmark-disable-gc --benchmark-warmup=on
+uv run pytest benchmarks/ --benchmark-only --benchmark-disable-gc --benchmark-warmup=on
 ```
 
 ### Run Specific Suite
 
 ```bash
 # Pile benchmarks only
-uv run pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-only
+uv run pytest benchmarks/test_pile_benchmarks.py --benchmark-only
 
 # Flow benchmarks only
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only
+uv run pytest benchmarks/test_flow_benchmarks.py --benchmark-only
 ```
 
 ### Save and Compare Results
 
 ```bash
 # Save baseline
-uv run pytest tests/benchmarks/ --benchmark-only --benchmark-save=baseline
+uv run pytest benchmarks/ --benchmark-only --benchmark-save=baseline
 
 # Run new benchmarks
-uv run pytest tests/benchmarks/ --benchmark-only --benchmark-save=new
+uv run pytest benchmarks/ --benchmark-only --benchmark-save=new
 
 # Compare
 pytest-benchmark compare baseline new
@@ -287,7 +287,7 @@ def test_memory():
     # ...
 
 # Run
-python -m memory_profiler tests/benchmarks/test_pile_benchmarks.py
+python -m memory_profiler benchmarks/test_pile_benchmarks.py
 ```
 
 ### Using sys.getsizeof
@@ -403,7 +403,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          uv run pytest tests/benchmarks/ \\
+          uv run pytest benchmarks/ \\
             --benchmark-only \\
             --benchmark-json=output.json \\
             --benchmark-compare-fail=mean:10%
@@ -506,7 +506,7 @@ Identify what to benchmark:
 ### 2. Create Test File
 
 ```python
-# tests/benchmarks/test_<component>_benchmarks.py
+# benchmarks/test_<component>_benchmarks.py
 
 """Benchmarks for <Component>.
 

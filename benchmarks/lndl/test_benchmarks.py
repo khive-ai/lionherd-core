@@ -3,8 +3,10 @@
 
 """Benchmark suite for LNDL parser - trade-off analysis: speed vs error tolerance.
 
-Validates LNDL's value proposition: 10-50ms overhead but <5% failure rate
-vs strict JSON's 40-60% failure rate on real LLM output with common errors.
+IMPORTANT: These benchmarks measure parsing overhead, NOT fuzzy correction overhead.
+The fuzzy matching (typo correction, case normalization) adds significant additional
+cost (10-50ms) that is NOT included in most benchmarks here. See test_benchmark_lndl_fuzzy_correction
+for isolated fuzzy matching overhead.
 
 Benchmark Coverage:
 - Perfect JSON: All parsers succeed (baseline speed comparison)
@@ -16,20 +18,25 @@ Benchmark Coverage:
 Parsers Compared:
 - json.loads (stdlib) - baseline
 - orjson.loads (fastest JSON) - performance target
-- msgpack.unpackb (binary) - alternative format
 - pydantic.parse_raw (typed JSON) - closest competitor
 - LNDL fuzzy parser (ours) - error-tolerant
+- NOTE: msgpack removed (unfair comparison - binary vs string parsing)
 
 Metrics:
 - Parse speed (ops/s) - throughput under ideal conditions
-- Success rate (%) - robustness to malformed input
+- Success rate (%) - tolerance for LLM output variability
 - Error tolerance (%) - % of malformed inputs handled
 - Memory overhead - relative to json.loads
 
+Success Rate Interpretation:
+- Strict parsers (json.loads, Pydantic) CORRECTLY reject malformed input
+- LNDL's higher success rate shows tolerance, not that strict parsers are "bad"
+- Trade-off: Accept LLM output variability at cost of parsing overhead
+
 Performance Goals:
 - Perfect JSON: LNDL within 2x orjson speed (acceptable overhead)
-- Malformed JSON: LNDL >90% success rate vs <60% strict parsers
-- Trade-off: 10-50ms overhead justified by 35% success rate improvement
+- Malformed JSON: LNDL >90% success rate (handle LLM variability)
+- Trade-off: Parsing + fuzzy correction overhead justified by tolerance
 
 Usage:
     # Run benchmarks only (skip regular tests)
@@ -48,14 +55,12 @@ Usage:
 from __future__ import annotations
 
 import json
-import sys
 from typing import Any
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
 from lionherd_core.lndl import parse_lndl_fuzzy
-from lionherd_core.lndl.errors import AmbiguousMatchError, MissingFieldError
 from lionherd_core.types import Operable, Spec
 
 # Optional dependencies for comparison
@@ -65,13 +70,6 @@ try:
     HAS_ORJSON = True
 except ImportError:
     HAS_ORJSON = False
-
-try:
-    import msgpack
-
-    HAS_MSGPACK = True
-except ImportError:
-    HAS_MSGPACK = False
 
 
 # ============================================================================
@@ -283,21 +281,10 @@ def test_benchmark_orjson_loads(benchmark, json_fixture, request):
     benchmark(parse)
 
 
-@pytest.mark.skipif(not HAS_MSGPACK, reason="msgpack not installed")
-@pytest.mark.parametrize(
-    "json_fixture", ["perfect_json_100b", "perfect_json_1kb", "perfect_json_10kb"]
-)
-def test_benchmark_msgpack_unpackb(benchmark, json_fixture, request):
-    """Binary format alternative."""
-    json_str = request.getfixturevalue(json_fixture)
-    # Pre-convert to msgpack format
-    data = json.loads(json_str)
-    packed = msgpack.packb(data)
-
-    def parse():
-        return msgpack.unpackb(packed)
-
-    benchmark(parse)
+# NOTE: msgpack benchmark removed - unfair comparison
+# msgpack.unpackb() deserializes pre-packed binary (already parsed structure)
+# while json.loads() parses strings (different problem class)
+# For fair comparison, would need to measure packb() + unpackb() overhead
 
 
 @pytest.mark.parametrize(
@@ -577,11 +564,16 @@ OUT{report: [t, s, q, w]}
     print(f"LNDL Improvement: +{lndl_rate - pydantic_rate:.1f}% vs Pydantic")
     print("=" * 60)
 
-    # Validate trade-off claim
-    assert lndl_rate >= 90, f"LNDL should have ≥90% success rate, got {lndl_rate:.1f}%"
-    assert json_rate <= 60 or pydantic_rate <= 60, (
-        "Strict parsers should have ≤60% success rate on malformed inputs"
-    )
+    # Validate LNDL's fuzzy parsing capability
+    # NOTE: This test measures tolerance, not quality. Strict parsers (json.loads, Pydantic)
+    # CORRECTLY reject malformed input - that's their design. LNDL's value is handling
+    # LLM output variability (typos, case variations) that strict parsers can't tolerate.
+    assert lndl_rate >= 90, f"LNDL should handle LLM output variability, got {lndl_rate:.1f}%"
+
+    # Strict parsers should correctly reject malformed inputs (this is NOT a deficiency)
+    # The gap shows LNDL's tolerance, not that json.loads is "bad"
+    assert lndl_rate > json_rate, "LNDL should be more tolerant than strict parsers"
+    assert lndl_rate > pydantic_rate, "LNDL should be more tolerant than Pydantic"
 
 
 # ============================================================================
