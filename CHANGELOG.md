@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-alpha5](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha5) - 2025-11-12
+
 ### Changed
 
 - **BREAKING**: `Pile.item_type` and `Pile.strict_type` are now frozen fields (#156). Type configuration must be set at initialization and cannot be mutated afterward. Prevents runtime type confusion.
@@ -38,15 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **API Exports**: All protocols and errors now exported at top level for simplified imports (#148, #171). Backwards compatible - old import paths still work.
+  - Protocols: `Observable`, `Serializable`, `Adaptable`, `AdapterRegisterable`, `AsyncAdaptable`, `AsyncAdapterRegisterable`, `Deserializable`, `Containable`, `Allowable`, `Invocable`, `Hashable`, `implements`
+  - Errors: `NotFoundError`, `ExistsError`, `ValidationError`, `ConfigurationError`, `ConnectionError`, `ExecutionError`, `TimeoutError`
+  - Migration: `from lionherd_core import Observable, NotFoundError` (was `from lionherd_core.protocols import Observable`)
 - `Pile.__bool__` protocol for empty checks (#159). `if pile:` is False when empty.
 - `Pile` dict-like iteration protocol (#159): `keys()` and `items()` methods for dict-like access.
 - `Progression.__bool__` protocol for empty checks (#156). Empty progressions are falsy.
 - `Flow` referential integrity validation via `@model_validator` (#156).
 - **BREAKING**: `@implements()` strict runtime enforcement (#147). Classes MUST define protocol methods in class body (inheritance doesn't count). Enforces Rust-like explicit trait implementation. Raises `TypeError` on violation with clear error message.
+- **Documentation**: Comprehensive migration guide (`docs/migration/v1.0.0-alpha5.md`), user guides (type safety, API design, validation, protocols), and updated notebooks for all API changes (#165-#169).
 
 ### Fixed
 
 - **Flow**: `item_type`/`strict_type` now correctly applied to items `Pile` (#156). Previous design created default Pile then mutated frozen fields.
+- **Flow**: `add_progression()` now validates referential integrity before adding to pile (#164, #170). Prevents inconsistent state if progression contains invalid UUIDs. Consistent with `@model_validator` pattern.
 
 ## [1.0.0a4](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha4) - 2025-11-11
 
