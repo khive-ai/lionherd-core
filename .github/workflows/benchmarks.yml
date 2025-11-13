@@ -1,0 +1,197 @@
+name: Benchmarks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - "uv.lock"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmarks:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need history for comparison
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Download baseline benchmarks
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: .benchmarks-baseline/
+        continue-on-error: true
+
+      - name: Run benchmarks (fast suite)
+        run: |
+          # Run benchmarks and save results
+          uv run pytest benchmarks/ \
+            --benchmark-only \
+            --benchmark-json=benchmark-results.json \
+            --benchmark-columns=min,max,mean,stddev,median \
+            --benchmark-sort=name \
+            -v
+
+      - name: Compare with baseline
+        if: github.event_name == 'pull_request' && hashFiles('.benchmarks-baseline/baseline.json') != ''
+        id: compare
+        run: |
+          uv run python -c "
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          # Load current results
+          current = json.loads(Path('benchmark-results.json').read_text())
+
+          # Load baseline
+          baseline_path = Path('.benchmarks-baseline/baseline.json')
+          if not baseline_path.exists():
+              print('No baseline found, skipping comparison')
+              sys.exit(0)
+
+          baseline = json.loads(baseline_path.read_text())
+
+          # Build benchmark lookup
+          baseline_benchmarks = {b['fullname']: b for b in baseline.get('benchmarks', [])}
+
+          regressions = []
+          warnings = []
+          improvements = []
+
+          for bench in current.get('benchmarks', []):
+              name = bench['fullname']
+              current_mean = bench['stats']['mean']
+
+              if name not in baseline_benchmarks:
+                  continue
+
+              baseline_mean = baseline_benchmarks[name]['stats']['mean']
+
+              # Calculate percentage change
+              change = ((current_mean - baseline_mean) / baseline_mean) * 100
+
+              result = {
+                  'name': name,
+                  'baseline': baseline_mean,
+                  'current': current_mean,
+                  'change': change
+              }
+
+              if change > 10:  # >10% slower = regression
+                  regressions.append(result)
+              elif change > 5:  # 5-10% slower = warning
+                  warnings.append(result)
+              elif change < -5:  # >5% faster = improvement
+                  improvements.append(result)
+
+          # Generate report
+          report = []
+
+          if regressions:
+              report.append('## ⚠️ Performance Regressions Detected\\n')
+              report.append('| Benchmark | Baseline | Current | Change |')
+              report.append('|-----------|----------|---------|--------|')
+              for r in regressions:
+                  report.append(f'| {r[\"name\"]} | {r[\"baseline\"]:.2e}s | {r[\"current\"]:.2e}s | +{r[\"change\"]:.1f}% ❌ |')
+
+          if warnings:
+              report.append('\\n## ⚠️ Performance Warnings\\n')
+              report.append('| Benchmark | Baseline | Current | Change |')
+              report.append('|-----------|----------|---------|--------|')
+              for w in warnings:
+                  report.append(f'| {w[\"name\"]} | {w[\"baseline\"]:.2e}s | {w[\"current\"]:.2e}s | +{w[\"change\"]:.1f}% ⚠️ |')
+
+          if improvements:
+              report.append('\\n## ✅ Performance Improvements\\n')
+              report.append('| Benchmark | Baseline | Current | Change |')
+              report.append('|-----------|----------|---------|--------|')
+              for i in improvements:
+                  report.append(f'| {i[\"name\"]} | {i[\"baseline\"]:.2e}s | {i[\"current\"]:.2e}s | {i[\"change\"]:.1f}% ✅ |')
+
+          if not regressions and not warnings and not improvements:
+              report.append('## ✅ No Significant Performance Changes\\n')
+              report.append('All benchmarks within ±5% of baseline.')
+
+          # Save report
+          report_text = '\\n'.join(report)
+          Path('benchmark-report.md').write_text(report_text)
+          print(report_text)
+
+          # Set outputs
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'has_regressions={'true' if regressions else 'false'}\\n')
+              f.write(f'has_warnings={'true' if warnings else 'false'}\\n')
+              f.write(f'regression_count={len(regressions)}\\n')
+
+          # Fail if regressions detected
+          if regressions:
+              print(f'\\n❌ {len(regressions)} benchmark(s) regressed by >10%')
+              sys.exit(1)
+          " || echo "Comparison failed, continuing..."
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && (steps.compare.outputs.has_regressions == 'true' || steps.compare.outputs.has_warnings == 'true')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('benchmark-report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `# Benchmark Results\n\n${report}\n\n---\n*Automated benchmark regression detection*`
+            });
+
+      - name: Upload benchmark results (for baseline)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Rename to baseline.json to match download expectations
+          mv benchmark-results.json baseline.json
+
+      - name: Upload baseline artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: baseline.json
+          retention-days: 90
+
+      - name: Fail on regression
+        if: steps.compare.outputs.has_regressions == 'true'
+        run: |
+          echo "::error::Benchmark regression detected (>10% slower)"
+          exit 1
