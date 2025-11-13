@@ -19,4 +19,3 @@ uv run pytest benchmarks/lndl/ --benchmark-save=lndl_baseline
 - Overhead: +10-50ms (acceptable for I/O-bound LLM workloads)
 
 See `analysis.md` for detailed trade-off analysis and decision matrix.
-

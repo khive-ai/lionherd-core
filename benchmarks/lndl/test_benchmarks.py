@@ -127,14 +127,18 @@ def perfect_json_100b():
 def perfect_json_1kb():
     """Perfect JSON, ~1KB."""
     summary = "A" * 900  # Pad to ~1KB
-    return f'{{"title": "Title", "summary": "{summary}", "quality_score": 0.95, "word_count": 1000}}'
+    return (
+        f'{{"title": "Title", "summary": "{summary}", "quality_score": 0.95, "word_count": 1000}}'
+    )
 
 
 @pytest.fixture(scope="module")
 def perfect_json_10kb():
     """Perfect JSON, ~10KB."""
     summary = "A" * 9800  # Pad to ~10KB
-    return f'{{"title": "Title", "summary": "{summary}", "quality_score": 0.95, "word_count": 10000}}'
+    return (
+        f'{{"title": "Title", "summary": "{summary}", "quality_score": 0.95, "word_count": 10000}}'
+    )
 
 
 @pytest.fixture(scope="module")
@@ -435,18 +439,10 @@ def test_benchmark_lndl_tokenization(benchmark, perfect_lndl_100b):
 
 def test_benchmark_lndl_fuzzy_correction(benchmark, lndl_with_typos):
     """Measure fuzzy matching overhead (typo correction)."""
-    from lionherd_core.lndl.parser import (
-        extract_lacts_prefixed,
-        extract_lvars_prefixed,
-        extract_out_block,
-        parse_out_block_array,
-    )
+    from lionherd_core.lndl.parser import extract_lvars_prefixed
 
     # Pre-extract to isolate fuzzy matching
     lvars_raw = extract_lvars_prefixed(lndl_with_typos)
-    lacts_raw = extract_lacts_prefixed(lndl_with_typos)
-    out_content = extract_out_block(lndl_with_typos)
-    out_fields_raw = parse_out_block_array(out_content)
 
     # Operable for correction
     operable = Operable([Spec(Report, name="report")])
@@ -583,9 +579,9 @@ OUT{report: [t, s, q, w]}
 
     # Validate trade-off claim
     assert lndl_rate >= 90, f"LNDL should have ≥90% success rate, got {lndl_rate:.1f}%"
-    assert (
-        json_rate <= 60 or pydantic_rate <= 60
-    ), "Strict parsers should have ≤60% success rate on malformed inputs"
+    assert json_rate <= 60 or pydantic_rate <= 60, (
+        "Strict parsers should have ≤60% success rate on malformed inputs"
+    )
 
 
 # ============================================================================

@@ -11,6 +11,7 @@ Comprehensive guide to performance benchmarking in lionherd-core.
 **Comparisons**: dict, OrderedDict, pandas.Index, polars.Series
 
 **Key Findings**:
+
 - Pile is ~100x slower than dict for add operations
 - O(1) operations (get/contains) within acceptable range
 - Remove is O(n) bottleneck due to Progression scanning
@@ -31,6 +32,7 @@ uv run pytest tests/benchmarks/test_pile_benchmarks.py --benchmark-only
 **Focus**: Progression operations, referential integrity
 
 **Key Metrics**:
+
 - Pandas-level performance for data structure operations
 - <5% regression threshold
 - 1K and 10K dataset sizes
@@ -82,12 +84,14 @@ pytest-benchmark compare baseline new
 ### 1. Stable Environment
 
 **Before running benchmarks**:
+
 - Close unnecessary applications
 - Disable power management / turbo boost
 - Ensure consistent system load
 - Run multiple times for validation
 
 **CI Environment**:
+
 - Use dedicated benchmark runners
 - Pin CPU frequency
 - Isolate from other workloads
@@ -112,6 +116,7 @@ def test_operation(benchmark):
 ```
 
 **Key Points**:
+
 - Use `setup()` to exclude initialization time
 - Return data as `(args,), kwargs` tuple
 - Use `pedantic()` for explicit control
@@ -132,6 +137,7 @@ def test_operation(benchmark, size):
 ```
 
 **Benefits**:
+
 - Single test, multiple sizes
 - Easy scaling analysis
 - Consistent methodology
@@ -153,6 +159,7 @@ def test_baseline_pandas(benchmark, pandas_baseline):
 ```
 
 **Pattern**:
+
 - Same test structure for all implementations
 - Consistent naming (`test_pile_*`, `test_dict_*`)
 - Same size parameters
@@ -259,6 +266,7 @@ pytest --benchmark-only --benchmark-compare=before --benchmark-compare-fail=mean
 ```
 
 **Regression Thresholds**:
+
 - <2%: Noise (acceptable)
 - 2-5%: Minor (investigate)
 - 5-10%: Moderate (justify)
@@ -295,6 +303,7 @@ def test_memory_overhead(benchmark):
 ```
 
 **Limitations**:
+
 - `sys.getsizeof()` doesn't include referenced objects
 - Only measures direct container overhead
 - Use memory_profiler for comprehensive analysis
@@ -304,6 +313,7 @@ def test_memory_overhead(benchmark):
 ### ✅ DO
 
 1. **Isolate Setup**
+
    ```python
    def setup():
        return (expensive_setup(),), {}
@@ -311,18 +321,21 @@ def test_memory_overhead(benchmark):
    ```
 
 2. **Fresh Data Per Iteration**
+
    ```python
    def setup():
        return ([1, 2, 3],), {}  # New list each time
    ```
 
 3. **Equivalent Comparisons**
+
    ```python
    # Compare same operations
    pile.get(uuid)  vs  dict[uuid]
    ```
 
 4. **Statistical Significance**
+
    ```python
    # Enough rounds for stable mean
    benchmark.pedantic(run, rounds=10)
@@ -331,6 +344,7 @@ def test_memory_overhead(benchmark):
 ### ❌ DON'T
 
 1. **Measure Setup Time**
+
    ```python
    # Bad: includes setup
    def run():
@@ -339,6 +353,7 @@ def test_memory_overhead(benchmark):
    ```
 
 2. **Reuse Mutable Data**
+
    ```python
    # Bad: first iteration empties list
    data = [1, 2, 3]
@@ -347,12 +362,14 @@ def test_memory_overhead(benchmark):
    ```
 
 3. **Compare Different Operations**
+
    ```python
    # Bad: different semantics
    pile[lambda x: x.value > 5]  vs  dict_comprehension
    ```
 
 4. **Ignore Variance**
+
    ```python
    # Bad: high variance unreliable
    # StdDev > 20% of mean → investigate
@@ -420,12 +437,14 @@ jobs:
 **Symptoms**: Inconsistent results, high StdDev
 
 **Causes**:
+
 - Background processes
 - Thermal throttling
 - Memory pressure
 - GC interference
 
 **Solutions**:
+
 ```bash
 # Disable GC
 --benchmark-disable-gc
@@ -442,12 +461,14 @@ jobs:
 **Symptoms**: Many outliers detected
 
 **Causes**:
+
 - System interrupts
 - Disk I/O
 - Network activity
 - Scheduler preemption
 
 **Solutions**:
+
 - Close background apps
 - Isolate benchmark environment
 - Use dedicated hardware
@@ -460,6 +481,7 @@ jobs:
 **Cause**: Fixtures are reused but test mutates them
 
 **Solution**:
+
 ```python
 # Use setup function
 def test_operation(benchmark):
@@ -475,6 +497,7 @@ def test_operation(benchmark):
 ### 1. Choose Component
 
 Identify what to benchmark:
+
 - Data structure operations (Pile, Flow, Graph)
 - Algorithms (pathfinding, validation)
 - Serialization (to_dict, from_dict)
@@ -527,6 +550,7 @@ def test_baseline_pandas(benchmark, size):
 ### 4. Document Results
 
 Create `<COMPONENT>_BENCHMARK_ANALYSIS.md`:
+
 - Performance characteristics
 - Overhead quantification
 - Decision matrix (when to use)

@@ -30,7 +30,7 @@ uv run pytest benchmarks/ --benchmark-compare=v1.0.0-alpha5
 
 Each component follows the same structure:
 
-```
+```text
 {component}/
 ├── test_benchmarks.py    # pytest-benchmark tests
 ├── profile.py            # Profiling script (optional)
@@ -42,6 +42,7 @@ Each component follows the same structure:
 ## CI Integration
 
 Benchmarks run on every PR to detect performance regressions:
+
 - Baseline: Previous release version
 - Threshold: <10% regression allowed
 - Alert: >10% regression requires justification

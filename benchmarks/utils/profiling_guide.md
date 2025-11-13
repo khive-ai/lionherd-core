@@ -35,6 +35,7 @@ uv run python scripts/profile_graph.py --size 100000
 **Script**: `profile_graph.py`
 
 **Profiles**:
+
 - Node add/remove operations (with cascading edge cleanup)
 - Edge add/remove operations
 - Graph queries (predecessors, successors, node_edges)
@@ -42,6 +43,7 @@ uv run python scripts/profile_graph.py --size 100000
 - Serialization (to_dict/from_dict)
 
 **Workload**:
+
 - Nodes: N operations
 - Edges: ~2N operations (average degree ~2)
 - Queries: min(1000, N) × 3 query types
@@ -49,6 +51,7 @@ uv run python scripts/profile_graph.py --size 100000
 - Algorithms: N/10 nodes (O(n²) scaling)
 
 **Usage**:
+
 ```bash
 # Basic profiling with 10K nodes
 uv run python scripts/profile_graph.py
@@ -61,6 +64,7 @@ uv run python scripts/profile_graph.py --help
 ```
 
 **Output**:
+
 1. Performance metrics for each operation type
 2. CPU profiling: Top 30 functions by cumulative time
 3. Hot path analysis: Top 20 functions by self time
@@ -71,6 +75,7 @@ uv run python scripts/profile_graph.py --help
 **Script**: `profile_flow.py`
 
 **Profiles**:
+
 - Item add/remove operations (with progression cascade)
 - Progression add/remove operations
 - Progression queries (by ID/name)
@@ -78,6 +83,7 @@ uv run python scripts/profile_graph.py --help
 - Serialization (to_dict/from_dict)
 
 **Workload**:
+
 - Items: N operations
 - Progressions: 10 progressions (N/10 items each)
 - Item additions: N/10 new items
@@ -85,6 +91,7 @@ uv run python scripts/profile_graph.py --help
 - Progression management: 50 add + 25 remove
 
 **Usage**:
+
 ```bash
 # Basic profiling with 10K items
 uv run python scripts/profile_flow.py
@@ -97,6 +104,7 @@ uv run python scripts/profile_flow.py --help
 ```
 
 **Output**:
+
 1. Performance metrics for each operation type
 2. CPU profiling: Top 30 functions by cumulative time
 3. Hot path analysis: Top 20 functions by self time
@@ -125,16 +133,19 @@ python -m memory_profiler scripts/profile_flow.py
 #### CPU Profiling
 
 **Cumulative Time**: Total time spent in function + all callees
+
 - Functions with >10% cumulative time are optimization targets
 - Look for functions called many times (ncalls column)
 
 **Self Time**: Time spent in function only (excluding callees)
+
 - High self time = computational bottleneck
 - Candidates for Cython/numba optimization
 
 #### Hot Path Identification
 
 Look for:
+
 1. **Function call overhead**: High ncalls, low self time
    - Solution: Inline or Cython compile
 2. **Memory allocations**: dict/list operations in hot loops
@@ -167,6 +178,7 @@ diff before.txt after.txt
 ```
 
 **Pandas baseline**: For operations like add/remove at 50K scale, pandas achieves:
+
 - Add operations: ~500K-1M ops/s
 - Remove operations: ~200K-500K ops/s
 - Queries: ~1M-5M ops/s
@@ -236,7 +248,7 @@ When adding new scripts:
 
 ### Optimization Strategy
 
-```
+```text
 Measure → Identify hotspots → Optimize → Verify → Repeat
 ```
 

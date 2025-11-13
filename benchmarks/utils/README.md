@@ -18,4 +18,3 @@ graph = create_large_graph(nodes=10000, edges=50000)
 with profile_cpu():
     # ... benchmark code
 ```
-
