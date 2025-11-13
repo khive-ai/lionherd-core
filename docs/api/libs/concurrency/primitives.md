@@ -201,6 +201,7 @@ async with sem:
 #### Rate Limiting Concurrent Operations
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Semaphore, gather, sleep
 
 # Allow max 5 concurrent API calls
@@ -585,6 +586,7 @@ async with queue:
 #### Producer-Consumer Pattern
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Queue, gather, sleep
 
 queue = Queue.with_maxsize(50)
@@ -742,6 +744,7 @@ def statistics(self) -> anyio.EventStatistics: ...
 #### Coordinating Task Startup
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Event, gather, sleep
 
 ready = Event()
@@ -764,6 +767,7 @@ await gather(setup(), worker(), worker(), worker())
 #### One-Time Notification
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep, gather, Event
 
 shutdown_event = Event()
@@ -927,6 +931,7 @@ async with condition:
 #### Producer-Consumer with Condition
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Condition, sleep, gather
 
 condition = Condition()
@@ -1135,6 +1140,7 @@ sem = Semaphore(5)
 ### Example 1: Rate-Limited Batch Processing
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Semaphore, Queue, gather, sleep
 
 # Limit concurrent operations to 5
@@ -1172,6 +1178,7 @@ async with results_queue:
 ### Example 2: Graceful Shutdown Coordination
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Event, Lock, sleep, gather
 
 shutdown_event = Event()
@@ -1215,6 +1222,7 @@ await gather(*workers, shutdown_handler())
 ### Example 3: Dynamic Resource Pool
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import CapacityLimiter, sleep, create_task_group
 import random
 
@@ -1263,6 +1271,7 @@ async with create_task_group() as tg:
 ### Example 4: Multi-Stage Pipeline
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import Queue, Event, gather, sleep
 
 stage1_queue = Queue.with_maxsize(10)

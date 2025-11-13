@@ -456,6 +456,7 @@ The `.retryable` flag indicates whether an operation can be retried after this e
 **Usage with retry logic:**
 
 ```python
+# noqa:validation
 from lionherd_core.errors import LionherdError, ExecutionError
 from lionherd_core import concurrency
 
@@ -683,6 +684,7 @@ except KeyError as e:
 Use `.retryable` flag to decide retry strategy.
 
 ```python
+# noqa:validation
 from lionherd_core.errors import LionherdError
 from lionherd_core import concurrency
 
@@ -802,6 +804,7 @@ except ExceptionGroup as eg:
 Use `.to_dict()` for structured logging and monitoring.
 
 ```python
+# noqa:validation
 import logging
 import json
 from lionherd_core.errors import LionherdError

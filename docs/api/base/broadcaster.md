@@ -328,6 +328,7 @@ def _cleanup_dead_refs(
 ### Pattern 1: Application-Wide Shutdown
 
 ```python
+# noqa:validation
 from lionherd_core.base.broadcaster import Broadcaster
 from lionherd_core.base.event import Event
 
@@ -369,6 +370,7 @@ await ShutdownBroadcaster.broadcast(
 ### Pattern 2: Config Reload Propagation
 
 ```python
+# noqa:validation
 class ConfigChangeEvent(Event):
     config_key: str = ""
     new_value: object = None
@@ -426,6 +428,7 @@ print(ShutdownBroadcaster.get_subscriber_count())  # 1 (h1 auto-removed)
 ### Pattern 4: Mixed Sync/Async Handlers
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep
 
 # Sync handler (immediate execution)
@@ -492,6 +495,7 @@ ShutdownBroadcaster.subscribe(log_event)
 **Issue**: Expecting handlers to run concurrently (they execute sequentially)
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep
 
 async def slow_handler(event):
@@ -542,6 +546,7 @@ Broadcaster does NOT implement lionherd-core protocols (Observable, Serializable
 ### Example 1: Basic Subscription & Broadcasting
 
 ```python
+# noqa:validation
 from lionherd_core.base.broadcaster import Broadcaster
 from lionherd_core.base.event import Event
 from lionherd_core.libs.concurrency import sleep

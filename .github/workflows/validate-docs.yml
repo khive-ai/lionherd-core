@@ -1,0 +1,66 @@
+name: Validate Documentation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**/*.md"
+      - "scripts/validate_docs.py"
+      - ".github/workflows/validate-docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =============================================================================
+  # Validate Python code blocks in documentation
+  # =============================================================================
+  validate-code-blocks:
+    name: Validate Code Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py3.11-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py3.11-
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Validate documentation code blocks
+        run: |
+          echo "Validating Python code blocks in docs/**/*.md"
+          echo "============================================="
+          uv run python scripts/validate_docs.py docs/
+
+      - name: Upload validation report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation_report.txt
+          retention-days: 7

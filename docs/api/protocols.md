@@ -417,6 +417,7 @@ class AsyncAdaptable(Protocol):
 #### Usage Pattern
 
 ```python
+# noqa:validation
 from lionherd_core.protocols import AsyncAdaptable, implements
 
 @implements(AsyncAdaptable)
@@ -557,6 +558,7 @@ class Invocable(Protocol):
 #### Usage Pattern
 
 ```python
+# noqa:validation
 from lionherd_core.protocols import Invocable, implements
 
 @implements(Invocable)

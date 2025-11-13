@@ -513,6 +513,7 @@ Model = pickle.load(open("model.pkl", "rb"))
 **Solution**: Share schema, not model. Regenerate in each process.
 
 ```python
+# noqa:validation
 # Process 1
 import json
 schema = {"type": "object", ...}
@@ -704,6 +705,7 @@ except ValueError as e:
 ### Example 3: Multi-Schema System
 
 ```python
+# noqa:validation
 from lionherd_core.libs.schema_handlers import load_pydantic_model_from_schema
 from functools import lru_cache
 import hashlib

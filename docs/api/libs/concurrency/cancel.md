@@ -395,6 +395,7 @@ async def example():
 ### Pattern 1: API Request Timeout
 
 ```python
+# noqa:validation
 import httpx
 
 from lionherd_core.libs.concurrency.cancel import fail_after
@@ -471,6 +472,7 @@ async def multi_stage_pipeline(data, total_timeout: float = 10.0):
 ### Pattern 4: Adaptive Algorithm Selection
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency.cancel import (
     fail_after,
     effective_deadline,
@@ -724,6 +726,7 @@ deadline = current_time() + 5.0
 ### Example 1: Retry with Timeout
 
 ```python
+# noqa:validation
 import httpx
 
 from lionherd_core.libs.concurrency.cancel import fail_after
@@ -758,6 +761,7 @@ result = await retry_with_timeout(flaky_api_call, max_attempts=3, timeout=2.0)
 ### Example 2: Conditional Timeout Based on Environment
 
 ```python
+# noqa:validation
 import os
 
 from lionherd_core.libs.concurrency.cancel import fail_after

@@ -92,6 +92,7 @@ None
 **Examples:**
 
 ```python
+# noqa:validation
 >>> from lionherd_core.lndl.prompt import get_lndl_system_prompt
 >>> prompt = get_lndl_system_prompt()
 >>> print(prompt[:50])

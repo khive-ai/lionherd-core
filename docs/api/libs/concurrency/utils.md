@@ -330,6 +330,7 @@ print(result)  # 30
 #### Integrating Sync Libraries
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import run_sync, gather, sleep
 
 async def fetch_sync_api(url: str) -> dict:
@@ -373,6 +374,7 @@ async def write_file_async(path: str, content: str) -> None:
 #### CPU-Bound Operations
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import run_sync, gather
 import hashlib
 
@@ -422,6 +424,7 @@ result: bool = await run_sync(sync_func, 1, "hello")
 **When NOT to Use**:
 
 ```python
+# noqa:validation
 # ❌ Don't use for async functions
 async def async_func():
     return 42
@@ -467,6 +470,7 @@ Duration to sleep in seconds. Can be fractional (e.g., 0.1 for 100ms).
 ### Examples
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep
 
 # Sleep for 1 second
@@ -800,6 +804,7 @@ while True:
 ### Example 1: Retry with Timeout and Backoff
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep, current_time
 
 async def retry_with_timeout(
@@ -835,6 +840,7 @@ result = await retry_with_timeout(
 ### Example 2: Adaptive Polling
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep, current_time
 
 async def wait_for_condition_adaptive(
@@ -870,6 +876,7 @@ await wait_for_condition_adaptive(
 ### Example 3: Mixed Sync/Async Pipeline
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import is_coro_func, run_sync
 
 class Pipeline:
