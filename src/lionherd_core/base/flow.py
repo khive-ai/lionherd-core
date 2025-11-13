@@ -186,7 +186,15 @@ class Flow(Element, Generic[E, P]):
                 f"Progression with name '{progression.name}' already exists. Names must be unique."
             )
 
-        # Add to progressions pile
+        # Validate referential integrity before adding to pile
+        item_ids = set(self.items.keys())
+        missing_ids = set(list(progression)) - item_ids
+        if missing_ids:
+            raise NotFoundError(
+                f"Progression '{progression.name or progression.id}' contains UUIDs not in items pile: {missing_ids}"
+            )
+
+        # Add to progressions pile (safe - validation passed)
         self.progressions.add(progression)
 
         # Register name if present

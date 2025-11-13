@@ -323,6 +323,40 @@ def test_flow_add_progression_without_name():
     assert len(f._progression_names) == 0
 
 
+def test_flow_add_progression_validates_referential_integrity():
+    """Test adding progression with invalid UUIDs raises NotFoundError.
+
+    Design Rationale - Fail Fast:
+        Validate referential integrity BEFORE adding to pile to prevent
+        inconsistent state. If validation happens after adding, a failure
+        would leave the progression in the pile but unusable.
+
+    Consistency with __init__:
+        Both __init__ (via @model_validator) and add_progression() enforce
+        the same referential integrity constraint: all progression UUIDs
+        must exist in items pile.
+
+    Related:
+        - Issue #164: Bug fix for validation order
+        - PR #162: Added @model_validator for __init__ validation
+    """
+    # Create flow with items
+    items = [FlowTestItem(value=f"item{i}") for i in range(3)]
+    f = Flow[FlowTestItem, FlowTestProgression](items=items)
+
+    # Create progression with non-existent UUID
+    missing_uuid = uuid4()
+    prog = FlowTestProgression(name="invalid_prog", order=[missing_uuid])
+
+    # Should raise NotFoundError before adding to pile
+    with pytest.raises(NotFoundError, match="contains UUIDs not in items pile"):
+        f.add_progression(prog)
+
+    # Verify progression was NOT added to pile (no inconsistent state)
+    assert len(f.progressions) == 0
+    assert "invalid_prog" not in f._progression_names
+
+
 def test_flow_remove_progression_by_uuid(flow, progressions):
     """Test removing progression by UUID."""
     prog = progressions[0]
