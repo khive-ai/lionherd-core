@@ -1,21 +1,18 @@
 # LNDL Parser Benchmarks
 
-Benchmarks comparing LNDL fuzzy parser vs json.loads/orjson/pydantic.
+Performance tracking for LNDL parser.
 
 ## Quick Start
 
 ```bash
-# Run all LNDL benchmarks
+# Run benchmarks
 uv run pytest benchmarks/lndl/ --benchmark-only
 
-# Save baseline
-uv run pytest benchmarks/lndl/ --benchmark-save=lndl_baseline
+# Save baseline for version
+uv run pytest benchmarks/lndl/ --benchmark-save=v1.0.0-alpha5
+
+# Compare against baseline
+uv run pytest benchmarks/lndl/ --benchmark-compare=v1.0.0-alpha5
 ```
 
-## Trade-off Analysis
-
-- LNDL: 100% success rate on malformed LLM output
-- json.loads: 60% success rate (strict parsing)
-- Overhead: +10-50ms (acceptable for I/O-bound LLM workloads)
-
-See `analysis.md` for detailed trade-off analysis and decision matrix.
+See `analysis.md` for current performance measurements.

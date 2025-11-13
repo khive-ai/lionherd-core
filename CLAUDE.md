@@ -63,7 +63,7 @@ class Agent:
 
 **Purpose**: Fuzzy parser for LLM output with high tolerance for errors.
 
-**Trade-off**: +10-50ms overhead, <5% failure rate (vs 40-60% with strict JSON)
+**Trade-off**: +~50-90μs overhead, <5% failure rate (vs 40-60% with strict JSON)
 
 **Workflow**:
 
