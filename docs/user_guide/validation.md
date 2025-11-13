@@ -1028,4 +1028,3 @@ class User(BaseModel):
 
 - [Pydantic V2 Validators](https://docs.pydantic.dev/latest/concepts/validators/)
 - [Pydantic Field Constraints](https://docs.pydantic.dev/latest/concepts/fields/)
-- [Python Validation Best Practices](https://realpython.com/python-data-validation/)

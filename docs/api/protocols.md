@@ -459,7 +459,7 @@ Separate async protocol enables:
 #### See Also
 
 - [Adaptable](#adaptable): Synchronous adapter protocol
-- [anyio documentation](https://anyio.readthedocs.io/): Async I/O framework
+- [anyio documentation](https://anyio.readthedocs.io/en/stable/): Async I/O framework
 
 ---
 
