@@ -43,8 +43,10 @@ Each component follows the same structure:
 
 Planned benchmark automation for regression detection:
 
-- Baseline: Compare against previous release version
-- Threshold: Alert on >10% performance regression
-- Workflow: Manual runs until automated CI implemented
+Benchmarks run on every PR to detect performance regressions:
+
+- Baseline: Previous release version
+- Threshold: <10% regression allowed
+- Alert: >10% regression requires justification
 
 See `GUIDE.md` for detailed benchmarking best practices and CI integration examples.
