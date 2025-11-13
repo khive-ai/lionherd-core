@@ -12,21 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 **Pile API**:
+
 - **BREAKING**: `item_type` and `strict_type` now frozen (#156). Set at initialization only.
 - **BREAKING**: `include()`/`exclude()` return guaranteed state (True = in pile) not action taken (#157).
 - **BREAKING**: `items` changed from property to method (#159). Returns `Iterator[tuple[UUID, T]]`.
 
 **Flow API**:
+
 - **BREAKING**: `__init__` accepts `progressions` parameter, creates configured Pile upfront (#156).
 - **BREAKING**: Validates referential integrity at construction (#156). All progression UUIDs must exist in items.
 - **BREAKING**: `add_item()` parameter renamed: `progression_ids` → `progressions` (#162).
 - **BREAKING**: `remove_item()` always removes from all progressions. `remove_from_progressions` parameter removed (#162).
 
 **Progression API**:
+
 - **BREAKING**: `__init__` removed—validation moved to `@field_validator` (#156). Invalid items raise `ValidationError` (no silent drops).
 - **BREAKING**: `IndexError` → `NotFoundError` for `pop()`, `popleft()`, `_validate_index()` (#153). Consistent with Pile/Graph/Flow.
 
 **Protocol System**:
+
 - **BREAKING**: Protocol separation (#147, #149). Adaptable protocols split from registry mutation:
   - `Adaptable`/`AsyncAdaptable` - read-only adaptation
   - `AdapterRegisterable`/`AsyncAdapterRegisterable` - mutable registry
