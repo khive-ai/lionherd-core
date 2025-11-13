@@ -42,6 +42,7 @@ Each component follows the same structure:
 ## CI Integration
 
 Benchmarks run on every PR to detect performance regressions:
+
 - Baseline: Previous release version
 - Threshold: <10% regression allowed
 - Alert: >10% regression requires justification
