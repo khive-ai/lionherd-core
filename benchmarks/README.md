@@ -39,7 +39,9 @@ Each component follows the same structure:
 └── baselines/            # Saved benchmark results
 ```
 
-## CI Integration
+## Future: CI Integration
+
+Planned benchmark automation for regression detection:
 
 Benchmarks run on every PR to detect performance regressions:
 
@@ -47,4 +49,4 @@ Benchmarks run on every PR to detect performance regressions:
 - Threshold: <10% regression allowed
 - Alert: >10% regression requires justification
 
-See `GUIDE.md` for detailed benchmarking best practices.
+See `GUIDE.md` for detailed benchmarking best practices and CI integration examples.
