@@ -30,7 +30,7 @@ uv run pytest benchmarks/ --benchmark-compare=v1.0.0-alpha5
 
 Each component follows the same structure:
 
-```
+```text
 {component}/
 ├── test_benchmarks.py    # pytest-benchmark tests
 ├── profile.py            # Profiling script (optional)
