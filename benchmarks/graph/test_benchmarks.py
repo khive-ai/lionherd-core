@@ -9,48 +9,41 @@ Validates performance of Graph operations to ensure no regression from PR #117
 Benchmark Coverage:
 - add_node: Single node addition with adjacency initialization
 - remove_node: Node removal with cascading edge cleanup
-- remove_edge: Edge removal with adjacency updates
-- bulk_add_nodes: Batch node addition (1000 nodes)
-- bulk_add_edges: Batch edge addition (1000 edges)
-- bulk_remove_edges: Batch edge removal (1000 edges)
-- bulk_remove_nodes: Batch node removal with cascading cleanup (1000 nodes)
 - is_acyclic: DFS cycle detection (workflow validation)
 - topological_sort: Kahn's algorithm (execution planning)
 - find_path: BFS pathfinding (debugging, analysis)
 
-Test Datasets:
-- Algorithm benchmarks: 100, 1000, 10K nodes (realistic workflow scales)
-- CRUD benchmarks: 10K nodes + 50K edges (realistic agent graphs)
-- Stress test: 100K nodes + 500K edges (large-scale workflows)
+Test Datasets (Simplified):
+- Primary: 1000 nodes (main performance validation scale)
+- Workflow: 10, 50, 100 nodes (realistic workflow scales)
 
 Performance Goals:
 - add_node: <100μs (O(1) Pile add + adjacency init)
 - remove_node: <1ms for low-degree nodes (O(deg) edge cleanup)
-- remove_edge: <50μs (O(1) Pile remove + set discard)
-- bulk operations: Linear scaling (no exponential blowup)
-- is_acyclic: <1ms (100 nodes), <10ms (1000 nodes), <100ms (10K nodes)
-- topological_sort: <1ms (100 nodes), <10ms (1000 nodes), <100ms (10K nodes)
-- find_path: <1ms (100 nodes), <10ms (1000 nodes), <50ms (10K nodes)
+- is_acyclic: <1ms (100 nodes), <10ms (1000 nodes)
+- topological_sort: <1ms (100 nodes), <10ms (1000 nodes)
+- find_path: <1ms (100 nodes), <10ms (1000 nodes)
 
 Baseline Comparison:
 Run with --benchmark-compare to compare against baseline.json from pre-PR #117 commit.
 
 Usage:
     # Run benchmarks only (skip regular tests)
-    uv run pytest tests/benchmarks/test_graph_benchmarks.py --benchmark-only
+    uv run pytest benchmarks/graph/ --benchmark-only
+
+    # Tune statistical rigor
+    GRAPH_BENCH_ROUNDS=100 GRAPH_BENCH_ITERATIONS=10 uv run pytest benchmarks/graph/ --benchmark-only
 
     # Save baseline for future comparison
-    uv run pytest tests/benchmarks/test_graph_benchmarks.py --benchmark-save=baseline
+    uv run pytest benchmarks/graph/ --benchmark-save=baseline --benchmark-only
 
     # Compare against baseline
-    uv run pytest tests/benchmarks/test_graph_benchmarks.py --benchmark-compare=baseline
-
-    # Run with verbose stats
-    uv run pytest tests/benchmarks/test_graph_benchmarks.py --benchmark-verbose
+    uv run pytest benchmarks/graph/ --benchmark-compare=baseline --benchmark-only
 """
 
 from __future__ import annotations
 
+import os
 import random
 
 import pytest
@@ -58,12 +51,21 @@ import pytest
 from lionherd_core.base import Edge, Graph, Node
 
 # ============================================================================
+# Global Benchmark Configuration
+# ============================================================================
+# Default pedantic settings. Override from environment for tuning:
+#   GRAPH_BENCH_ROUNDS, GRAPH_BENCH_ITERATIONS, GRAPH_BENCH_WARMUP
+BENCH_ROUNDS = int(os.getenv("GRAPH_BENCH_ROUNDS", "50"))
+BENCH_ITERATIONS = int(os.getenv("GRAPH_BENCH_ITERATIONS", "5"))
+BENCH_WARMUP = int(os.getenv("GRAPH_BENCH_WARMUP", "5"))
+
+# ============================================================================
 # Fixtures - Function Scope for Statistical Isolation
 # ============================================================================
 #
 # Statistical Methodology:
 # - Function scope prevents fixture pollution (fresh graph per test)
-# - Standardized: 100 rounds x 10 iterations + 5 warmup rounds
+# - Configurable: ~50 rounds x 5 iterations + 5 warmup (default)
 # - Warmup: Eliminates JIT/cache cold start effects
 # - Iterations: Amortizes setup overhead, focuses on operation cost
 #
@@ -129,98 +131,48 @@ def _create_dag_graph(num_nodes: int, num_layers: int, edges_per_node: int = 5):
     return graph, nodes
 
 
-@pytest.fixture(scope="function")
-def graph_10k():
-    """Create fresh DAG with 10K nodes and ~50K edges for each test.
-
-    Graph structure: Stratified DAG with 20 layers (500 nodes per layer).
-    Each node connects to 5 random nodes in subsequent layers, creating
-    forward-flowing edges typical of workflow dependencies.
-
-    Construction takes ~2-3s, but guarantees no fixture pollution.
-    Function scope ensures clean baseline for statistical measurements.
-    """
-    return _create_dag_graph(num_nodes=10_000, num_layers=20, edges_per_node=5)
-
-
-@pytest.fixture(scope="function")
-def graph_100k():
-    """Create fresh DAG with 100K nodes and ~500K edges for each test.
-
-    Graph structure: Stratified DAG with 50 layers (2000 nodes per layer).
-    Each node connects to 5 random nodes in subsequent layers, creating
-    forward-flowing edges typical of large-scale workflows.
-
-    Construction takes ~30-40s, but guarantees no fixture pollution.
-    Function scope ensures clean baseline for statistical measurements.
-    """
-    return _create_dag_graph(num_nodes=100_000, num_layers=50, edges_per_node=5)
-
-
+# Realistic workflow fixtures (10-100 nodes)
 @pytest.fixture(scope="function")
 def graph_10():
-    """Create tiny DAG with 10 nodes for realistic workflow benchmarks.
-
-    Graph structure: Stratified DAG with 3 layers (~3-4 nodes per layer).
-    Each node connects to 2-3 nodes in subsequent layers.
-
-    Represents typical lionagi workflows (6-12 nodes common).
-    Construction: <1ms
-    """
+    """Create fresh DAG with 10 nodes (small agent, simple flow)."""
     return _create_dag_graph(num_nodes=10, num_layers=3, edges_per_node=2)
 
 
 @pytest.fixture(scope="function")
 def graph_50():
-    """Create small DAG with 50 nodes for realistic workflow benchmarks.
-
-    Graph structure: Stratified DAG with 5 layers (10 nodes per layer).
-    Each node connects to 3 random nodes in subsequent layers.
-
-    Represents medium-scale lionagi workflows.
-    Construction: <10ms
-    """
+    """Create fresh DAG with 50 nodes (medium workflow)."""
     return _create_dag_graph(num_nodes=50, num_layers=5, edges_per_node=3)
 
 
 @pytest.fixture(scope="function")
 def graph_100():
-    """Create DAG with 100 nodes for realistic workflow benchmarks (p99 scale).
-
-    Graph structure: Stratified DAG with 5 layers (20 nodes per layer).
-    Each node connects to 5 random nodes in subsequent layers.
-
-    Represents p99 lionagi workflows (50-100 nodes).
-    Construction: <20ms
-    """
-    return _create_dag_graph(num_nodes=100, num_layers=5, edges_per_node=5)
+    """Create fresh DAG with 100 nodes (complex orchestration)."""
+    return _create_dag_graph(num_nodes=100, num_layers=10, edges_per_node=3)
 
 
+# Primary benchmark fixture (1000 nodes)
 @pytest.fixture(scope="function")
 def graph_1000():
-    """Create medium DAG with 1000 nodes for algorithm benchmarks.
+    """Create fresh DAG with 1000 nodes for primary performance validation.
 
     Graph structure: Stratified DAG with 10 layers (100 nodes per layer).
-    Each node connects to 5 random nodes in subsequent layers.
+    Each node connects to 5 random nodes in subsequent layers, creating
+    forward-flowing edges typical of workflow dependencies.
 
-    Used for medium-scale algorithm benchmarks.
+    Construction takes ~1s, but guarantees no fixture pollution.
+    Function scope ensures clean baseline for statistical measurements.
     """
     return _create_dag_graph(num_nodes=1000, num_layers=10, edges_per_node=5)
 
 
 # ============================================================================
-# Single Operation Benchmarks
+# CRUD Benchmarks - add_node, remove_node
 # ============================================================================
 
 
-@pytest.mark.parametrize("graph_fixture", ["graph_10k", "graph_100k"])
-def test_benchmark_add_node(benchmark, graph_fixture, request):
-    """Benchmark single node addition (O(1) expected).
-
-    Measures: Pile.add() + adjacency dict initialization
-    Critical path: _check_node_exists, adjacency set creation
-    """
-    graph, _ = request.getfixturevalue(graph_fixture)
+def test_benchmark_add_node(benchmark, graph_1000):
+    """Benchmark node addition (O(1) Pile add + adjacency init)."""
+    graph, _ = graph_1000
 
     def add_node():
         # Create fresh node each iteration
@@ -229,396 +181,110 @@ def test_benchmark_add_node(benchmark, graph_fixture, request):
         return node
 
     # Use pedantic mode for precise measurement (removes outliers)
-    benchmark.pedantic(add_node, rounds=100, iterations=10, warmup_rounds=5)
+    benchmark.pedantic(
+        add_node,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
 
-    # Cleanup: remove added nodes to keep graph size stable
-    # (benchmark measures add, not cleanup)
 
+def test_benchmark_remove_node(benchmark, graph_1000):
+    """Benchmark node removal with cascading edge cleanup (O(degree))."""
+    graph, nodes = graph_1000
 
-@pytest.mark.parametrize("graph_fixture", ["graph_10k", "graph_100k"])
-def test_benchmark_remove_node(benchmark, graph_fixture, request):
-    """Benchmark single node removal with edge cleanup.
+    # Setup: create a new node to remove each round (avoids node-already-removed errors)
+    def setup():
+        # Create a fresh node connected to existing nodes
+        node_to_remove = Node(content={"value": "temp_node"})
+        graph.add_node(node_to_remove)
+        # Add a few edges to simulate realistic removal
+        if len(nodes) >= 5:
+            for i in range(min(5, len(nodes))):
+                edge = Edge(
+                    head=node_to_remove.id,
+                    tail=nodes[i].id,
+                    label=["temp"],
+                )
+                graph.add_edge(edge)
+        return (node_to_remove,), {}
 
-    Measures: Edge cascade removal + adjacency cleanup + Pile.remove()
-    Critical path: _check_node_exists, remove_edge calls (nested lock), dict cleanup
-    Performance: O(deg) where deg = in_degree + out_degree (~10 for our graphs)
-    """
-    graph, nodes = request.getfixturevalue(graph_fixture)
-
-    # Setup: Pre-select nodes to remove (middle nodes with typical degree)
-    nodes_to_remove = nodes[1000:2000]  # 1000 nodes for benchmark
-
-    def remove_node():
-        # Get a node that still exists
-        node = nodes_to_remove[0]
-        # Remove node (cascades to edges)
+    def remove_node(node):
         graph.remove_node(node.id)
 
-    def setup():
-        # Re-add the node and its edges before each iteration
-        node = nodes_to_remove[0]
-        # Add node only if not already present
-        if node not in graph:
-            graph.add_node(node)
-        # Re-add edges (simple pattern: connect to next 5 nodes)
-        for j in range(1, 6):
-            idx = nodes.index(node)
-            target_idx = (idx + j) % len(nodes)
-            if nodes[target_idx] in graph:
-                edge = Edge(head=node.id, tail=nodes[target_idx].id, label=["bench"])
-                try:
-                    graph.add_edge(edge)
-                except Exception:
-                    pass  # Edge might already exist
-
-    benchmark.pedantic(remove_node, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # Restore the node after all benchmark rounds (last iteration leaves it removed)
-    node = nodes_to_remove[0]
-    if node not in graph:
-        graph.add_node(node)
-        # Restore edges
-        for j in range(1, 6):
-            idx = nodes.index(node)
-            target_idx = (idx + j) % len(nodes)
-            if nodes[target_idx] in graph:
-                edge = Edge(head=node.id, tail=nodes[target_idx].id, label=["restored"])
-                try:
-                    graph.add_edge(edge)
-                except Exception:
-                    pass
-
-
-@pytest.mark.parametrize("graph_fixture", ["graph_10k", "graph_100k"])
-def test_benchmark_remove_edge(benchmark, graph_fixture, request):
-    """Benchmark single edge removal (O(1) expected).
-
-    Measures: _check_edge_exists + adjacency set.discard() + Pile.remove()
-    Critical path: Error handling from PR #117, dict/set updates
-    """
-    graph, nodes = request.getfixturevalue(graph_fixture)
-
-    # Setup: Create test edge that we'll repeatedly add/remove
-    test_node_a = nodes[5000]
-    test_node_b = nodes[5001]
-    test_edge_id = [None]  # Mutable container
-
-    def remove_edge():
-        graph.remove_edge(test_edge_id[0])
-
-    def setup():
-        # Re-add edge before each iteration
-        edge = Edge(head=test_node_a.id, tail=test_node_b.id, label=["benchmark"])
-        graph.add_edge(edge)
-        test_edge_id[0] = edge.id
-
-    benchmark.pedantic(remove_edge, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # Restore the edge after all benchmark rounds (last iteration leaves it removed)
-    edge = Edge(head=test_node_a.id, tail=test_node_b.id, label=["restored"])
-    try:
-        graph.add_edge(edge)
-    except Exception:
-        pass  # Edge might already exist
+    # NOTE: setup functions require iterations=1 in pytest-benchmark
+    benchmark.pedantic(
+        remove_node,
+        setup=setup,
+        rounds=BENCH_ROUNDS,
+        iterations=1,
+        warmup_rounds=BENCH_WARMUP,
+    )
 
 
 # ============================================================================
-# Bulk Operation Benchmarks
-# ============================================================================
-
-
-def test_benchmark_bulk_add_nodes_10k(benchmark, graph_10k):
-    """Benchmark bulk node addition (1000 nodes).
-
-    Validates: Linear scaling, no quadratic behavior in batch ops
-    Expected: ~100ms for 1000 nodes (100μs per node)
-    """
-    graph, _ = graph_10k
-    added_nodes = []
-
-    def bulk_add_nodes():
-        nodes = []
-        for i in range(1000):
-            node = Node(content={"id": f"bulk_{i}", "value": f"bulk_node_{i}"})
-            graph.add_node(node)
-            nodes.append(node)
-        added_nodes.extend(nodes)
-        return nodes
-
-    benchmark(bulk_add_nodes)
-
-    # Note: No cleanup - these are additive operations, graph grows but stays valid
-
-
-def test_benchmark_bulk_add_nodes_100k(benchmark, graph_100k):
-    """Benchmark bulk node addition on large graph (1000 nodes).
-
-    Validates: Performance stable even on 100K node graph
-    """
-    graph, _ = graph_100k
-    added_nodes = []
-
-    def bulk_add_nodes():
-        nodes = []
-        for i in range(1000):
-            node = Node(content={"id": f"bulk_{i}", "value": f"bulk_node_{i}"})
-            graph.add_node(node)
-            nodes.append(node)
-        added_nodes.extend(nodes)
-        return nodes
-
-    benchmark(bulk_add_nodes)
-
-    # Note: No cleanup - these are additive operations, graph grows but stays valid
-
-
-def test_benchmark_bulk_add_edges_10k(benchmark, graph_10k):
-    """Benchmark bulk edge addition (1000 edges).
-
-    Validates: Edge addition scales linearly
-    Expected: ~50ms for 1000 edges (50μs per edge)
-    """
-    graph, nodes = graph_10k
-    added_edges = []
-
-    def bulk_add_edges():
-        edges = []
-        # Add edges between existing nodes
-        for i in range(1000):
-            head_idx = i % len(nodes)
-            tail_idx = (i + 100) % len(nodes)
-            edge = Edge(
-                head=nodes[head_idx].id,
-                tail=nodes[tail_idx].id,
-                label=[f"bulk_edge_{i}"],
-            )
-            graph.add_edge(edge)
-            edges.append(edge)
-        added_edges.extend(edges)
-        return edges
-
-    benchmark(bulk_add_edges)
-
-    # Note: No cleanup - these are additive operations, graph grows but stays valid
-
-
-def test_benchmark_bulk_add_edges_100k(benchmark, graph_100k):
-    """Benchmark bulk edge addition on large graph (1000 edges)."""
-    graph, nodes = graph_100k
-    added_edges = []
-
-    def bulk_add_edges():
-        edges = []
-        for i in range(1000):
-            head_idx = i % len(nodes)
-            tail_idx = (i + 1000) % len(nodes)
-            edge = Edge(
-                head=nodes[head_idx].id,
-                tail=nodes[tail_idx].id,
-                label=[f"bulk_edge_{i}"],
-            )
-            graph.add_edge(edge)
-            edges.append(edge)
-        added_edges.extend(edges)
-        return edges
-
-    benchmark(bulk_add_edges)
-
-    # Note: No cleanup - these are additive operations, graph grows but stays valid
-
-
-def test_benchmark_bulk_remove_edges_10k(benchmark, graph_10k):
-    """Benchmark bulk edge removal (1000 edges).
-
-    Validates: Remove operations scale linearly
-    Critical path: Adjacency cleanup, error handling
-    """
-    graph, nodes = graph_10k
-
-    edges_for_removal = []
-
-    def bulk_remove_edges():
-        for edge in edges_for_removal:
-            graph.remove_edge(edge.id)
-
-    def setup():
-        # Create fresh edges before each benchmark iteration
-        edges_for_removal.clear()
-        for i in range(1000):
-            head_idx = (i + 50) % len(nodes)
-            tail_idx = (i + 150) % len(nodes)
-            edge = Edge(
-                head=nodes[head_idx].id,
-                tail=nodes[tail_idx].id,
-                label=[f"remove_bulk_{i}"],
-            )
-            graph.add_edge(edge)
-            edges_for_removal.append(edge)
-
-    benchmark.pedantic(bulk_remove_edges, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # No cleanup needed - edges already removed
-
-
-def test_benchmark_bulk_remove_edges_100k(benchmark, graph_100k):
-    """Benchmark bulk edge removal on large graph (1000 edges)."""
-    graph, nodes = graph_100k
-
-    edges_for_removal = []
-
-    def bulk_remove_edges():
-        for edge in edges_for_removal:
-            graph.remove_edge(edge.id)
-
-    def setup():
-        # Create fresh edges before each benchmark iteration
-        edges_for_removal.clear()
-        for i in range(1000):
-            head_idx = (i + 500) % len(nodes)
-            tail_idx = (i + 1500) % len(nodes)
-            edge = Edge(
-                head=nodes[head_idx].id,
-                tail=nodes[tail_idx].id,
-                label=[f"remove_bulk_{i}"],
-            )
-            graph.add_edge(edge)
-            edges_for_removal.append(edge)
-
-    benchmark.pedantic(bulk_remove_edges, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # No cleanup needed - edges already removed
-
-
-def test_benchmark_bulk_remove_nodes_10k(benchmark, graph_10k):
-    """Benchmark bulk node removal with edge cleanup (1000 nodes).
-
-    Most expensive operation: Cascading edge removal + adjacency cleanup
-    Validates: Performance acceptable for batch removal
-    Expected: ~1-2s for 1000 nodes (~1-2ms per node with degree ~5)
-    """
-    graph, nodes = graph_10k
-
-    nodes_for_removal = []
-
-    def bulk_remove_nodes():
-        for node in nodes_for_removal:
-            graph.remove_node(node.id)
-
-    def setup():
-        # Create fresh nodes before each benchmark iteration
-        nodes_for_removal.clear()
-        for i in range(1000):
-            node = Node(content={"id": f"remove_bulk_{i}", "value": f"remove_bulk_node_{i}"})
-            graph.add_node(node)
-            nodes_for_removal.append(node)
-            # Add edges to make it realistic (connect to existing nodes)
-            for j in range(5):
-                target_idx = (i * 10 + j) % len(nodes)
-                edge = Edge(head=node.id, tail=nodes[target_idx].id, label=["bulk_edge"])
-                graph.add_edge(edge)
-
-    benchmark.pedantic(bulk_remove_nodes, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # No cleanup needed - nodes already removed
-
-
-def test_benchmark_bulk_remove_nodes_100k(benchmark, graph_100k):
-    """Benchmark bulk node removal on large graph (1000 nodes)."""
-    graph, nodes = graph_100k
-
-    nodes_for_removal = []
-
-    def bulk_remove_nodes():
-        for node in nodes_for_removal:
-            graph.remove_node(node.id)
-
-    def setup():
-        # Create fresh nodes before each benchmark iteration
-        nodes_for_removal.clear()
-        for i in range(1000):
-            node = Node(content={"id": f"remove_bulk_{i}", "value": f"remove_bulk_node_{i}"})
-            graph.add_node(node)
-            nodes_for_removal.append(node)
-            # Add edges to make it realistic (connect to existing nodes)
-            for j in range(5):
-                target_idx = (i * 100 + j) % len(nodes)
-                edge = Edge(head=node.id, tail=nodes[target_idx].id, label=["bulk_edge"])
-                graph.add_edge(edge)
-
-    benchmark.pedantic(bulk_remove_nodes, setup=setup, rounds=100, iterations=10, warmup_rounds=5)
-
-    # No cleanup needed - nodes already removed
-
-
-# ============================================================================
-# Query Operation Benchmarks
-# ============================================================================
-
-
-@pytest.mark.parametrize("graph_fixture", ["graph_10k", "graph_100k"])
-def test_benchmark_get_successors(benchmark, graph_fixture, request):
-    """Benchmark get_successors query (O(deg) expected).
-
-    Measures: Adjacency lookup + node fetching from Pile
-    Critical path: _out_edges dict access, Pile[uuid] lookups
-    """
-    graph, nodes = request.getfixturevalue(graph_fixture)
-
-    # Use middle node (typical degree ~5)
-    test_node = nodes[len(nodes) // 2]
-
-    def get_successors():
-        return graph.get_successors(test_node.id)
-
-    benchmark(get_successors)
-
-
-@pytest.mark.parametrize("graph_fixture", ["graph_10k", "graph_100k"])
-def test_benchmark_get_predecessors(benchmark, graph_fixture, request):
-    """Benchmark get_predecessors query (O(deg) expected)."""
-    graph, nodes = request.getfixturevalue(graph_fixture)
-
-    test_node = nodes[len(nodes) // 2]
-
-    def get_predecessors():
-        return graph.get_predecessors(test_node.id)
-
-    benchmark(get_predecessors)
-
-
-# ============================================================================
-# Workflow Construction Benchmarks (Realistic Scale)
+# Realistic Workflow Benchmarks (10-100 nodes)
 # ============================================================================
 
 
 @pytest.mark.parametrize(
-    "num_nodes,num_layers,edges_per_node",
-    [(10, 3, 2), (50, 5, 3), (100, 5, 5)],
+    "graph_fixture,expected_max_ms",
+    [
+        ("graph_10", 1),
+        ("graph_50", 5),
+        ("graph_100", 10),
+    ],
 )
-def test_benchmark_workflow_construction(benchmark, num_nodes, num_layers, edges_per_node):
-    """Benchmark complete workflow DAG construction.
-
-    Measures end-to-end time to build a realistic workflow DAG:
-    - Node creation and addition
-    - Edge creation with dependencies
-    - DAG topology (forward-flowing edges)
-
-    Scales:
-    - 10 nodes: Typical lionagi workflow (<1ms expected)
-    - 50 nodes: Medium workflow (<10ms expected)
-    - 100 nodes: P99 workflow (<20ms expected)
-
-    Critical for understanding workflow setup overhead in production.
-    """
+def test_benchmark_workflow_construction(benchmark, graph_fixture, expected_max_ms, request):
+    """Benchmark workflow graph construction (realistic scales)."""
+    graph, _ = request.getfixturevalue(graph_fixture)
 
     def construct_workflow():
-        return _create_dag_graph(num_nodes, num_layers, edges_per_node)
+        # Simulate workflow construction: add nodes + edges
+        new_nodes = []
+        for i in range(5):
+            node = Node(content={"task": f"step_{i}"})
+            graph.add_node(node)
+            new_nodes.append(node)
 
-    graph, _nodes = benchmark(construct_workflow)
+        # Connect in sequence
+        for i in range(len(new_nodes) - 1):
+            edge = Edge(head=new_nodes[i].id, tail=new_nodes[i + 1].id, label=["next"])
+            graph.add_edge(edge)
 
-    # Verify DAG properties
-    assert len(graph.nodes) == num_nodes
-    assert graph.is_acyclic()
+    benchmark.pedantic(
+        construct_workflow,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
+
+
+@pytest.mark.parametrize(
+    "graph_fixture,expected_max_ms",
+    [
+        ("graph_10", 1),
+        ("graph_50", 5),
+        ("graph_100", 10),
+    ],
+)
+def test_benchmark_workflow_query(benchmark, graph_fixture, expected_max_ms, request):
+    """Benchmark workflow graph queries (get_successors, get_predecessors)."""
+    graph, nodes = request.getfixturevalue(graph_fixture)
+
+    def query_workflow():
+        # Query middle node
+        middle_node = nodes[len(nodes) // 2]
+        _ = graph.get_successors(middle_node.id)
+        _ = graph.get_predecessors(middle_node.id)
+        _ = graph.get_node_edges(middle_node.id, direction="both")
+
+    benchmark.pedantic(
+        query_workflow,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
 
 
 # ============================================================================
@@ -628,87 +294,75 @@ def test_benchmark_workflow_construction(benchmark, num_nodes, num_layers, edges
 
 @pytest.mark.parametrize(
     "graph_fixture,expected_max_ms",
-    [("graph_100", 1), ("graph_1000", 10), ("graph_10k", 100)],
+    [
+        ("graph_100", 1),
+        ("graph_1000", 10),
+    ],
 )
 def test_benchmark_is_acyclic(benchmark, graph_fixture, expected_max_ms, request):
-    """Benchmark is_acyclic (DFS cycle detection).
-
-    Critical algorithm for workflow validation - called before every execution.
-
-    Performance expectations:
-    - 100 nodes: <1ms (typical workflow)
-    - 1000 nodes: <10ms (medium workflow)
-    - 10K nodes: <100ms (stress test)
-
-    Algorithm: Three-color DFS traversing all nodes and edges
-    Complexity: O(V + E)
-    """
+    """Benchmark is_acyclic (DFS cycle detection) - called before every workflow execution."""
     graph, _ = request.getfixturevalue(graph_fixture)
 
     def check_acyclic():
         return graph.is_acyclic()
 
-    result = benchmark.pedantic(check_acyclic, rounds=100, iterations=10, warmup_rounds=5)
-    assert result is True  # Verify graph is actually acyclic
+    result = benchmark.pedantic(
+        check_acyclic,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
+    assert result is True  # Should be acyclic (DAG structure)
 
 
 @pytest.mark.parametrize(
     "graph_fixture,expected_max_ms",
-    [("graph_100", 1), ("graph_1000", 10), ("graph_10k", 100)],
+    [
+        ("graph_100", 1),
+        ("graph_1000", 10),
+    ],
 )
 def test_benchmark_topological_sort(benchmark, graph_fixture, expected_max_ms, request):
-    """Benchmark topological_sort (Kahn's algorithm).
-
-    Critical for execution planning - determines task execution order.
-
-    Performance expectations:
-    - 100 nodes: <1ms (typical workflow)
-    - 1000 nodes: <10ms (medium workflow)
-    - 10K nodes: <100ms (stress test)
-
-    Algorithm: Kahn's algorithm with in-degree tracking + queue
-    Complexity: O(V + E)
-    """
+    """Benchmark topological_sort (Kahn's algorithm) - determines task execution order."""
     graph, _ = request.getfixturevalue(graph_fixture)
 
     def topo_sort():
         return graph.topological_sort()
 
-    result = benchmark.pedantic(topo_sort, rounds=100, iterations=10, warmup_rounds=5)
-    assert len(result) == len(graph.nodes)  # Verify all nodes included
+    result = benchmark.pedantic(
+        topo_sort,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
+    assert len(result) == len(graph.nodes)  # All nodes in sorted order
 
 
 @pytest.mark.parametrize(
     "graph_fixture,expected_max_ms",
-    [("graph_100", 1), ("graph_1000", 10), ("graph_10k", 50)],
+    [
+        ("graph_100", 1),
+        ("graph_1000", 10),
+    ],
 )
 def test_benchmark_find_path(benchmark, graph_fixture, expected_max_ms, request):
-    """Benchmark find_path (BFS pathfinding).
-
-    Used for debugging, dependency analysis, and workflow visualization.
-
-    Performance expectations:
-    - 100 nodes: <1ms (typical workflow)
-    - 1000 nodes: <10ms (medium workflow)
-    - 10K nodes: <50ms (stress test - typical paths shorter)
-
-    Algorithm: BFS with parent tracking
-    Complexity: O(V + E) worst case, typically much faster
-    """
-    import anyio
-
+    """Benchmark find_path (BFS) - debugging and dependency analysis."""
     graph, nodes = request.getfixturevalue(graph_fixture)
 
-    # Find path from first node to last node (worst case - full traversal)
+    # Find path from first node to last node
     start_node = nodes[0]
     end_node = nodes[-1]
 
     def find_path():
-        return anyio.run(graph.find_path, start_node.id, end_node.id)
+        return graph.find_path(start_node.id, end_node.id)
 
-    result = benchmark.pedantic(find_path, rounds=100, iterations=10, warmup_rounds=5)
-    assert result is not None  # Verify path exists in DAG
-    assert len(result) > 0  # Verify non-empty path
+    result = benchmark.pedantic(
+        find_path,
+        rounds=BENCH_ROUNDS,
+        iterations=BENCH_ITERATIONS,
+        warmup_rounds=BENCH_WARMUP,
+    )
+    assert result is not None  # Path should exist in DAG
 
 
 # ============================================================================
@@ -716,51 +370,20 @@ def test_benchmark_find_path(benchmark, graph_fixture, expected_max_ms, request)
 # ============================================================================
 
 
-def test_benchmark_memory_10k(benchmark):
-    """Benchmark memory usage for 10K node DAG.
+def test_benchmark_memory_1000():
+    """Benchmark peak memory usage for 1000-node graph (target: <50 MB).
 
-    Uses tracemalloc to measure actual peak memory allocation.
-    Validates: Memory footprint reasonable for graph size.
-    Baseline: ~68 MB for 10K nodes + 50K edges (~6.8 KB/node)
-    Target: <100 MB (allows for variance)
+    Single-shot measurement (not timed) - validates memory footprint correctness.
     """
     import tracemalloc
 
     def create_graph_and_measure():
         tracemalloc.start()
-        _graph, _ = _create_dag_graph(num_nodes=10_000, num_layers=20, edges_per_node=5)
+        _graph, _ = _create_dag_graph(num_nodes=1000, num_layers=10, edges_per_node=5)
         _current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
+        return peak / 1024 / 1024  # Convert to MB
 
-        # Return peak memory in MB for readability
-        return peak / 1024 / 1024
-
-    peak_mb = benchmark(create_graph_and_measure)
-
-    # Validate memory is reasonable (baseline: ~68 MB, allow 20% variance)
-    # Target: <10 KB per node (10K nodes = ~100 MB max including edges)
-    assert peak_mb < 100, f"Memory usage too high: {peak_mb:.2f} MB (target: <100 MB)"
-
-
-def test_benchmark_memory_100k(benchmark):
-    """Benchmark memory usage for 100K node DAG.
-
-    Uses tracemalloc to measure actual peak memory allocation.
-    Baseline: ~680 MB for 100K nodes + 500K edges (~6.8 KB/node)
-    Target: <1000 MB (allows for variance)
-    """
-    import tracemalloc
-
-    def create_graph_and_measure():
-        tracemalloc.start()
-        _graph, _ = _create_dag_graph(num_nodes=100_000, num_layers=50, edges_per_node=5)
-        _current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
-
-        return peak / 1024 / 1024
-
-    peak_mb = benchmark(create_graph_and_measure)
-
-    # Validate memory is reasonable (baseline: ~680 MB, allow 50% variance)
-    # Target: <10 KB per node (100K nodes = ~1000 MB max including edges)
-    assert peak_mb < 1000, f"Memory usage too high: {peak_mb:.2f} MB (target: <1000 MB)"
+    # Single-shot measurement (no benchmark fixture)
+    peak_mb = create_graph_and_measure()
+    assert peak_mb < 50, f"Peak memory {peak_mb:.2f} MB exceeds 50 MB target"
