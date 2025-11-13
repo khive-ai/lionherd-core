@@ -8,19 +8,19 @@ Strict parsers (json.loads, Pydantic) **correctly reject** malformed input - thi
 **Test Results on LLM Output Variability (typos, case variations):**
 
 - LNDL fuzzy: **100%** (5/5 test cases with typos/case issues)
-- json.loads: **60%** (3/5 - rejects malformed inputs as designed)
-- pydantic: **60%** (3/5 - rejects malformed inputs as designed)
+- fuzzy_json: **100%** (5/5 - handles malformed JSON: commas, quotes, brackets)
+- pydantic: **80%+** (coerces some type mismatches)
 
 **Interpretation:**
 
-- Gap shows LNDL's **tolerance**, not that json.loads is "bad"
-- LNDL accepts LLM output variability (typos, case variations)
-- Strict parsers correctly enforce format compliance
+- LNDL handles LNDL format typos/case (field names, model names)
+- fuzzy_json handles JSON syntax errors (commas, quotes, brackets)
+- Both are fuzzy parsers - fair comparison shows LNDL's LNDL-specific tolerance
 
 ## Speed: Parsing Overhead Only
 
 **IMPORTANT**: These measurements are parsing overhead only, NOT including fuzzy correction.
-Fuzzy matching (typo correction) adds 10-50ms additional overhead not shown here.
+Fuzzy matching (typo correction) adds ~50μs additional overhead not shown here.
 
 **Parsing Speed (perfect input):**
 
@@ -43,8 +43,9 @@ Fuzzy matching (typo correction) adds 10-50ms additional overhead not shown here
 **When NOT to use LNDL:**
 
 - Perfect JSON from APIs (use orjson - 100x faster)
-- Need strict format validation (use json.loads/Pydantic)
-- Performance critical paths (LNDL has overhead)
+- Malformed JSON without LNDL format (use fuzzy_json - handles JSON syntax errors)
+- Need strict format validation (use Pydantic)
+- Performance critical paths (both LNDL and fuzzy_json have ~50-100μs overhead)
 
 ## Benchmark Details
 

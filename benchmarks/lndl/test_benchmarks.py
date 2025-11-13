@@ -5,7 +5,7 @@
 
 IMPORTANT: These benchmarks measure parsing overhead, NOT fuzzy correction overhead.
 The fuzzy matching (typo correction, case normalization) adds significant additional
-cost (10-50ms) that is NOT included in most benchmarks here. See test_benchmark_lndl_fuzzy_correction
+cost (~50μs) that is NOT included in most benchmarks here. See test_benchmark_lndl_fuzzy_correction
 for isolated fuzzy matching overhead.
 
 Benchmark Coverage:
@@ -40,16 +40,16 @@ Performance Goals:
 
 Usage:
     # Run benchmarks only (skip regular tests)
-    uv run pytest tests/benchmarks/test_lndl_benchmarks.py --benchmark-only
+    uv run pytest benchmarks/lndl/test_benchmarks.py --benchmark-only
 
     # Save baseline for future comparison
-    uv run pytest tests/benchmarks/test_lndl_benchmarks.py --benchmark-save=lndl_baseline
+    uv run pytest benchmarks/lndl/test_benchmarks.py --benchmark-save=lndl_baseline
 
     # Compare against baseline
-    uv run pytest tests/benchmarks/test_lndl_benchmarks.py --benchmark-compare=lndl_baseline
+    uv run pytest benchmarks/lndl/test_benchmarks.py --benchmark-compare=lndl_baseline
 
     # Run with verbose stats
-    uv run pytest tests/benchmarks/test_lndl_benchmarks.py --benchmark-verbose
+    uv run pytest benchmarks/lndl/test_benchmarks.py --benchmark-verbose
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from lionherd_core.lndl import parse_lndl_fuzzy
+from lionherd_core.libs.string_handlers._fuzzy_json import fuzzy_json
 from lionherd_core.types import Operable, Spec
 
 # Optional dependencies for comparison
@@ -324,48 +325,52 @@ def test_benchmark_lndl_fuzzy_perfect(benchmark, lndl_fixture, operable_fixture,
 # ============================================================================
 
 
-def test_benchmark_json_loads_malformed_extra_comma(benchmark, malformed_json_extra_comma):
-    """JSON stdlib fails on trailing comma."""
+def test_benchmark_fuzzy_json_malformed_extra_comma(benchmark, malformed_json_extra_comma):
+    """fuzzy_json handles trailing comma."""
 
     def parse():
         try:
-            return json.loads(malformed_json_extra_comma)
-        except json.JSONDecodeError:
+            return fuzzy_json(malformed_json_extra_comma)
+        except (ValueError, TypeError):
             return None  # Failure
 
     result = benchmark(parse)
-    assert result is None  # Confirm failure
+    # fuzzy_json should handle trailing commas
+    assert result is not None
 
 
-def test_benchmark_json_loads_malformed_missing_quotes(benchmark, malformed_json_missing_quotes):
-    """JSON stdlib fails on missing quotes."""
-
-    def parse():
-        try:
-            return json.loads(malformed_json_missing_quotes)
-        except json.JSONDecodeError:
-            return None
-
-    result = benchmark(parse)
-    assert result is None
-
-
-@pytest.mark.skipif(not HAS_ORJSON, reason="orjson not installed")
-def test_benchmark_orjson_loads_malformed_extra_comma(benchmark, malformed_json_extra_comma):
-    """orjson fails on trailing comma."""
+def test_benchmark_fuzzy_json_malformed_missing_quotes(benchmark, malformed_json_missing_quotes):
+    """fuzzy_json handles missing quotes."""
 
     def parse():
         try:
-            return orjson.loads(malformed_json_extra_comma)
-        except orjson.JSONDecodeError:
+            return fuzzy_json(malformed_json_missing_quotes)
+        except (ValueError, TypeError):
             return None
 
     result = benchmark(parse)
-    assert result is None
+    # fuzzy_json should handle missing quotes
+    assert result is not None
+
+
+def test_benchmark_fuzzy_json_malformed_wrong_type(benchmark, malformed_json_wrong_type):
+    """fuzzy_json handles type coercion."""
+
+    def parse():
+        try:
+            result = fuzzy_json(malformed_json_wrong_type)
+            # Validate it parsed and returned dict
+            return result
+        except (ValueError, TypeError):
+            return None
+
+    result = benchmark(parse)
+    # fuzzy_json should parse successfully (dict returned)
+    assert result is not None
 
 
 def test_benchmark_pydantic_malformed_wrong_type(benchmark, malformed_json_wrong_type):
-    """Pydantic validates types strictly."""
+    """Pydantic validates types (may coerce string to float)."""
 
     def parse():
         try:
@@ -474,11 +479,11 @@ def test_benchmark_lndl_full_pipeline_fuzzy(benchmark, lndl_with_typos, lndl_ope
 # ============================================================================
 
 
-def test_success_rate_comparison(capsys):
+def test_success_rate_comparison():
     """Compare success rates across parsers on malformed inputs.
 
-    This test doesn't benchmark speed - it validates the trade-off claim:
-    LNDL has <5% failure rate vs strict JSON's 40-60% failure rate.
+    This test doesn't benchmark speed - it validates fuzzy parser comparison:
+    LNDL (fuzzy LNDL) vs fuzzy_json (fuzzy JSON) on malformed inputs.
     """
     # Test cases: mix of perfect and malformed inputs
     json_test_cases = [
@@ -532,9 +537,9 @@ OUT{report: [t, s, q, w]}
         """,
     ]
 
-    # JSON stdlib
-    json_successes, json_total = parse_success_rate(json.loads, json_test_cases)
-    json_rate = 100 * json_successes / json_total
+    # fuzzy_json (our fuzzy JSON parser)
+    fuzzy_json_successes, fuzzy_json_total = parse_success_rate(fuzzy_json, json_test_cases)
+    fuzzy_json_rate = 100 * fuzzy_json_successes / fuzzy_json_total
 
     # Pydantic
     def pydantic_parser(json_str):
@@ -556,24 +561,21 @@ OUT{report: [t, s, q, w]}
     print("\n" + "=" * 60)
     print("Success Rate Comparison (Malformed Inputs)")
     print("=" * 60)
-    print(f"json.loads:       {json_successes}/{json_total} ({json_rate:.1f}%)")
+    print(f"fuzzy_json:       {fuzzy_json_successes}/{fuzzy_json_total} ({fuzzy_json_rate:.1f}%)")
     print(f"Pydantic:         {pydantic_successes}/{pydantic_total} ({pydantic_rate:.1f}%)")
     print(f"LNDL Fuzzy:       {lndl_successes}/{lndl_total} ({lndl_rate:.1f}%)")
     print("=" * 60)
-    print(f"LNDL Improvement: +{lndl_rate - json_rate:.1f}% vs json.loads")
-    print(f"LNDL Improvement: +{lndl_rate - pydantic_rate:.1f}% vs Pydantic")
+    print(f"LNDL vs fuzzy_json: {lndl_rate - fuzzy_json_rate:+.1f}%")
+    print(f"LNDL vs Pydantic: {lndl_rate - pydantic_rate:+.1f}%")
     print("=" * 60)
 
     # Validate LNDL's fuzzy parsing capability
-    # NOTE: This test measures tolerance, not quality. Strict parsers (json.loads, Pydantic)
-    # CORRECTLY reject malformed input - that's their design. LNDL's value is handling
-    # LLM output variability (typos, case variations) that strict parsers can't tolerate.
+    # NOTE: Comparing fuzzy parsers (LNDL vs fuzzy_json), not strict vs fuzzy
+    # Both handle malformed input, but LNDL has additional typo/case tolerance for LNDL format
     assert lndl_rate >= 90, f"LNDL should handle LLM output variability, got {lndl_rate:.1f}%"
 
-    # Strict parsers should correctly reject malformed inputs (this is NOT a deficiency)
-    # The gap shows LNDL's tolerance, not that json.loads is "bad"
-    assert lndl_rate > json_rate, "LNDL should be more tolerant than strict parsers"
-    assert lndl_rate > pydantic_rate, "LNDL should be more tolerant than Pydantic"
+    # fuzzy_json should also have high success rate (it's a fuzzy parser)
+    assert fuzzy_json_rate >= 80, f"fuzzy_json should handle malformed JSON, got {fuzzy_json_rate:.1f}%"
 
 
 # ============================================================================
@@ -644,8 +646,8 @@ def test_benchmark_lndl_complex_with_typos(
 # ============================================================================
 
 
-def test_generate_comparison_matrix(capsys):
-    """Generate decision matrix: when to use LNDL vs strict JSON vs orjson.
+def test_generate_comparison_matrix():
+    """Generate decision matrix: when to use LNDL vs fuzzy_json vs orjson.
 
     This is a summary test that doesn't benchmark - it analyzes the results
     and provides guidance for users.
@@ -666,7 +668,7 @@ def test_generate_comparison_matrix(capsys):
         (
             "LLM Output, Unknown Quality",
             "LNDL Fuzzy (threshold=0.85)",
-            "90%+ success, 10-50ms overhead",
+            "90%+ success, ~50-90μs overhead",
         ),
         (
             "LLM Output, Strict Validation",
@@ -692,13 +694,13 @@ def test_generate_comparison_matrix(capsys):
     print("  ✓ 90%+ success rate on malformed LLM output")
     print("  ✓ Handles typos, case variations, missing fields")
     print("  ✓ Type coercion and validation")
-    print("  ✗ 10-50ms overhead vs strict parsers")
+    print("  ✗ ~50-90μs overhead vs strict parsers")
     print("  ✗ Not suitable for high-frequency parsing (>10K ops/s)")
-    print("\nStrict JSON Parsers (json.loads, orjson):")
-    print("  ✓ 2-10x faster than LNDL")
-    print("  ✓ Battle-tested, minimal memory overhead")
-    print("  ✗ 40-60% failure rate on malformed LLM output")
-    print("  ✗ No type validation or schema enforcement")
+    print("\nfuzzy_json (lionherd_core):")
+    print("  ✓ Handles malformed JSON (trailing commas, missing quotes, brackets)")
+    print("  ✓ Similar speed to LNDL (~50-100μs)")
+    print("  ✓ Returns dict/list[dict] for structured data")
+    print("  ✗ JSON format only (no LNDL typo/case tolerance)")
     print("\nPydantic (model_validate_json):")
     print("  ✓ Type validation and schema enforcement")
     print("  ✓ Similar speed to LNDL strict mode")

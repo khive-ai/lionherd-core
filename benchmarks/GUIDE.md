@@ -4,7 +4,10 @@ Comprehensive guide to performance benchmarking in lionherd-core.
 
 ## Available Benchmark Suites
 
-### 1. Pile[T] Benchmarks
+**Currently Implemented**: LNDL Parser (benchmarks/lndl/)
+**Planned**: Pile, Flow, Graph (infrastructure ready, implementation pending)
+
+### 1. Pile[T] Benchmarks (PLANNED)
 
 **File**: `test_pile_benchmarks.py`
 **Component**: `lionherd_core.base.Pile`
@@ -18,14 +21,14 @@ Comprehensive guide to performance benchmarking in lionherd-core.
 - 4.4x memory overhead vs dict
 - Type validation adds minimal overhead (1.6-4.6%)
 
-**See**: [PILE_BENCHMARK_ANALYSIS.md](./PILE_BENCHMARK_ANALYSIS.md)
+**See**: PILE_BENCHMARK_ANALYSIS.md (to be created with implementation)
 
 ```bash
 # Run Pile benchmarks
 uv run pytest benchmarks/test_pile_benchmarks.py --benchmark-only
 ```
 
-### 2. Flow Benchmarks
+### 2. Flow Benchmarks (PLANNED)
 
 **File**: `test_flow_benchmarks.py`
 **Component**: `lionherd_core.base.Flow`
