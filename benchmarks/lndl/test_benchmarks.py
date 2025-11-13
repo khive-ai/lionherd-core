@@ -60,8 +60,8 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from lionherd_core.lndl import parse_lndl_fuzzy
 from lionherd_core.libs.string_handlers._fuzzy_json import fuzzy_json
+from lionherd_core.lndl import parse_lndl_fuzzy
 from lionherd_core.types import Operable, Spec
 
 # Optional dependencies for comparison
@@ -575,7 +575,9 @@ OUT{report: [t, s, q, w]}
     assert lndl_rate >= 90, f"LNDL should handle LLM output variability, got {lndl_rate:.1f}%"
 
     # fuzzy_json should also have high success rate (it's a fuzzy parser)
-    assert fuzzy_json_rate >= 80, f"fuzzy_json should handle malformed JSON, got {fuzzy_json_rate:.1f}%"
+    assert fuzzy_json_rate >= 80, (
+        f"fuzzy_json should handle malformed JSON, got {fuzzy_json_rate:.1f}%"
+    )
 
 
 # ============================================================================
