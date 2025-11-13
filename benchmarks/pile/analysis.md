@@ -25,8 +25,8 @@
 **Comparisons:**
 
 - OrderedDict iteration: 8x faster than Pile
-- pandas.Index creation: 200x faster than Pile
-- pandas.Index get_loc: 22x faster than Pile
+- dict is ~100x faster for lookups (get, contains)
+- dict is ~88x faster for add operations
 
 ## Scaling
 

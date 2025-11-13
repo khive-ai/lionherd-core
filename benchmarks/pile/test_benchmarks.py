@@ -4,14 +4,14 @@
 """Comprehensive benchmarks for Pile[T] data structure.
 
 This benchmark suite measures Pile performance against baseline implementations
-(dict, pandas.Index, polars.Series) to quantify the overhead of type safety,
-protocol support, and progression tracking.
+(dict, OrderedDict) to quantify the overhead of type safety, protocol support,
+and progression tracking.
 
 Methodology
 -----------
-- Size scales: 100, 1K, 10K, 100K items
+- Size scales: 100, 1K, 10K items
 - Operations: add, remove, get, contains, iteration, filtering
-- Comparisons: Raw dict, pandas.Index, polars.Series
+- Comparisons: dict, OrderedDict
 - Memory profiling: Overhead of Pile vs dict
 
 Design Intent
@@ -61,8 +61,6 @@ from collections import OrderedDict
 from typing import Any
 from uuid import UUID, uuid4
 
-import pandas as pd
-import polars as pl
 import pytest
 
 from lionherd_core.base import Element, Pile, Progression
@@ -79,43 +77,31 @@ class BenchElement(Element):
 
 
 @pytest.fixture(params=[100, 1_000, 10_000])
-def size(request):
+def size(request) -> int:
     """Parametrize benchmark sizes."""
     return request.param
 
 
 @pytest.fixture
-def elements(size):
+def elements(size: int) -> list[BenchElement]:
     """Create test elements."""
     return [BenchElement(value=i) for i in range(size)]
 
 
 @pytest.fixture
-def pile(elements):
+def pile(elements: list[BenchElement]) -> Pile[BenchElement]:
     """Pre-populated Pile."""
     return Pile(items=elements)
 
 
 @pytest.fixture
-def dict_baseline(elements):
+def dict_baseline(elements: list[BenchElement]) -> dict[UUID, BenchElement]:
     """Baseline dict for comparison."""
     return {elem.id: elem for elem in elements}
 
 
 @pytest.fixture
-def pandas_baseline(elements):
-    """Baseline pandas.Index for comparison."""
-    return pd.Index([elem.id for elem in elements])
-
-
-@pytest.fixture
-def polars_baseline(elements):
-    """Baseline polars.Series for comparison."""
-    return pl.Series([str(elem.id) for elem in elements])
-
-
-@pytest.fixture
-def ordered_dict_baseline(elements):
+def ordered_dict_baseline(elements: list[BenchElement]) -> OrderedDict[UUID, BenchElement]:
     """Baseline OrderedDict for comparison."""
     return OrderedDict((elem.id, elem) for elem in elements)
 
@@ -128,7 +114,7 @@ def ordered_dict_baseline(elements):
 class TestCoreOperations:
     """Benchmark core operations: add, remove, get, contains."""
 
-    def test_pile_add(self, benchmark, size):
+    def test_pile_add(self, benchmark, size) -> None:
         """Benchmark Pile.add() - single item addition."""
 
         def setup():
@@ -142,7 +128,7 @@ class TestCoreOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=10)
 
-    def test_dict_add(self, benchmark, size):
+    def test_dict_add(self, benchmark, size) -> None:
         """Baseline: dict insert."""
 
         def setup():
@@ -156,7 +142,7 @@ class TestCoreOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=10)
 
-    def test_pile_remove(self, benchmark, size):
+    def test_pile_remove(self, benchmark, size) -> None:
         """Benchmark Pile.remove() - single item removal."""
 
         def setup():
@@ -171,7 +157,7 @@ class TestCoreOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=5)
 
-    def test_dict_remove(self, benchmark, size):
+    def test_dict_remove(self, benchmark, size) -> None:
         """Baseline: dict.pop()."""
 
         def setup():
@@ -186,7 +172,7 @@ class TestCoreOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=5)
 
-    def test_pile_get(self, benchmark, pile, elements):
+    def test_pile_get(self, benchmark, pile, elements) -> None:
         """Benchmark Pile.get() - UUID lookup."""
         uuids = [elem.id for elem in elements]
 
@@ -196,7 +182,7 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_dict_get(self, benchmark, dict_baseline, elements):
+    def test_dict_get(self, benchmark, dict_baseline, elements) -> None:
         """Baseline: dict[key] lookup."""
         uuids = [elem.id for elem in elements]
 
@@ -206,7 +192,7 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_pile_contains(self, benchmark, pile, elements):
+    def test_pile_contains(self, benchmark, pile, elements) -> None:
         """Benchmark Pile.__contains__() - membership test."""
         uuids = [elem.id for elem in elements]
 
@@ -216,7 +202,7 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_dict_contains(self, benchmark, dict_baseline, elements):
+    def test_dict_contains(self, benchmark, dict_baseline, elements) -> None:
         """Baseline: dict.__contains__()."""
         uuids = [elem.id for elem in elements]
 
@@ -226,15 +212,15 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_pile_len(self, benchmark, pile):
+    def test_pile_len(self, benchmark, pile) -> None:
         """Benchmark Pile.__len__()."""
         benchmark(len, pile)
 
-    def test_dict_len(self, benchmark, dict_baseline):
+    def test_dict_len(self, benchmark, dict_baseline) -> None:
         """Baseline: dict.__len__()."""
         benchmark(len, dict_baseline)
 
-    def test_pile_iteration(self, benchmark, pile):
+    def test_pile_iteration(self, benchmark, pile) -> None:
         """Benchmark Pile.__iter__() - full iteration."""
 
         def run():
@@ -243,7 +229,7 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_dict_iteration(self, benchmark, dict_baseline):
+    def test_dict_iteration(self, benchmark, dict_baseline) -> None:
         """Baseline: dict.values() iteration."""
 
         def run():
@@ -252,7 +238,7 @@ class TestCoreOperations:
 
         benchmark(run)
 
-    def test_ordered_dict_iteration(self, benchmark, ordered_dict_baseline):
+    def test_ordered_dict_iteration(self, benchmark, ordered_dict_baseline) -> None:
         """Baseline: OrderedDict iteration (ordered like Pile)."""
 
         def run():
@@ -270,7 +256,7 @@ class TestCoreOperations:
 class TestBulkOperations:
     """Benchmark bulk operations: bulk add, bulk remove, filtering."""
 
-    def test_pile_bulk_add_via_init(self, benchmark, elements):
+    def test_pile_bulk_add_via_init(self, benchmark, elements) -> None:
         """Benchmark Pile initialization with items."""
 
         def run():
@@ -278,7 +264,7 @@ class TestBulkOperations:
 
         benchmark(run)
 
-    def test_dict_bulk_add_via_comprehension(self, benchmark, elements):
+    def test_dict_bulk_add_via_comprehension(self, benchmark, elements) -> None:
         """Baseline: dict comprehension."""
 
         def run():
@@ -286,7 +272,7 @@ class TestBulkOperations:
 
         benchmark(run)
 
-    def test_pile_bulk_remove(self, benchmark, size):
+    def test_pile_bulk_remove(self, benchmark, size) -> None:
         """Benchmark bulk remove (remove half)."""
 
         def setup():
@@ -301,7 +287,7 @@ class TestBulkOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=5)
 
-    def test_pile_filter_by_predicate(self, benchmark, pile):
+    def test_pile_filter_by_predicate(self, benchmark, pile) -> None:
         """Benchmark Pile.__getitem__[callable] - predicate filtering."""
 
         def run():
@@ -310,7 +296,7 @@ class TestBulkOperations:
 
         benchmark(run)
 
-    def test_pile_filter_by_progression(self, benchmark, pile, elements):
+    def test_pile_filter_by_progression(self, benchmark, pile, elements) -> None:
         """Benchmark Pile.__getitem__[Progression] - progression filtering."""
         # Filter to 50% of items
         subset_ids = [elem.id for elem in elements[::2]]
@@ -322,7 +308,7 @@ class TestBulkOperations:
 
         benchmark(run)
 
-    def test_pile_slice(self, benchmark, pile, size):
+    def test_pile_slice(self, benchmark, pile, size) -> None:
         """Benchmark Pile.__getitem__[slice] - slice access."""
         start = size // 4
         end = 3 * size // 4
@@ -342,7 +328,7 @@ class TestBulkOperations:
 class TestTypeSafetyOverhead:
     """Benchmark type validation overhead."""
 
-    def test_pile_add_with_type_validation(self, benchmark, size):
+    def test_pile_add_with_type_validation(self, benchmark, size) -> None:
         """Benchmark add with type validation (non-strict)."""
 
         def setup():
@@ -356,7 +342,7 @@ class TestTypeSafetyOverhead:
 
         benchmark.pedantic(run, setup=setup, rounds=10)
 
-    def test_pile_add_strict_type_validation(self, benchmark, size):
+    def test_pile_add_strict_type_validation(self, benchmark, size) -> None:
         """Benchmark add with strict type validation."""
 
         def setup():
@@ -370,7 +356,7 @@ class TestTypeSafetyOverhead:
 
         benchmark.pedantic(run, setup=setup, rounds=10)
 
-    def test_pile_add_no_type_validation(self, benchmark, size):
+    def test_pile_add_no_type_validation(self, benchmark, size) -> None:
         """Benchmark add without type validation (item_type=None)."""
 
         def setup():
@@ -386,81 +372,6 @@ class TestTypeSafetyOverhead:
 
 
 # =============================================================================
-# Pandas Comparison
-# =============================================================================
-
-
-class TestPandasComparison:
-    """Compare Pile against pandas.Index."""
-
-    def test_pandas_index_creation(self, benchmark, elements):
-        """Baseline: pandas.Index creation."""
-        uuids = [elem.id for elem in elements]
-
-        def run():
-            pd.Index(uuids)
-
-        benchmark(run)
-
-    def test_pandas_index_contains(self, benchmark, pandas_baseline, elements):
-        """Baseline: pandas.Index.__contains__()."""
-        uuids = [elem.id for elem in elements]
-
-        def run():
-            for uuid in uuids:
-                _ = uuid in pandas_baseline
-
-        benchmark(run)
-
-    def test_pandas_index_get_loc(self, benchmark, pandas_baseline, elements):
-        """Baseline: pandas.Index.get_loc() - lookup by value."""
-        uuids = [elem.id for elem in elements]
-
-        def run():
-            for uuid in uuids:
-                pandas_baseline.get_loc(uuid)
-
-        benchmark(run)
-
-
-# =============================================================================
-# Polars Comparison
-# =============================================================================
-
-
-class TestPolarsComparison:
-    """Compare Pile against polars.Series."""
-
-    def test_polars_series_creation(self, benchmark, elements):
-        """Baseline: polars.Series creation."""
-        uuids = [str(elem.id) for elem in elements]
-
-        def run():
-            pl.Series(uuids)
-
-        benchmark(run)
-
-    def test_polars_series_contains(self, benchmark, polars_baseline, elements):
-        """Baseline: polars.Series filtering for membership."""
-        uuids = [str(elem.id) for elem in elements]
-
-        def run():
-            for uuid in uuids:
-                polars_baseline.filter(polars_baseline == uuid)
-
-        benchmark(run)
-
-    def test_polars_series_filter(self, benchmark, size):
-        """Baseline: polars.Series filtering."""
-        values = pl.Series(list(range(size)))
-
-        def run():
-            values.filter(values % 2 == 0)
-
-        benchmark(run)
-
-
-# =============================================================================
 # Memory Benchmarks
 # =============================================================================
 
@@ -472,7 +383,7 @@ class TestMemoryOverhead:
     Use memory_profiler for detailed analysis: @profile decorator.
     """
 
-    def test_pile_memory_overhead(self, benchmark, size):
+    def test_pile_memory_overhead(self, benchmark, size) -> None:
         """Measure Pile memory footprint."""
 
         def run():
@@ -487,7 +398,7 @@ class TestMemoryOverhead:
         print(f"  sys.getsizeof(pile._items): {sys.getsizeof(pile._items)} bytes")
         print(f"  sys.getsizeof(pile._progression): {sys.getsizeof(pile._progression.order)} bytes")
 
-    def test_dict_memory_overhead(self, benchmark, size):
+    def test_dict_memory_overhead(self, benchmark, size) -> None:
         """Baseline: dict memory footprint."""
 
         def run():
@@ -510,7 +421,7 @@ class TestMemoryOverhead:
 class TestSpecialOperations:
     """Benchmark special Pile features."""
 
-    def test_pile_keys_iteration(self, benchmark, pile):
+    def test_pile_keys_iteration(self, benchmark, pile) -> None:
         """Benchmark Pile.keys() iteration."""
 
         def run():
@@ -519,7 +430,7 @@ class TestSpecialOperations:
 
         benchmark(run)
 
-    def test_pile_items_iteration(self, benchmark, pile):
+    def test_pile_items_iteration(self, benchmark, pile) -> None:
         """Benchmark Pile.items() iteration."""
 
         def run():
@@ -528,7 +439,7 @@ class TestSpecialOperations:
 
         benchmark(run)
 
-    def test_pile_filter_by_type(self, benchmark, size):
+    def test_pile_filter_by_type(self, benchmark, size) -> None:
         """Benchmark Pile.filter_by_type()."""
 
         def setup():
@@ -548,7 +459,7 @@ class TestSpecialOperations:
 
         benchmark.pedantic(run, setup=setup, rounds=5)
 
-    def test_pile_include_idempotent(self, benchmark, pile, elements):
+    def test_pile_include_idempotent(self, benchmark, pile, elements) -> None:
         """Benchmark Pile.include() - idempotent add."""
         # Test repeated include (should be fast after first add)
 
@@ -558,7 +469,7 @@ class TestSpecialOperations:
 
         benchmark(run)
 
-    def test_pile_exclude_idempotent(self, benchmark, size):
+    def test_pile_exclude_idempotent(self, benchmark, size) -> None:
         """Benchmark Pile.exclude() - idempotent remove."""
 
         def setup():

@@ -2,6 +2,14 @@
 
 Performance tracking for Pile[T] data structure.
 
+## Dependencies
+
+Benchmarks require pytest-benchmark:
+
+```bash
+uv pip install pytest-benchmark
+```
+
 ## Quick Start
 
 ```bash
