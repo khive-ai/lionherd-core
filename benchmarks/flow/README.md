@@ -18,8 +18,7 @@ uv run pytest benchmarks/flow/ --benchmark-save=flow_baseline
 ## Profiling
 
 ```bash
-uv run python benchmarks/flow/profile.py --size 10000
+uv run python benchmarks/flow/profile_flow.py --size 10000
 ```
 
-See `analysis.md` for performance breakdown and optimization recommendations.
-
+See `USAGE.md` for performance breakdown and optimization recommendations.

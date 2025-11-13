@@ -56,9 +56,9 @@ def build_flow(size: int, num_progressions: int = 10) -> tuple[Flow, list[Node],
     Returns:
         Tuple of (flow, items, progressions)
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Building flow with {size:,} items, {num_progressions} progressions...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     flow = Flow(name="perf_test_flow")
     items = []
@@ -71,9 +71,9 @@ def build_flow(size: int, num_progressions: int = 10) -> tuple[Flow, list[Node],
         flow.add_item(item)
         items.append(item)
         if (i + 1) % (size // 10) == 0:
-            print(f"  Added {i+1:,}/{size:,} items...")
+            print(f"  Added {i + 1:,}/{size:,} items...")
     elapsed = time.perf_counter() - start
-    print(f"✓ Items added: {elapsed:.2f}s ({size/elapsed:,.0f} ops/s)")
+    print(f"✓ Items added: {elapsed:.2f}s ({size / elapsed:,.0f} ops/s)")
 
     # Phase 2: Create progressions
     start = time.perf_counter()
@@ -92,12 +92,12 @@ def build_flow(size: int, num_progressions: int = 10) -> tuple[Flow, list[Node],
         progressions.append(prog)
 
         if (p + 1) % max(1, num_progressions // 5) == 0:
-            print(f"  Created {p+1}/{num_progressions} progressions...")
+            print(f"  Created {p + 1}/{num_progressions} progressions...")
 
     elapsed = time.perf_counter() - start
     print(f"✓ Progressions created: {elapsed:.2f}s")
 
-    print(f"\n📊 Flow Stats:")
+    print("\n📊 Flow Stats:")
     print(f"   Items: {len(flow.items):,}")
     print(f"   Progressions: {len(flow.progressions):,}")
     print(f"   Avg items/progression: {len(flow.items) / len(flow.progressions):,.0f}")
@@ -115,9 +115,9 @@ def profile_flow_operations(size: int = 10000, num_progressions: int = 10):
     flow, items, progressions = build_flow(size, num_progressions)
 
     # Profile progression queries
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Profiling progression queries...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     start = time.perf_counter()
     for p in progressions:
@@ -126,12 +126,12 @@ def profile_flow_operations(size: int = 10000, num_progressions: int = 10):
         _ = list(p)  # Iterate through progression
     elapsed = time.perf_counter() - start
     ops = len(progressions) * 3
-    print(f"✓ Query operations: {elapsed:.2f}s ({ops/elapsed:,.0f} ops/s)")
+    print(f"✓ Query operations: {elapsed:.2f}s ({ops / elapsed:,.0f} ops/s)")
 
     # Profile adding items to existing progressions
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Profiling item additions to progressions...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     new_items = []
     add_count = size // 10
@@ -142,15 +142,15 @@ def profile_flow_operations(size: int = 10000, num_progressions: int = 10):
         flow.add_item(item, progressions=progressions[0].id)
         new_items.append(item)
         if (i + 1) % (add_count // 5) == 0:
-            print(f"  Added {i+1:,}/{add_count:,} items...")
+            print(f"  Added {i + 1:,}/{add_count:,} items...")
 
     elapsed = time.perf_counter() - start
-    print(f"✓ Item additions: {elapsed:.2f}s ({add_count/elapsed:,.0f} ops/s)")
+    print(f"✓ Item additions: {elapsed:.2f}s ({add_count / elapsed:,.0f} ops/s)")
 
     # Profile item removal (cascades through progressions)
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Profiling item removal (cascading progression updates)...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Remove items from middle progressions
     remove_count = size // 20
@@ -160,12 +160,12 @@ def profile_flow_operations(size: int = 10000, num_progressions: int = 10):
         if idx < len(items):
             flow.remove_item(items[idx].id)
         if (i + 1) % (remove_count // 5) == 0:
-            print(f"  Removed {i+1:,}/{remove_count:,} items...")
+            print(f"  Removed {i + 1:,}/{remove_count:,} items...")
 
     elapsed = time.perf_counter() - start
-    print(f"✓ Item removal: {elapsed:.2f}s ({remove_count/elapsed:,.0f} ops/s)")
+    print(f"✓ Item removal: {elapsed:.2f}s ({remove_count / elapsed:,.0f} ops/s)")
 
-    print(f"\n📊 Final Flow Stats:")
+    print("\n📊 Final Flow Stats:")
     print(f"   Items: {len(flow.items):,}")
     print(f"   Progressions: {len(flow.progressions):,}")
 
@@ -176,9 +176,9 @@ def profile_flow_progression_management(size: int = 10000):
     Args:
         size: Number of items in flow
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Profiling progression management...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     flow, items, _ = build_flow(size, num_progressions=5)
 
@@ -200,10 +200,10 @@ def profile_flow_progression_management(size: int = 10000):
         new_progressions.append(prog)
 
         if (i + 1) % (add_count // 5) == 0:
-            print(f"  Added {i+1}/{add_count} progressions...")
+            print(f"  Added {i + 1}/{add_count} progressions...")
 
     elapsed = time.perf_counter() - start
-    print(f"✓ Progression additions: {elapsed:.2f}s ({add_count/elapsed:,.0f} ops/s)")
+    print(f"✓ Progression additions: {elapsed:.2f}s ({add_count / elapsed:,.0f} ops/s)")
 
     # Profile progression removal
     remove_count = 25
@@ -212,9 +212,9 @@ def profile_flow_progression_management(size: int = 10000):
         flow.remove_progression(new_progressions[i].id)
 
     elapsed = time.perf_counter() - start
-    print(f"✓ Progression removal: {elapsed:.2f}s ({remove_count/elapsed:,.0f} ops/s)")
+    print(f"✓ Progression removal: {elapsed:.2f}s ({remove_count / elapsed:,.0f} ops/s)")
 
-    print(f"\n📊 Final Stats:")
+    print("\n📊 Final Stats:")
     print(f"   Progressions: {len(flow.progressions):,}")
 
 
@@ -225,9 +225,9 @@ def profile_flow_serialization(size: int = 10000, num_progressions: int = 10):
         size: Number of items in flow
         num_progressions: Number of progressions
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Profiling serialization...")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     flow, _, _ = build_flow(size, num_progressions)
 
@@ -242,7 +242,9 @@ def profile_flow_serialization(size: int = 10000, num_progressions: int = 10):
     restored = Flow.from_dict(data)
     elapsed = time.perf_counter() - start
     print(f"✓ from_dict(): {elapsed:.2f}s")
-    print(f"   Restored: {len(restored.items):,} items, {len(restored.progressions):,} progressions")
+    print(
+        f"   Restored: {len(restored.items):,} items, {len(restored.progressions):,} progressions"
+    )
 
 
 def run_profiling(size: int, enable_memory: bool = False, enable_cpu: bool = True):
@@ -253,10 +255,10 @@ def run_profiling(size: int, enable_memory: bool = False, enable_cpu: bool = Tru
         enable_memory: Enable memory profiling (slower)
         enable_cpu: Enable CPU profiling
     """
-    print(f"\n{'='*60}")
-    print(f"FLOW PROFILING")
-    print(f"{'='*60}")
-    print(f"Configuration:")
+    print(f"\n{'=' * 60}")
+    print("FLOW PROFILING")
+    print(f"{'=' * 60}")
+    print("Configuration:")
     print(f"  Operations: {size:,}")
     print(f"  CPU profiling: {'enabled' if enable_cpu else 'disabled'}")
     print(f"  Memory profiling: {'enabled' if enable_memory else 'disabled'}")
@@ -275,9 +277,9 @@ def run_profiling(size: int, enable_memory: bool = False, enable_cpu: bool = Tru
         profiler.disable()
 
         # Print CPU profiling results
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("CPU PROFILING RESULTS (Top 30 by cumulative time)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         stream = io.StringIO()
         stats = pstats.Stats(profiler, stream=stream)
@@ -287,9 +289,9 @@ def run_profiling(size: int, enable_memory: bool = False, enable_cpu: bool = Tru
         print(stream.getvalue())
 
         # Hot path analysis
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("HOT PATH ANALYSIS (Top 20 by time)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         stream = io.StringIO()
         stats = pstats.Stats(profiler, stream=stream)
         stats.strip_dirs()
@@ -332,9 +334,9 @@ def main():
 
     run_profiling(size=args.size, enable_memory=args.memory, enable_cpu=args.cpu)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("PROFILING COMPLETE")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print("\nNext steps:")
     print("  1. Review hot paths in CPU profiling results")
     print("  2. Compare against pandas/polars for baseline")

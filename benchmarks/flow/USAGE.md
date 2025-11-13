@@ -17,6 +17,7 @@ Validates that Flow operations maintain pandas-level performance after architect
 ## Benchmark Categories
 
 ### Single Operations
+
 - `test_flow_add_item` - Add single item to flow
 - `test_flow_remove_item` - Remove single item from flow
 - `test_flow_add_progression` - Add single progression
@@ -25,27 +26,33 @@ Validates that Flow operations maintain pandas-level performance after architect
 - `test_flow_get_progression_by_uuid` - UUID-based lookup (O(1))
 
 ### Bulk Operations
+
 - `test_flow_bulk_add_items` - Add 100 items in loop
 - `test_flow_bulk_remove_items` - Remove 100 items in loop
 
 ### Progression Operations
+
 - `test_flow_progression_append` - Append item to progression (O(1))
 - `test_flow_progression_remove` - Remove item from progression (O(n))
 - `test_flow_progression_traversal` - Iterate progression.order
 - `test_flow_progression_contains` - Check item membership (O(1))
 
 ### Complex Operations
+
 - `test_flow_add_item_to_multiple_progressions` - M:N relationship overhead
 - `test_flow_remove_item_cascade` - Cascade delete across progressions
 
 ### Serialization
+
 - `test_flow_to_dict` - Flow serialization
 - `test_flow_from_dict` - Flow deserialization
 
 ### Referential Integrity
+
 - `test_flow_referential_integrity_validation_1k` - Validation during construction
 
 ### Name Index
+
 - `test_flow_name_index_lookup_1k` - Dict lookup performance
 - `test_flow_name_index_rebuild_after_deserialization` - Index rebuild cost
 
@@ -54,57 +61,57 @@ Validates that Flow operations maintain pandas-level performance after architect
 ### Run All Benchmarks
 
 ```bash
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only
 ```
 
 ### Run Specific Size
 
 ```bash
 # 1K dataset only
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -k "1k"
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -k "1k"
 
 # 10K dataset only
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -k "10k"
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -k "10k"
 ```
 
 ### Run Specific Operation
 
 ```bash
 # All add_item benchmarks
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -k "add_item"
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -k "add_item"
 
 # Progression operations only
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -k "progression"
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -k "progression"
 ```
 
 ### Save Baseline
 
 ```bash
 # Save current results as baseline
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-save=baseline_pr117
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-save=baseline_pr117
 ```
 
 ### Compare with Baseline
 
 ```bash
 # Compare current results with baseline
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-compare=0001
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-compare=0001
 
 # Compare with named baseline
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-compare=baseline_pr117
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-compare=baseline_pr117
 ```
 
 ### Advanced Options
 
 ```bash
 # Warmup + disable GC for more consistent results
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-warmup=on --benchmark-disable-gc
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-warmup=on --benchmark-disable-gc
 
 # Verbose output
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -v
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -v
 
 # Generate HTML report
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-json=output.json
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-json=output.json
 ```
 
 ## Interpreting Results
@@ -138,13 +145,14 @@ Compare before/after results:
 
 ```bash
 # Before PR
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-save=before
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-save=before
 
 # After PR
-uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-compare=before
+uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-compare=before
 ```
 
 Look for:
+
 - **>5% increase in Mean**: Performance regression
 - **Significant StdDev increase**: Consistency regression
 - **Outliers increase**: Edge case issues

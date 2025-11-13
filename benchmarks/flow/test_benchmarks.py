@@ -22,16 +22,16 @@ Datasets:
 
 Usage:
     # Run all benchmarks
-    uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only
+    uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only
 
     # Compare with baseline
-    uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-compare=0001
+    uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-compare=0001
 
     # Save baseline
-    uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only --benchmark-save=baseline
+    uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only --benchmark-save=baseline
 
     # Specific size
-    uv run pytest tests/benchmarks/test_flow_benchmarks.py --benchmark-only -k "1k"
+    uv run pytest benchmarks/flow/test_benchmarks.py --benchmark-only -k "1k"
 """
 
 from __future__ import annotations
@@ -61,19 +61,19 @@ class BenchmarkProgression(Progression):
 
 
 @pytest.fixture(scope="module")
-def items_1k():
+def items_1k() -> list[BenchmarkItem]:
     """Create 1K test items (reusable across benchmarks)."""
     return [BenchmarkItem(value=f"item{i}") for i in range(1000)]
 
 
 @pytest.fixture(scope="module")
-def items_10k():
+def items_10k() -> list[BenchmarkItem]:
     """Create 10K test items (reusable across benchmarks)."""
     return [BenchmarkItem(value=f"item{i}") for i in range(10000)]
 
 
 @pytest.fixture(scope="module")
-def flow_1k(items_1k):
+def flow_1k(items_1k: list[BenchmarkItem]) -> Flow[BenchmarkItem, BenchmarkProgression]:
     """Flow with 1K items + 10 progressions (small workflow).
 
     Pre-populated fixture to avoid setup time contamination.
@@ -97,7 +97,7 @@ def flow_1k(items_1k):
 
 
 @pytest.fixture(scope="module")
-def flow_10k(items_10k):
+def flow_10k(items_10k: list[BenchmarkItem]) -> Flow[BenchmarkItem, BenchmarkProgression]:
     """Flow with 10K items + 100 progressions (large workflow).
 
     Pre-populated fixture to avoid setup time contamination.
@@ -144,7 +144,7 @@ def fresh_flow_10k(items_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_add_item(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_add_item(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark adding a single item to flow.
 
     Operation: flow.add_item(item)
@@ -164,7 +164,7 @@ def test_flow_add_item(benchmark, size, fresh_flow_1k, fresh_flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_remove_item(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_remove_item(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark removing a single item from flow.
 
     Operation: flow.remove_item(item_id)
@@ -192,7 +192,7 @@ def test_flow_remove_item(benchmark, size, fresh_flow_1k, fresh_flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_add_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_add_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark adding a single progression to flow.
 
     Operation: flow.add_progression(progression)
@@ -215,7 +215,7 @@ def test_flow_add_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_remove_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_remove_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark removing a single progression from flow.
 
     Operation: flow.remove_progression(progression_id)
@@ -243,7 +243,7 @@ def test_flow_remove_progression(benchmark, size, fresh_flow_1k, fresh_flow_10k)
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_get_progression_by_name(benchmark, size, flow_1k, flow_10k):
+def test_flow_get_progression_by_name(benchmark, size, flow_1k, flow_10k) -> None:
     """Benchmark retrieving progression by name.
 
     Operation: flow.get_progression("prog0")
@@ -260,7 +260,7 @@ def test_flow_get_progression_by_name(benchmark, size, flow_1k, flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_get_progression_by_uuid(benchmark, size, flow_1k, flow_10k):
+def test_flow_get_progression_by_uuid(benchmark, size, flow_1k, flow_10k) -> None:
     """Benchmark retrieving progression by UUID.
 
     Operation: flow.get_progression(uuid)
@@ -280,7 +280,7 @@ def test_flow_get_progression_by_uuid(benchmark, size, flow_1k, flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_bulk_add_items(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_bulk_add_items(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark bulk adding 100 items.
 
     Operation: Add 100 items in a loop
@@ -304,7 +304,7 @@ def test_flow_bulk_add_items(benchmark, size, fresh_flow_1k, fresh_flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_bulk_remove_items(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_bulk_remove_items(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark bulk removing 100 items.
 
     Operation: Remove 100 items in a loop
@@ -341,7 +341,7 @@ def test_flow_bulk_remove_items(benchmark, size, fresh_flow_1k, fresh_flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_progression_append(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_progression_append(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark appending item to progression.
 
     Operation: progression.append(item_id)
@@ -368,7 +368,7 @@ def test_flow_progression_append(benchmark, size, fresh_flow_1k, fresh_flow_10k)
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_progression_remove(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_progression_remove(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark removing item from progression.
 
     Operation: progression.remove(item_id)
@@ -398,7 +398,7 @@ def test_flow_progression_remove(benchmark, size, fresh_flow_1k, fresh_flow_10k)
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_progression_traversal(benchmark, size, flow_1k, flow_10k):
+def test_flow_progression_traversal(benchmark, size, flow_1k, flow_10k) -> None:
     """Benchmark traversing progression order.
 
     Operation: for item_id in progression.order: flow.items[item_id]
@@ -422,7 +422,7 @@ def test_flow_progression_traversal(benchmark, size, flow_1k, flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_progression_contains(benchmark, size, flow_1k, flow_10k):
+def test_flow_progression_contains(benchmark, size, flow_1k, flow_10k) -> None:
     """Benchmark checking if item is in progression.
 
     Operation: item_id in progression
@@ -443,7 +443,9 @@ def test_flow_progression_contains(benchmark, size, flow_1k, flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_add_item_to_multiple_progressions(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_add_item_to_multiple_progressions(
+    benchmark, size, fresh_flow_1k, fresh_flow_10k
+) -> None:
     """Benchmark adding item to multiple progressions (M:N relationship).
 
     Operation: flow.add_item(item, progressions=[prog1, prog2, ..., prog10])
@@ -473,7 +475,7 @@ def test_flow_add_item_to_multiple_progressions(benchmark, size, fresh_flow_1k, 
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_remove_item_cascade(benchmark, size, fresh_flow_1k, fresh_flow_10k):
+def test_flow_remove_item_cascade(benchmark, size, fresh_flow_1k, fresh_flow_10k) -> None:
     """Benchmark removing item that exists in multiple progressions (cascade delete).
 
     Operation: flow.remove_item(item_id)
@@ -512,7 +514,7 @@ def test_flow_remove_item_cascade(benchmark, size, fresh_flow_1k, fresh_flow_10k
 
 
 @pytest.mark.parametrize("size", ["1k", "10k"])
-def test_flow_to_dict(benchmark, size, flow_1k, flow_10k):
+def test_flow_to_dict(benchmark, size, flow_1k, flow_10k) -> None:
     """Benchmark Flow serialization to dict.
 
     Operation: flow.to_dict()
@@ -528,7 +530,7 @@ def test_flow_to_dict(benchmark, size, flow_1k, flow_10k):
 
 
 @pytest.mark.parametrize("size", ["1k"])  # 10K is too slow for from_dict
-def test_flow_from_dict(benchmark, size, flow_1k):
+def test_flow_from_dict(benchmark, size, flow_1k) -> None:
     """Benchmark Flow deserialization from dict.
 
     Operation: Flow.from_dict(data)
@@ -548,7 +550,7 @@ def test_flow_from_dict(benchmark, size, flow_1k):
 # ==================== Referential Integrity Benchmarks ====================
 
 
-def test_flow_referential_integrity_validation_1k(benchmark, items_1k):
+def test_flow_referential_integrity_validation_1k(benchmark, items_1k) -> None:
     """Benchmark referential integrity validation during Flow construction.
 
     Operation: Flow(items, progressions) with model_validator
@@ -580,7 +582,7 @@ def test_flow_referential_integrity_validation_1k(benchmark, items_1k):
 # ==================== Name Index Benchmarks ====================
 
 
-def test_flow_name_index_lookup_1k(benchmark, flow_1k):
+def test_flow_name_index_lookup_1k(benchmark, flow_1k) -> None:
     """Benchmark name index lookup performance.
 
     Operation: flow._progression_names[name]
@@ -597,7 +599,7 @@ def test_flow_name_index_lookup_1k(benchmark, flow_1k):
     benchmark(lambda: flow._progression_names[name])
 
 
-def test_flow_name_index_rebuild_after_deserialization(benchmark, flow_1k):
+def test_flow_name_index_rebuild_after_deserialization(benchmark, flow_1k) -> None:
     """Benchmark name index rebuild in model_post_init.
 
     Operation: Flow.from_dict() -> model_post_init() -> rebuild _progression_names
