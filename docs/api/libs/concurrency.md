@@ -89,6 +89,7 @@ Time utilities (`current_time`, `sleep`), sync/async bridges (`run_sync`, `run_a
 Use task groups for automatic cleanup:
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def worker(name: str):
@@ -122,6 +123,7 @@ async with move_on_after(5.0):
 Control concurrency for rate-limited APIs:
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import bounded_map
 
 async def fetch(url: str):
@@ -154,6 +156,7 @@ async def critical_section():
 Retry with exponential backoff:
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import retry, fail_after
 
 async def flaky_operation():

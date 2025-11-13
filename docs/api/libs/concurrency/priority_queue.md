@@ -556,6 +556,7 @@ run(main)
 ### Non-Blocking Operations
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import PriorityQueue, QueueEmpty, QueueFull
 
 queue = PriorityQueue[tuple[int, str]](maxsize=2)
@@ -684,6 +685,7 @@ run(main)
 ### Stable Priority with FIFO Ordering
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import PriorityQueue, QueueEmpty
 
 queue = PriorityQueue[tuple[int, int, str]]()

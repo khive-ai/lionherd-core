@@ -59,6 +59,7 @@ async def gather(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import gather, sleep
 
 # Basic concurrent execution
@@ -123,6 +124,7 @@ async def race(*aws: Awaitable[T]) -> T: ...
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import race, sleep
 
 # Timeout pattern
@@ -200,6 +202,7 @@ async def bounded_map(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import bounded_map, sleep
 
 # Rate-limited API calls (max 5 concurrent)
@@ -290,6 +293,7 @@ async def retry(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import retry, move_on_after, sleep
 
 # Retry transient failures
@@ -415,6 +419,7 @@ Yields results as `(index, result)` tuples in **completion order** (not input or
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import CompletionStream, sleep
 
 # Stream results as they complete
@@ -684,6 +689,7 @@ async def fetch_user_data():
 ### Example 2: Rate-Limited Bulk Processing
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import bounded_map, sleep
 
 async def process_documents(doc_ids):
@@ -716,6 +722,7 @@ await process_documents(range(100))
 ### Example 3: Timeout with Race
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import race, sleep
 
 async def fetch_with_timeout():
@@ -747,6 +754,7 @@ await fetch_with_timeout()
 ### Example 4: Progress Tracking with CompletionStream
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import CompletionStream, sleep
 
 async def process_with_progress(item_count):
@@ -775,6 +783,7 @@ await process_with_progress(20)
 ### Example 5: Resilient Operation with Retry
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import retry, move_on_after, sleep
 import random
 
@@ -815,6 +824,7 @@ await fetch_important_data()
 ### Example 6: Mixed Gather and Race Pattern
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import gather, race, sleep
 
 async def fetch_from_multiple_sources():

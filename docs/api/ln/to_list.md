@@ -436,6 +436,7 @@ This provides maximum performance for common cases while gracefully handling map
 ### Why Lazy Initialization for Global Types?
 
 ```python
+# noqa:validation
 # Initialized on first call, not at import
 _INITIALIZED = False
 

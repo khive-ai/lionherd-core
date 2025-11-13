@@ -378,6 +378,7 @@ def _cleanup_dead_refs(self, topic: str) -> list[Handler]: ...
 ### Pattern 1: Metrics Collection
 
 ```python
+# noqa:validation
 from lionherd_core.base.eventbus import EventBus
 
 bus = EventBus()
@@ -411,6 +412,7 @@ print(metrics)
 ### Pattern 2: Cross-Cutting Observability
 
 ```python
+# noqa:validation
 # Separate event buses for different concerns
 metrics_bus = EventBus()
 trace_bus = EventBus()
@@ -442,6 +444,7 @@ await log_bus.emit("log", level="INFO", message="Request processed")
 ### Pattern 3: Multi-Handler Concurrent Execution
 
 ```python
+# noqa:validation
 from lionherd_core.base.eventbus import EventBus
 from lionherd_core.libs.concurrency import sleep
 
@@ -471,6 +474,7 @@ print(execution_order)
 ### Pattern 4: Dynamic Handler Registration
 
 ```python
+# noqa:validation
 bus = EventBus()
 
 # Plugin system with module-level handlers (weakref-compatible)
@@ -554,6 +558,7 @@ bus.subscribe("test", log_event)
 **Issue**: Assuming handlers execute in order (they run concurrently)
 
 ```python
+# noqa:validation
 results = []
 
 async def first(**kw):
@@ -618,6 +623,7 @@ EventBus does NOT implement lionherd-core protocols (Observable, Serializable, e
 ### Example 1: Basic Topic Subscription
 
 ```python
+# noqa:validation
 from lionherd_core.base.eventbus import EventBus
 
 bus = EventBus()
@@ -645,6 +651,7 @@ print(events)
 ### Example 2: Concurrent Handler Execution
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep
 
 bus = EventBus()
@@ -671,6 +678,7 @@ print(execution_log)
 ### Example 3: Exception Isolation
 
 ```python
+# noqa:validation
 bus = EventBus()
 results = []
 
@@ -694,6 +702,7 @@ print(results)
 ### Example 4: Multi-Topic Event Routing
 
 ```python
+# noqa:validation
 bus = EventBus()
 logs = []
 

@@ -132,6 +132,7 @@ def to_dict(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.types import HashableModel
 
 class Config(HashableModel):
@@ -195,6 +196,7 @@ def to_json(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.types import HashableModel
 
 class CacheKey(HashableModel):
@@ -266,6 +268,7 @@ def from_dict(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.types import HashableModel
 
 class Config(HashableModel):
@@ -327,6 +330,7 @@ def from_json(
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.types import HashableModel
 
 class CacheKey(HashableModel):

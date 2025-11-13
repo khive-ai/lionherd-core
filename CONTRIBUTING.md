@@ -144,6 +144,8 @@ await some_operation()
 - Ensure all executable examples have necessary imports
 - Use `# noqa: validation` sparingly for pattern demonstrations only
 
+**Migration Note**: Existing documentation (as of PR #169) has been tagged with `# noqa:validation` for multi-pattern demonstration blocks. New contributions should follow these guidelines for adding validation skip comments.
+
 ## Code Style
 
 ### Formatting

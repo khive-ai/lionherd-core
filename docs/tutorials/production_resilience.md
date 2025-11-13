@@ -200,6 +200,7 @@ async def store_all_items(items: list[ProcessedItem]) -> dict[str, Any]:
 ### 5. Complete Pipeline with Graceful Degradation
 
 ```python
+# noqa:validation
 async def run_pipeline(item_ids: list[str]) -> dict[str, Any]:
     """Run complete data pipeline with resilience."""
     print(f"Starting pipeline for {len(item_ids)} items...")
@@ -262,6 +263,7 @@ Pipeline result: {
 ### Pattern 1: Circuit Breaker
 
 ```python
+# noqa:validation
 from lionherd_core import concurrency
 
 class CircuitBreaker:

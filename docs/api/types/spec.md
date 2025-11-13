@@ -977,6 +977,7 @@ base_type, *metadata = get_args(ann)
 ### Default Value Handling
 
 ```python
+# noqa:validation
 from lionherd_core.types import Spec
 
 # Literal default

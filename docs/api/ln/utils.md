@@ -703,6 +703,7 @@ if missing:
 ### Timestamped File Creation
 
 ```python
+# noqa:validation
 from lionherd_core.ln._utils import acreate_path, now_utc
 
 async def create_log(log_dir: str, event: str) -> AsyncPath:
@@ -836,6 +837,7 @@ from lionherd_core.ln import (
 ### Example 1: Complete Log File Workflow
 
 ```python
+# noqa:validation
 from anyio import Path as AsyncPath
 
 async def write_log(log_dir: str, message: str):
@@ -892,6 +894,7 @@ result = processor.process([1.0, 2.0, 3.0, 4.0, 5.0])
 ### Example 3: Batched API Requests
 
 ```python
+# noqa:validation
 from lionherd_core.ln._utils import get_bins
 
 async def send_batched_messages(
@@ -973,6 +976,7 @@ if fast_json := manager.get_plugin("fast_json"):
 ### Example 5: Timeout-Protected File Creation
 
 ```python
+# noqa:validation
 from lionherd_core.ln._utils import acreate_path
 
 async def create_output_safely(

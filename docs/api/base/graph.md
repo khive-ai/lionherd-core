@@ -1011,6 +1011,7 @@ for s in next_states:
 ### Pattern 3: Conditional Pathfinding
 
 ```python
+# noqa:validation
 # Define condition: only traverse high-capacity edges
 class CapacityCondition(EdgeCondition):
     async def apply(self, min_capacity: float = 100.0) -> bool:

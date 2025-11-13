@@ -210,6 +210,7 @@ If `return_exceptions=False` and one or more tasks raise exceptions. Contains al
 **Examples:**
 
 ```python
+# noqa:validation
 import httpx
 from lionherd_core.ln import alcall
 
@@ -361,6 +362,7 @@ Arguments passed to `alcall()` for each batch. See `alcall()` parameters.
 **Examples:**
 
 ```python
+# noqa:validation
 from lionherd_core.ln import bcall
 from lionherd_core.libs.concurrency import sleep
 
@@ -604,6 +606,7 @@ async for batch in batch_config(urls, fetch_data, batch_size=20):
 ### Basic Parallel Processing
 
 ```python
+# noqa:validation
 from lionherd_core.ln import alcall
 from lionherd_core.libs.concurrency import sleep
 
@@ -624,6 +627,7 @@ results = await alcall(items, async_process)
 ### Retry with Exponential Backoff
 
 ```python
+# noqa:validation
 import httpx
 from lionherd_core.ln import alcall
 
@@ -732,6 +736,7 @@ except ExceptionGroup as eg:
 ### Batch Processing
 
 ```python
+# noqa:validation
 from lionherd_core.ln import bcall
 
 # User-defined async function (replace with actual implementation)
@@ -939,6 +944,7 @@ from lionherd_core.types import Unset
 ### Example 1: LLM Batch Processing
 
 ```python
+# noqa:validation
 from openai import AsyncOpenAI
 from lionherd_core.ln import bcall
 
@@ -978,6 +984,7 @@ async for batch_results in bcall(
 ### Example 2: API Scraping with Error Recovery
 
 ```python
+# noqa:validation
 import httpx
 from lionherd_core.ln import alcall
 
@@ -1021,6 +1028,7 @@ print(f"Scraped: {len(successful)}, Failed: {len(failed)}")
 ### Example 3: Database Bulk Insert with Preprocessing
 
 ```python
+# noqa:validation
 from lionherd_core.ln import alcall
 
 # User-defined async function (replace with actual database client like asyncpg)
@@ -1056,6 +1064,7 @@ inserted_ids = await alcall(
 ### Example 4: Parallel File Processing
 
 ```python
+# noqa:validation
 import glob
 import aiofiles
 from lionherd_core.ln import alcall

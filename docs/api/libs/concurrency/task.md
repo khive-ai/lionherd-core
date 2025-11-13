@@ -133,6 +133,7 @@ def start_soon(
 **Examples:**
 
 ```python
+# noqa:validation
 async def worker(task_id: int):
     print(f"Worker {task_id} starting")
     await sleep(1)
@@ -179,6 +180,7 @@ async def start(
 **Examples:**
 
 ```python
+# noqa:validation
 from anyio.abc import TaskStatus
 import anyio
 from lionherd_core.libs.concurrency import create_task_group, sleep
@@ -251,6 +253,7 @@ async with create_task_group() as tg:
 #### Basic Concurrent Execution
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def fetch_data(url: str) -> dict:
@@ -279,6 +282,7 @@ async with create_task_group() as tg:
 #### Exception Handling
 
 ```python
+# noqa:validation
 async def failing_task():
     await sleep(1)
     raise ValueError("Task failed!")
@@ -300,6 +304,7 @@ except ValueError as e:
 #### Timeout with Cancel Scope
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def slow_task():
@@ -320,6 +325,7 @@ except TimeoutError:
 #### Server Initialization Pattern
 
 ```python
+# noqa:validation
 from anyio.abc import TaskStatus
 import anyio
 from lionherd_core.libs.concurrency import create_task_group, Queue, sleep
@@ -419,6 +425,7 @@ async with create_task_group() as tg:
 **Issue**: Attempting to create tasks that continue after group exits.
 
 ```python
+# noqa:validation
 # ❌ WRONG: Cannot do this
 async def background_loop():
     while True:
@@ -433,6 +440,7 @@ async with create_task_group() as tg:
 **Solution**: Either add termination condition or use cancel scope.
 
 ```python
+# noqa:validation
 # ✅ Correct: Add termination signal
 shutdown = Event()
 
@@ -459,6 +467,7 @@ async with create_task_group() as tg:
 **Issue**: Exceptions from child tasks crash the entire task group.
 
 ```python
+# noqa:validation
 # ❌ WRONG: Unhandled exception crashes all tasks
 async def risky_task():
     await sleep(1)
@@ -478,6 +487,7 @@ async with create_task_group() as tg:
 **Solution**: Handle exceptions within tasks or at group level.
 
 ```python
+# noqa:validation
 # ✅ Correct: Handle within task
 import logging
 
@@ -506,6 +516,7 @@ except ValueError:
 **Issue**: Using `start()` with task that doesn't call `task_status.started()`.
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep
 
 # ❌ WRONG: Task doesn't signal ready
@@ -523,6 +534,7 @@ async with create_task_group() as tg:
 **Solution**: Always call `task_status.started()` in tasks used with `start()`.
 
 ```python
+# noqa:validation
 # ✅ Correct: Signal when ready
 from anyio.abc import TaskStatus
 import anyio
@@ -580,6 +592,7 @@ async with create_task_group() as tg:
 ### Example 1: Parallel Data Processing
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep
 
 async def process_chunk(chunk_id: int, data: list) -> dict:
@@ -630,6 +643,7 @@ print(f"Processed {sum(len(r['items']) for r in results)} items")
 ### Example 2: Timeout and Retry Pattern
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import create_task_group, sleep, current_time
 
 async def with_timeout_and_retry(

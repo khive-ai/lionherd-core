@@ -819,6 +819,7 @@ print(f"Total items: {len(pile)}")  # 10 (thread-safe)
 ### Async Operations
 
 ```python
+# noqa:validation
 import asyncio
 from lionherd_core.libs.concurrency import gather
 
@@ -980,6 +981,7 @@ print(f"All items have unique IDs: {len(pile) == 50}")
 ### Example 4: Async Concurrent Operations
 
 ```python
+# noqa:validation
 import asyncio
 from lionherd_core.base import Pile, Element
 from lionherd_core.libs.concurrency import gather

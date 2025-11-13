@@ -371,10 +371,10 @@ def validate_docs(docs_dir: Path, pattern: str = "**/*.md") -> tuple[int, int]:
             files_with_errors += 1
             all_errors.extend(errors)
 
-    # Print results
-    if all_errors:
-        print(f"\n❌ Found {len(all_errors)} validation errors:\n")
+    # Prepare report content
+    report_lines = []
 
+    if all_errors:
         # Group errors by file
         errors_by_file = {}
         for error in all_errors:
@@ -382,18 +382,36 @@ def validate_docs(docs_dir: Path, pattern: str = "**/*.md") -> tuple[int, int]:
                 errors_by_file[error.file_path] = []
             errors_by_file[error.file_path].append(error)
 
-        # Print grouped errors
-        for file_path, file_errors in errors_by_file.items():
-            print(f"\n{file_path}:")
-            for error in sorted(file_errors, key=lambda e: e.line_number):
-                print(f"  Line {error.line_number}: [{error.error_type}] {error.message}")
+        # Build report
+        report_lines.append(f"❌ Found {len(all_errors)} validation errors:\n")
 
-        print(f"\n\nSummary: {files_with_errors}/{files_checked} files with errors")
-        return files_checked, files_with_errors
+        for file_path, file_errors in errors_by_file.items():
+            report_lines.append(f"\n{file_path}:")
+            for error in sorted(file_errors, key=lambda e: e.line_number):
+                report_lines.append(
+                    f"  Line {error.line_number}: [{error.error_type}] {error.message}"
+                )
+
+        report_lines.append(f"\n\nSummary: {files_with_errors}/{files_checked} files with errors")
+        status = "FAILED"
     else:
-        print(f"✅ All {files_checked} markdown files validated successfully!")
-        print("   No syntax or import errors found in Python code blocks.")
-        return files_checked, 0
+        report_lines.append(f"✅ All {files_checked} markdown files validated successfully!")
+        report_lines.append("   No syntax or import errors found in Python code blocks.")
+        status = "PASSED"
+
+    # Print to stdout
+    print("\n".join(report_lines))
+
+    # Write report file
+    report_path = Path("validation_report.txt")
+    with open(report_path, "w") as f:
+        f.write("\n".join(report_lines))
+        f.write(f"\n\nStatus: {status}\n")
+        f.write(f"Timestamp: {Path(__file__).stat().st_mtime}\n")
+
+    print(f"\n📄 Report written to: {report_path}")
+
+    return files_checked, files_with_errors
 
 
 def main():

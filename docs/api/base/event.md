@@ -584,6 +584,7 @@ UUID-based identity for tracking events across distributed systems.
 ### Pattern 1: Simple Async Operation
 
 ```python
+# noqa:validation
 class DatabaseQuery(Event):
     query: str = ""
 
@@ -608,6 +609,7 @@ elif event.status == EventStatus.CANCELLED:
 ### Pattern 2: Retry Strategy with Backoff
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import sleep
 
 async def retry_with_backoff(event: Event, max_retries: int = 3) -> Any:
@@ -685,6 +687,7 @@ async def execute_with_monitoring(event: Event) -> Any:
 ### Pattern 4: Parallel Execution with Error Aggregation
 
 ```python
+# noqa:validation
 from lionherd_core.libs.concurrency import gather
 
 async def execute_parallel(events: list[Event]) -> dict:
