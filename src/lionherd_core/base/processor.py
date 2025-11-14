@@ -1,30 +1,6 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Event processing with Flow-based state management and priority queue execution.
-
-Architecture:
-    Executor: Flow-based state tracking (EventStatus → Progressions) + Processor coordination
-    Processor: Background execution loop with PriorityQueue and capacity control
-
-Design Insight:
-    Flow progressions map 1:1 with EventStatus enum values:
-        - EventStatus.PENDING → progression "pending"
-        - EventStatus.PROCESSING → progression "processing"
-        - EventStatus.COMPLETED → progression "completed"
-        etc.
-
-    This gives O(1) status queries without scanning all events:
-        executor.states.get_progression("completed") → all completed events
-
-Key Benefits:
-    - Explainability: Inspect state at any moment
-    - Performance: O(1) stage queries, not O(n) pile scans
-    - Safety: Referential integrity (Flow validates UUIDs exist)
-    - Audit trail: Full state serialization via Flow.to_dict()
-    - Type safety: EventStatus enum defines valid progressions
-"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Self
@@ -48,21 +24,12 @@ __all__ = (
 class Processor:
     """Background event processor with priority queue and capacity control.
 
-    Manages a priority queue of event UUIDs with capacity-limited async processing.
-    Events are dequeued by priority (lower values first) and processed in batches
-    respecting capacity limits that refresh periodically.
-
-    Design: Queue stores UUID references only, events live in executor's Flow.items.
-    This avoids redundancy while preserving type safety.
-
-    After execution, automatically updates Flow progressions to match event status.
-
     Attributes:
-        event_type: ClassVar specifying Event subclass this processor handles
-        queue_capacity: Maximum events processed per batch
+        event_type: Event subclass this processor handles
+        queue_capacity: Max events per batch
         capacity_refresh_time: Seconds before capacity reset
-        concurrency_limit: Max concurrent event executions
-        pile: Reference to executor's Flow.items for fetching events
+        concurrency_limit: Max concurrent executions
+        pile: Reference to executor's Flow.items
         executor: Reference to executor for progression updates
     """
 
@@ -155,11 +122,7 @@ class Processor:
         return self.pile[event_id]
 
     async def join(self) -> None:
-        """Block until queue is empty and all tasks done.
-
-        Note: PriorityQueue doesn't have task_done/join pattern like asyncio.Queue.
-        This waits until queue is empty.
-        """
+        """Block until queue is empty."""
         while not self.queue.empty():
             await concurrency.sleep(0.1)
 
@@ -169,16 +132,11 @@ class Processor:
 
     async def start(self) -> None:
         """Clear stop signal, allowing processing to resume."""
-        # Create new event since ConcurrencyEvent doesn't have clear()
         if self._stop_event.is_set():
             self._stop_event = concurrency.ConcurrencyEvent()
 
     def is_stopped(self) -> bool:
-        """Check if processor is in stopped state.
-
-        Returns:
-            True if signaled to stop
-        """
+        """Check if processor is stopped."""
         return self._stop_event.is_set()
 
     @classmethod
@@ -211,12 +169,7 @@ class Processor:
         )
 
     async def process(self) -> None:
-        """Dequeue and process events up to available capacity.
-
-        Marks events as PROCESSING, invokes them asynchronously via TaskGroup,
-        and waits for completion. Updates Flow progressions to match event status
-        after execution. Resets capacity afterward if events processed.
-        """
+        """Dequeue and process events up to available capacity."""
         prev_event: Event | None = None
         events_processed = 0
 
@@ -239,7 +192,7 @@ class Processor:
 
                     if next_event.streaming:
                         # Streaming: consume async generator
-                        async def consume_stream(event):
+                        async def consume_stream(event: Event):
                             try:
                                 async for _ in event.stream():
                                     pass
@@ -251,15 +204,7 @@ class Processor:
                                 if self.executor:
                                     self.executor._update_progression(event)
 
-                        if self._concurrency_sem:
-
-                            async def stream_with_sem(event):
-                                async with self._concurrency_sem:
-                                    await consume_stream(event)
-
-                            tg.start_soon(stream_with_sem, next_event)
-                        else:
-                            tg.start_soon(consume_stream, next_event)
+                        tg.start_soon(self._with_semaphore, consume_stream(next_event))
                     else:
                         # Non-streaming: just invoke
                         async def invoke_and_update(event):
@@ -270,15 +215,7 @@ class Processor:
                                 if self.executor:
                                     self.executor._update_progression(event)
 
-                        if self._concurrency_sem:
-
-                            async def invoke_with_sem(event):
-                                async with self._concurrency_sem:
-                                    await invoke_and_update(event)
-
-                            tg.start_soon(invoke_with_sem, next_event)
-                        else:
-                            tg.start_soon(invoke_and_update, next_event)
+                        tg.start_soon(self._with_semaphore, invoke_and_update(next_event))
 
                     events_processed += 1
 
@@ -290,24 +227,18 @@ class Processor:
             self.available_capacity = self.queue_capacity
 
     async def request_permission(self, **kwargs: Any) -> bool:
-        """Determine if event may proceed.
-
-        Override for custom checks (rate limits, permissions, quotas).
-
-        Args:
-            **kwargs: Event request parameters
-
-        Returns:
-            True if event allowed, False otherwise
-        """
+        """Override for custom checks (rate limits, permissions, quotas)."""
         return True
 
-    async def execute(self) -> None:
-        """Continuously process events until stop() called.
+    async def _with_semaphore(self, coro):
+        """Execute coroutine with optional semaphore control."""
+        if self._concurrency_sem:
+            async with self._concurrency_sem:
+                return await coro
+        return await coro
 
-        Background loop that processes events in batches, sleeping for
-        capacity_refresh_time between cycles.
-        """
+    async def execute(self) -> None:
+        """Continuously process events until stop() called."""
         self.execution_mode = True
         await self.start()
 
@@ -321,38 +252,11 @@ class Processor:
 class Executor:
     """Event executor with Flow-based state tracking and background processing.
 
-    Architecture:
-        - Flow.items: All events (single source of truth, type-safe storage)
-        - Flow.progressions: One progression per EventStatus (state tracking)
-        - PriorityQueue (in Processor): Execution order via UUID references
-        - Processor: Background execution loop
-
-    Design Insight:
-        Flow progressions map 1:1 with EventStatus enum:
-            EventStatus.PENDING → progression "pending"
-            EventStatus.PROCESSING → progression "processing"
-            EventStatus.COMPLETED → progression "completed"
-            EventStatus.FAILED → progression "failed"
-            EventStatus.CANCELLED → progression "cancelled"
-            EventStatus.SKIPPED → progression "skipped"
-            EventStatus.ABORTED → progression "aborted"
-
-    Benefits:
-        - O(1) status queries: executor.get_events_by_status("completed")
-        - Explainability: Inspect state at any moment
-        - Audit trail: Full state serialization via states.to_dict()
-        - Type safety: EventStatus enum defines valid progressions
-        - No redundancy: Queue holds UUIDs, Flow holds events
-
-    Typical usage:
-        1. Create events and append to executor (stored in Flow + queued)
-        2. Processor executes in background (dequeues UUIDs, fetches from Flow)
-        3. Events update their own status during execution
-        4. Processor updates Flow progressions to match event status
-        5. Query events by status: executor.get_events_by_status("completed")
+    Flow progressions map 1:1 with EventStatus enum values.
+    Provides O(1) status queries via get_events_by_status().
 
     Attributes:
-        processor_type: ClassVar specifying Processor subclass
+        processor_type: Processor subclass
         states: Flow with EventStatus-aligned progressions
         processor: Background processor instance
     """
@@ -397,30 +301,18 @@ class Executor:
         return self.states.items.strict_type
 
     def _update_progression(self, event: Event, force_status: EventStatus | None = None) -> None:
-        """Update Flow progression to match event's execution status.
-
-        Args:
-            event: Event to update
-            force_status: Override event.execution.status (for PROCESSING transition)
-        """
-        # Determine target status
+        """Update Flow progression to match event status."""
         target_status = force_status if force_status else event.execution.status
 
-        # Remove from all progressions (event moves between states)
         for prog in self.states.progressions:
             if event.id in prog:
                 prog.remove(event.id)
 
-        # Add to progression matching current status
         status_prog = self.states.get_progression(target_status.value)
         status_prog.append(event.id)
 
     async def forward(self) -> None:
-        """Process any queued events immediately.
-
-        Triggers processor.process() to handle queued events.
-        Note: Events are queued automatically when appended.
-        """
+        """Process queued events immediately."""
         if self.processor:
             await self.processor.process()
 
@@ -436,40 +328,33 @@ class Executor:
             await self.processor.stop()
 
     async def _create_processor(self) -> None:
-        """Instantiate processor using stored config + Flow.items + executor reference."""
+        """Instantiate processor with config."""
         self.processor = await self.processor_type.create(
-            pile=self.states.items,  # Pass Flow.items as pile reference
-            executor=self,  # Pass self for progression updates
+            pile=self.states.items,
+            executor=self,
             **self.processor_config,
         )
 
     async def append(self, event: Event, priority: float | None = None) -> None:
         """Add event to Flow and enqueue for processing.
 
-        Event starts in "pending" progression, matching EventStatus.PENDING.
-
         Args:
             event: Event to add
-            priority: Optional priority (lower = higher priority).
-                     If None, uses event.created_at.
+            priority: Priority value (lower = higher priority). Defaults to event.created_at.
         """
-        # Add to Flow items + "pending" progression (initial state)
         self.states.add_item(event, progressions="pending")
 
-        # Enqueue UUID reference for processing
         if self.processor:
             await self.processor.enqueue(event.id, priority=priority)
 
     def get_events_by_status(self, status: EventStatus | str) -> list[Event]:
         """Get all events with given status.
 
-        O(1) progression lookup + O(k) iteration where k = events with this status.
-
         Args:
-            status: EventStatus enum or status string ("completed", "failed", etc.)
+            status: EventStatus enum or status string
 
         Returns:
-            List of events in this status
+            List of events
         """
         status_str = status.value if isinstance(status, EventStatus) else status
         prog = self.states.get_progression(status_str)
@@ -477,38 +362,30 @@ class Executor:
 
     @property
     def completed_events(self) -> list[Event]:
-        """All events with COMPLETED status (O(1) lookup)."""
+        """All events with COMPLETED status."""
         return self.get_events_by_status(EventStatus.COMPLETED)
 
     @property
     def pending_events(self) -> list[Event]:
-        """All events with PENDING status (O(1) lookup)."""
+        """All events with PENDING status."""
         return self.get_events_by_status(EventStatus.PENDING)
 
     @property
     def failed_events(self) -> list[Event]:
-        """All events with FAILED status (O(1) lookup)."""
+        """All events with FAILED status."""
         return self.get_events_by_status(EventStatus.FAILED)
 
     @property
     def processing_events(self) -> list[Event]:
-        """All events with PROCESSING status (O(1) lookup)."""
+        """All events with PROCESSING status."""
         return self.get_events_by_status(EventStatus.PROCESSING)
 
     def status_counts(self) -> dict[str, int]:
-        """Get event count per status (O(|EventStatus|) = O(7)).
-
-        Returns:
-            Dict mapping status name to count
-        """
+        """Get event count per status."""
         return {prog.name: len(prog) for prog in self.states.progressions}
 
     def inspect_state(self) -> str:
-        """Debug helper: show counts per status.
-
-        Returns:
-            Formatted string with status counts
-        """
+        """Debug helper: show counts per status."""
         lines = [f"Executor State ({self.states.name}):"]
         for status in EventStatus:
             count = len(self.states.get_progression(status.value))
@@ -516,14 +393,7 @@ class Executor:
         return "\n".join(lines)
 
     def __contains__(self, event: Event | UUID) -> bool:
-        """Check if event is in executor's Flow.
-
-        Args:
-            event: Event instance or UUID
-
-        Returns:
-            True if event in Flow.items
-        """
+        """Check if event is in Flow."""
         return event in self.states.items
 
     def __repr__(self) -> str:
