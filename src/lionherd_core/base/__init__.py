@@ -9,6 +9,7 @@ from .flow import Flow
 from .graph import Edge, EdgeCondition, Graph
 from .node import NODE_REGISTRY, Node
 from .pile import Pile
+from .processor import Executor, Processor
 from .progression import Progression
 
 __all__ = [
@@ -21,10 +22,12 @@ __all__ = [
     "EventBus",
     "EventStatus",
     "Execution",
+    "Executor",
     "Flow",
     "Graph",
     "Handler",
     "Node",
     "Pile",
+    "Processor",
     "Progression",
 ]

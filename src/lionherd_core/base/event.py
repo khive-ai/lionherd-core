@@ -199,6 +199,7 @@ class Event(Element):
 
     execution: Execution = Field(default_factory=Execution)
     timeout: float | None = Field(None, exclude=True)
+    streaming: bool = Field(False, exclude=True)
 
     def model_post_init(self, __context) -> None:
         """Initialize async lock for thread-safe invoke()."""
