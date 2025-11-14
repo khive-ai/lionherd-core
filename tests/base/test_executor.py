@@ -1236,3 +1236,83 @@ async def test_executor_status_counts_performance():
 
     assert len(counts) == 7
     assert counts["pending"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_executor_backfills_pending_events_on_start():
+    """Test that events appended before start() are backfilled into processor queue.
+
+    Bug Fix: Previously, events appended before processor creation were added to
+    Flow but never enqueued, causing them to be stuck in "pending" forever. The
+    start() method now backfills all pending events into the processor queue.
+
+    Workflow:
+        1. Append events (processor doesn't exist yet)
+        2. Call start() - should backfill pending events
+        3. Process - events should be processed
+    """
+    executor = ExecTestExecutor(
+        processor_config={"queue_capacity": 10, "capacity_refresh_time": 0.01}
+    )
+
+    # Append events BEFORE processor exists
+    events = [ExecTestEvent(return_value=f"event_{i}") for i in range(5)]
+    for event in events:
+        await executor.append(event)
+
+    # Verify events are pending but processor doesn't exist yet
+    assert executor.processor is None
+    assert len(executor.pending_events) == 5
+
+    # Start executor - should create processor AND backfill pending events
+    await executor.start()
+
+    # Verify processor created and queue has all events
+    assert executor.processor is not None
+    assert executor.processor.queue.qsize() == 5
+
+    # Process events
+    await executor.forward()
+
+    # All events should complete
+    completed = executor.get_events_by_status(EventStatus.COMPLETED)
+    assert len(completed) == 5
+    assert set(completed) == set(events)
+
+
+@pytest.mark.asyncio
+async def test_executor_mixed_priority_types():
+    """Test that mixing default (timestamp) and explicit (float) priorities works.
+
+    Bug Fix: Previously, default priority used event.created_at (datetime) while
+    explicit priorities were floats. This caused TypeError when heapq tried to
+    compare datetime < float. Now default priority converts datetime to timestamp.
+
+    Priority semantics:
+        - Default priority: event.created_at.timestamp() (earlier = lower value)
+        - Explicit priority: float (lower = higher priority)
+        - Both are now floats, so they can be compared
+    """
+    executor = ExecTestExecutor(
+        processor_config={"queue_capacity": 10, "capacity_refresh_time": 0.01}
+    )
+    await executor.start()
+
+    # Event 1: Default priority (uses timestamp)
+    event1 = ExecTestEvent(return_value="default_priority")
+    await executor.append(event1)  # No explicit priority
+
+    # Event 2: Explicit float priority
+    event2 = ExecTestEvent(return_value="explicit_priority")
+    await executor.append(event2, priority=0.5)
+
+    # Event 3: Another default priority
+    event3 = ExecTestEvent(return_value="another_default")
+    await executor.append(event3)
+
+    # Should not raise TypeError when comparing priorities
+    await executor.forward()
+
+    # All events should complete
+    completed = executor.get_events_by_status(EventStatus.COMPLETED)
+    assert len(completed) == 3

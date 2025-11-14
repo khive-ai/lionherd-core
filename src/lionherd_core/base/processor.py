@@ -103,12 +103,13 @@ class Processor:
         Args:
             event_id: UUID of event in pile
             priority: Priority value (lower = higher priority).
-                     If None, fetches event from pile and uses created_at.
+                     If None, fetches event from pile and uses created_at timestamp.
         """
         if priority is None:
             # Default: earlier events have lower priority value (processed first)
+            # Convert datetime to timestamp (float) for type consistency
             event = self.pile[event_id]
-            priority = event.created_at
+            priority = event.created_at.timestamp()
 
         await self.queue.put((priority, event_id))
 
@@ -314,9 +315,12 @@ class Executor:
             await self.processor.process()
 
     async def start(self) -> None:
-        """Initialize and start processor if not created."""
+        """Initialize and start processor if not created, backfilling pending events."""
         if not self.processor:
             await self._create_processor()
+            # Backfill all pending events into processor queue
+            for event in self.pending_events:
+                await self.processor.enqueue(event.id)
         await self.processor.start()
 
     async def stop(self) -> None:
