@@ -359,3 +359,84 @@ async def test_cleanup_events_uses_pile_locks():
     assert event.id not in executor.states.get_progression("completed"), (
         "Event should be removed by cleanup_events()"
     )
+
+
+# ==================== M1/M2 Memory Management Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_stop_clears_denial_counts():
+    """Test stop() clears _denial_counts to prevent memory leaks (M1 fix).
+
+    Security Fix: Prevents memory leaks across processor restart cycles.
+    """
+
+    class AlwaysDenyProcessor(SecTestProcessor):
+        """Processor that always denies permission."""
+
+        async def request_permission(self, **kwargs):
+            return False  # Always deny
+
+    pile = Pile[Event]()
+    proc = AlwaysDenyProcessor(queue_capacity=10, capacity_refresh_time=0.1, pile=pile)
+
+    # Create events and deny them
+    events = [SecTestEvent(return_value=f"event_{i}") for i in range(5)]
+    for event in events:
+        pile.add(event)
+        await proc.enqueue(event.id)
+        # Process immediately after enqueue - will be denied and requeued
+        await proc.process()
+
+    # Verify denial tracking populated (5 events denied once each)
+    assert len(proc._denial_counts) == 5
+    for event in events:
+        assert event.id in proc._denial_counts
+        assert proc._denial_counts[event.id] == 1
+
+    # M1 FIX VERIFICATION: stop() should clear denial tracking
+    await proc.stop()
+
+    assert len(proc._denial_counts) == 0, "Memory leak: stop() did not clear _denial_counts"
+
+
+@pytest.mark.asyncio
+async def test_bounded_denial_tracking():
+    """Test FIFO eviction when _denial_counts exceeds max_denial_tracking (M2 fix).
+
+    Security Fix: Prevents unbounded memory growth from DoS scenarios.
+    """
+
+    class AlwaysDenyProcessor(SecTestProcessor):
+        """Processor that always denies permission."""
+
+        async def request_permission(self, **kwargs):
+            return False  # Always deny
+
+    pile = Pile[Event]()
+    # Set max_denial_tracking to 10 for testing
+    proc = AlwaysDenyProcessor(
+        queue_capacity=10, capacity_refresh_time=0.1, pile=pile, max_denial_tracking=10
+    )
+
+    # Create 15 events (exceeds max_denial_tracking=10)
+    events = [SecTestEvent(return_value=f"event_{i}") for i in range(15)]
+    for event in events:
+        pile.add(event)
+        await proc.enqueue(event.id)
+        # Process immediately after enqueue - will be denied and requeued
+        await proc.process()
+
+    # M2 FIX VERIFICATION: Should have exactly 10 entries (FIFO eviction)
+    assert len(proc._denial_counts) == 10, (
+        f"Expected 10 denial entries (max_denial_tracking), got {len(proc._denial_counts)}"
+    )
+
+    # First 5 events should be evicted (FIFO), last 10 should remain
+    for i in range(5):
+        assert events[i].id not in proc._denial_counts, (
+            f"Event {i} should be evicted (oldest entries)"
+        )
+
+    for i in range(5, 15):
+        assert events[i].id in proc._denial_counts, f"Event {i} should be tracked (newest entries)"
