@@ -45,6 +45,7 @@ class Processor:
         executor: Executor | None = None,
         concurrency_limit: int = 100,
         max_queue_size: int = 1000,
+        max_denial_tracking: int = 10000,
     ) -> None:
         """Initialize processor with capacity constraints.
 
@@ -55,6 +56,7 @@ class Processor:
             executor: Reference to executor for progression updates (optional)
             concurrency_limit: Max concurrent executions (default: 100, prevents resource exhaustion)
             max_queue_size: Max queue size before rejecting new events (default: 1000)
+            max_denial_tracking: Max denial entries to track (default: 10000, prevents unbounded growth)
 
         Raises:
             ValueError: If parameters out of bounds
@@ -79,9 +81,14 @@ class Processor:
         if max_queue_size < 1:
             raise ValueError("Max queue size must be >= 1.")
 
+        # Validate max_denial_tracking
+        if max_denial_tracking < 1:
+            raise ValueError("Max denial tracking must be >= 1.")
+
         self.queue_capacity = queue_capacity
         self.capacity_refresh_time = capacity_refresh_time
         self.max_queue_size = max_queue_size
+        self.max_denial_tracking = max_denial_tracking
         self.pile = pile  # Reference to executor's event storage
         self.executor = executor  # For progression updates
 
@@ -164,8 +171,12 @@ class Processor:
             await concurrency.sleep(0.1)
 
     async def stop(self) -> None:
-        """Signal processor to stop processing events."""
+        """Signal processor to stop processing events.
+
+        Clears denial tracking to prevent memory leaks across stop/start cycles.
+        """
         self._stop_event.set()
+        self._denial_counts.clear()  # Clear denial tracking on stop
 
     async def start(self) -> None:
         """Clear stop signal, allowing processing to resume."""
@@ -185,6 +196,7 @@ class Processor:
         executor: Executor | None = None,
         concurrency_limit: int = 100,
         max_queue_size: int = 1000,
+        max_denial_tracking: int = 10000,
     ) -> Self:
         """Asynchronously construct new Processor.
 
@@ -195,6 +207,7 @@ class Processor:
             executor: Reference to executor for progression updates
             concurrency_limit: Max concurrent executions (default: 100)
             max_queue_size: Max queue size (default: 1000)
+            max_denial_tracking: Max denial entries to track (default: 10000)
 
         Returns:
             New processor instance
@@ -206,6 +219,7 @@ class Processor:
             executor=executor,
             concurrency_limit=concurrency_limit,
             max_queue_size=max_queue_size,
+            max_denial_tracking=max_denial_tracking,
         )
 
     async def process(self) -> None:
@@ -268,6 +282,11 @@ class Processor:
                     self._available_capacity -= 1
                 else:
                     # Permission denied - track denials and abort after 3 attempts
+                    # Evict oldest entry if exceeding max_denial_tracking (FIFO eviction)
+                    if len(self._denial_counts) >= self.max_denial_tracking:
+                        oldest_key = next(iter(self._denial_counts))
+                        self._denial_counts.pop(oldest_key)
+
                     denial_count = self._denial_counts.get(event_id, 0) + 1
                     self._denial_counts[event_id] = denial_count
 
