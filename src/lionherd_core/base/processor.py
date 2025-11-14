@@ -171,18 +171,23 @@ class Processor:
     async def process(self) -> None:
         """Dequeue and process events up to available capacity."""
         prev_event: Event | None = None
+        prev_priority: float | None = None
         events_processed = 0
 
         async with concurrency.create_task_group() as tg:
             while self.available_capacity > 0 and not self.queue.empty():
                 next_event = None
+                priority = None
 
                 # Wait if previous event still pending
                 if prev_event and prev_event.execution.status == EventStatus.PENDING:
                     await concurrency.sleep(self.capacity_refresh_time)
                     next_event = prev_event
+                    priority = prev_priority
                 else:
-                    next_event = await self.dequeue()
+                    # Dequeue with priority
+                    priority, event_id = await self.queue.get()
+                    next_event = self.pile[event_id]
 
                 # Permission check (override for rate limiting, auth, etc.)
                 if await self.request_permission(**next_event.request):
@@ -217,12 +222,17 @@ class Processor:
 
                         tg.start_soon(self._with_semaphore, invoke_and_update(next_event))
 
+                    # Only consume capacity when actually processing
                     events_processed += 1
+                    self._available_capacity -= 1
+                    prev_event = None
+                    prev_priority = None
+                else:
+                    # Permission denied - requeue and stop trying (retry in next process() call)
+                    await self.queue.put((priority, next_event.id))
+                    break  # Don't keep looping on denied events
 
-                prev_event = next_event
-                self._available_capacity -= 1
-
-        # Reset capacity after batch
+        # Reset capacity after batch (only if events were processed)
         if events_processed > 0:
             self.available_capacity = self.queue_capacity
 

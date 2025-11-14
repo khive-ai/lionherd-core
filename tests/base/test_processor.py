@@ -439,7 +439,11 @@ async def test_processor_capacity_reset_after_batch():
 
 @pytest.mark.asyncio
 async def test_processor_capacity_not_reset_if_no_events_processed():
-    """Test capacity does NOT reset if no events were processed."""
+    """Test capacity does NOT reset if no events were processed.
+
+    Capacity is only consumed when events are actually processed (permission granted).
+    If no events processed (empty queue or all denied), capacity remains unchanged.
+    """
     pile = Pile[Event]()
     proc = SimpleProcessor(queue_capacity=5, capacity_refresh_time=0.01, pile=pile)
 
@@ -449,7 +453,7 @@ async def test_processor_capacity_not_reset_if_no_events_processed():
     # Process with empty queue
     await proc.process()
 
-    # Capacity should remain unchanged
+    # Capacity should remain unchanged (no events processed)
     assert proc.available_capacity == 2
 
 
@@ -1031,3 +1035,117 @@ async def test_processor_capacity_boundary_conditions():
 
     assert event.execution.status == EventStatus.COMPLETED
     assert proc.available_capacity == 1  # Reset to queue_capacity
+
+
+@pytest.mark.asyncio
+async def test_processor_requeues_denied_events():
+    """Test denied events are requeued immediately instead of lost.
+
+    Bug Fix: Previously, events denied by request_permission() were removed from
+    the queue and lost. Now they are immediately requeued with original priority
+    and don't consume capacity.
+
+    Scenario:
+        1. Enqueue 3 events
+        2. Deny permission for all events
+        3. Verify all events remain in queue (immediately requeued)
+        4. Verify capacity NOT consumed (denied events don't count)
+        5. Grant permission and verify events can be processed
+
+    This validates the fix for Issue #1 from chatgpt-codex-connector bot.
+    """
+    pile = Pile[Event]()
+
+    # Custom processor that denies permission initially
+    class DenyingProcessor(SimpleProcessor):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.deny_count = 0
+            self.deny_threshold = 3  # Deny first 3 checks
+
+        async def request_permission(self, **kwargs):
+            self.deny_count += 1
+            return self.deny_count > self.deny_threshold
+
+    proc = DenyingProcessor(queue_capacity=5, capacity_refresh_time=0.01, pile=pile)
+
+    # Enqueue 3 events
+    events = [SimpleEvent(return_value=f"event_{i}") for i in range(3)]
+    for i, event in enumerate(events):
+        pile.add(event)
+        await proc.enqueue(event.id, priority=float(i))
+
+    initial_capacity = proc.available_capacity
+    assert initial_capacity == 5
+
+    # First process() call - first event denied, breaks loop
+    await proc.process()
+
+    # Verify first event requeued (loop breaks after first denial)
+    assert proc.queue.qsize() == 3  # First event requeued, other 2 still in queue
+
+    # CRITICAL: Capacity NOT consumed (denied events don't count)
+    assert proc.available_capacity == 5
+
+    # Second process() call - permission granted
+    proc.deny_threshold = 0  # Grant all
+
+    # Process multiple times to handle all events
+    await proc.process()  # Processes up to capacity (5)
+
+    # All events should be processed
+    completed = [e for e in events if e.execution.status == EventStatus.COMPLETED]
+    assert len(completed) == 3
+
+
+@pytest.mark.asyncio
+async def test_processor_capacity_not_consumed_when_all_denied():
+    """Test capacity is NOT consumed when all events are denied permission.
+
+    Bug Fix: Capacity should only be consumed when events are actually processed.
+    Denied events don't consume capacity, preventing processor deadlock.
+
+    Scenario:
+        1. Set capacity to 3
+        2. Deny permission for all events
+        3. Call process() - events requeued, capacity NOT consumed
+        4. Verify capacity remains at 3 (not stuck at 0)
+        5. Verify processor can continue processing
+
+    This validates the fix for Issue #2 from chatgpt-codex-connector bot.
+    """
+    pile = Pile[Event]()
+
+    # Processor that always denies
+    class AlwaysDenyProcessor(SimpleProcessor):
+        async def request_permission(self, **kwargs):
+            return False  # Always deny
+
+    proc = AlwaysDenyProcessor(queue_capacity=3, capacity_refresh_time=0.01, pile=pile)
+
+    # Enqueue events
+    events = [SimpleEvent(return_value=f"event_{i}") for i in range(5)]
+    for event in events:
+        pile.add(event)
+        await proc.enqueue(event.id)
+
+    # First process() - first event denied, breaks loop
+    initial_capacity = proc.available_capacity
+    assert initial_capacity == 3
+
+    await proc.process()
+
+    # CRITICAL: Capacity NOT consumed (denied events don't count)
+    assert proc.available_capacity == 3
+
+    # Verify first event requeued, others still in queue (loop breaks after denial)
+    assert proc.queue.qsize() == 5
+
+    # Verify processor can continue (not deadlocked)
+    # Change to allow processing
+    proc.__class__ = SimpleProcessor  # Switch class to allow permission
+    await proc.process()
+
+    # Should process events now (3 up to capacity)
+    completed = [e for e in events if e.execution.status == EventStatus.COMPLETED]
+    assert len(completed) == 3  # Processed up to capacity
