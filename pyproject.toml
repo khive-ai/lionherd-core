@@ -52,7 +52,7 @@ artifacts = ["src/lionherd_core/py.typed"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests", "benchmarks"]
-addopts = "--tb=short --no-header -q"
+addopts = "--tb=short --no-header -q --benchmark-skip"
 markers = [
   "unit: Unit tests",
   "property: Property-based tests",
