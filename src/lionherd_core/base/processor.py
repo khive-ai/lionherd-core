@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from ..errors import QueueFullError
 from ..libs import concurrency
 from .event import Event, EventStatus
 from .flow import Flow
@@ -41,27 +43,45 @@ class Processor:
         capacity_refresh_time: float,
         pile: Pile[Event],
         executor: Executor | None = None,
-        concurrency_limit: int | None = None,
+        concurrency_limit: int = 100,
+        max_queue_size: int = 1000,
     ) -> None:
         """Initialize processor with capacity constraints.
 
         Args:
-            queue_capacity: Max events per batch (must be > 0)
-            capacity_refresh_time: Refresh interval in seconds (must be > 0)
+            queue_capacity: Max events per batch (must be > 0, max 10000)
+            capacity_refresh_time: Refresh interval in seconds (must be in [0.01, 3600])
             pile: Reference to executor's Flow.items for event storage
             executor: Reference to executor for progression updates (optional)
-            concurrency_limit: Max concurrent executions (None = unlimited)
+            concurrency_limit: Max concurrent executions (default: 100, prevents resource exhaustion)
+            max_queue_size: Max queue size before rejecting new events (default: 1000)
 
         Raises:
-            ValueError: If queue_capacity < 1 or capacity_refresh_time <= 0
+            ValueError: If parameters out of bounds
         """
+        # Validate queue_capacity
         if queue_capacity < 1:
             raise ValueError("Queue capacity must be greater than 0.")
-        if capacity_refresh_time <= 0:
-            raise ValueError("Capacity refresh time must be larger than 0.")
+        if queue_capacity > 10000:
+            raise ValueError("Queue capacity must be <= 10000 (prevent unbounded batches).")
+
+        # Validate capacity_refresh_time (prevent hot loop or starvation)
+        if capacity_refresh_time < 0.01:
+            raise ValueError("Capacity refresh time must be >= 0.01s (prevent CPU hot loop).")
+        if capacity_refresh_time > 3600:
+            raise ValueError("Capacity refresh time must be <= 3600s (prevent starvation).")
+
+        # Validate concurrency_limit
+        if concurrency_limit < 1:
+            raise ValueError("Concurrency limit must be >= 1.")
+
+        # Validate max_queue_size
+        if max_queue_size < 1:
+            raise ValueError("Max queue size must be >= 1.")
 
         self.queue_capacity = queue_capacity
         self.capacity_refresh_time = capacity_refresh_time
+        self.max_queue_size = max_queue_size
         self.pile = pile  # Reference to executor's event storage
         self.executor = executor  # For progression updates
 
@@ -73,11 +93,10 @@ class Processor:
         self._available_capacity = queue_capacity
         self._execution_mode = False
         self._stop_event = concurrency.ConcurrencyEvent()
+        self._denial_counts: dict[UUID, int] = {}  # Track permission denials
 
-        if concurrency_limit:
-            self._concurrency_sem = concurrency.Semaphore(concurrency_limit)
-        else:
-            self._concurrency_sem = None
+        # Concurrency limit with safe default
+        self._concurrency_sem = concurrency.Semaphore(concurrency_limit)
 
     @property
     def available_capacity(self) -> int:
@@ -104,12 +123,29 @@ class Processor:
             event_id: UUID of event in pile
             priority: Priority value (lower = higher priority).
                      If None, fetches event from pile and uses created_at timestamp.
+
+        Raises:
+            QueueFullError: If queue size exceeds max_queue_size
+            ValueError: If priority is NaN or Inf
         """
+        # Check queue size limit
+        if self.queue.qsize() >= self.max_queue_size:
+            raise QueueFullError(
+                f"Queue size ({self.queue.qsize()}) exceeds max ({self.max_queue_size})",
+                details={"queue_size": self.queue.qsize(), "max_size": self.max_queue_size},
+            )
+
         if priority is None:
             # Default: earlier events have lower priority value (processed first)
             # Convert datetime to timestamp (float) for type consistency
             event = self.pile[event_id]
             priority = event.created_at.timestamp()
+
+        # Validate priority (prevent heap corruption)
+        if not math.isfinite(priority) or math.isnan(priority):
+            raise ValueError(
+                f"Priority must be finite and not NaN, got {priority}",
+            )
 
         await self.queue.put((priority, event_id))
 
@@ -147,7 +183,8 @@ class Processor:
         capacity_refresh_time: float,
         pile: Pile[Event],
         executor: Executor | None = None,
-        concurrency_limit: int | None = None,
+        concurrency_limit: int = 100,
+        max_queue_size: int = 1000,
     ) -> Self:
         """Asynchronously construct new Processor.
 
@@ -156,7 +193,8 @@ class Processor:
             capacity_refresh_time: Refresh interval in seconds
             pile: Reference to executor's Flow.items
             executor: Reference to executor for progression updates
-            concurrency_limit: Max concurrent executions
+            concurrency_limit: Max concurrent executions (default: 100)
+            max_queue_size: Max queue size (default: 1000)
 
         Returns:
             New processor instance
@@ -167,23 +205,36 @@ class Processor:
             pile=pile,
             executor=executor,
             concurrency_limit=concurrency_limit,
+            max_queue_size=max_queue_size,
         )
 
     async def process(self) -> None:
         """Dequeue and process events up to available capacity."""
+        from ..errors import NotFoundError
+
         events_processed = 0
 
         async with concurrency.create_task_group() as tg:
             while self.available_capacity > 0 and not self.queue.empty():
                 # Dequeue with priority
                 priority, event_id = await self.queue.get()
-                next_event = self.pile[event_id]
+
+                # Handle missing events gracefully (event removed from pile while in queue)
+                try:
+                    next_event = self.pile[event_id]
+                except NotFoundError:
+                    # Event was removed - skip it and clean up denial tracking
+                    self._denial_counts.pop(event_id, None)
+                    continue
 
                 # Permission check (override for rate limiting, auth, etc.)
                 if await self.request_permission(**next_event.request):
+                    # Permission granted - clear denial count and process
+                    self._denial_counts.pop(event_id, None)
+
                     # Update to PROCESSING status
                     if self.executor:
-                        self.executor._update_progression(next_event, EventStatus.PROCESSING)
+                        await self.executor._update_progression(next_event, EventStatus.PROCESSING)
 
                     if next_event.streaming:
                         # Streaming: consume async generator
@@ -193,11 +244,11 @@ class Processor:
                                     pass
                                 # Update progression after completion
                                 if self.executor:
-                                    self.executor._update_progression(event)
+                                    await self.executor._update_progression(event)
                             except Exception:
                                 # Update progression after failure
                                 if self.executor:
-                                    self.executor._update_progression(event)
+                                    await self.executor._update_progression(event)
 
                         tg.start_soon(self._with_semaphore, consume_stream(next_event))
                     else:
@@ -208,7 +259,7 @@ class Processor:
                             finally:
                                 # Update progression to match final status
                                 if self.executor:
-                                    self.executor._update_progression(event)
+                                    await self.executor._update_progression(event)
 
                         tg.start_soon(self._with_semaphore, invoke_and_update(next_event))
 
@@ -216,8 +267,21 @@ class Processor:
                     events_processed += 1
                     self._available_capacity -= 1
                 else:
-                    # Permission denied - requeue and stop trying (retry in next process() call)
-                    await self.queue.put((priority, next_event.id))
+                    # Permission denied - track denials and abort after 3 attempts
+                    denial_count = self._denial_counts.get(event_id, 0) + 1
+                    self._denial_counts[event_id] = denial_count
+
+                    if denial_count >= 3:
+                        # 3 strikes - abort event
+                        if self.executor:
+                            await self.executor._update_progression(next_event, EventStatus.ABORTED)
+                        self._denial_counts.pop(event_id, None)
+                    else:
+                        # Requeue for retry with exponential backoff (via priority adjustment)
+                        # Add backoff: 1st retry +1s, 2nd retry +2s
+                        backoff = denial_count * 1.0
+                        await self.queue.put((priority + backoff, next_event.id))
+
                     break  # Don't keep looping on denied events
 
         # Reset capacity after batch (only if events were processed)
@@ -276,6 +340,7 @@ class Executor:
         """
         self.processor_config = processor_config or {}
         self.processor: Processor | None = None
+        self._progression_lock = concurrency.Lock()  # Thread-safe progression updates
 
         # Create Flow with progressions for each EventStatus
         self.states = Flow[Event, Progression](
@@ -298,16 +363,36 @@ class Executor:
         """Whether Flow enforces exact event type matching."""
         return self.states.items.strict_type
 
-    def _update_progression(self, event: Event, force_status: EventStatus | None = None) -> None:
-        """Update Flow progression to match event status."""
+    async def _update_progression(
+        self, event: Event, force_status: EventStatus | None = None
+    ) -> None:
+        """Update Flow progression to match event status (thread-safe).
+
+        Raises:
+            ConfigurationError: If progression for status doesn't exist
+        """
+        from ..errors import ConfigurationError
+
         target_status = force_status if force_status else event.execution.status
 
-        for prog in self.states.progressions:
-            if event.id in prog:
-                prog.remove(event.id)
+        async with self._progression_lock:
+            # Remove from all progressions (enforce single-ownership invariant)
+            for prog in self.states.progressions:
+                if event.id in prog:
+                    prog.remove(event.id)
 
-        status_prog = self.states.get_progression(target_status.value)
-        status_prog.append(event.id)
+            # Add to target progression with error handling
+            try:
+                status_prog = self.states.get_progression(target_status.value)
+                status_prog.append(event.id)
+            except KeyError as e:
+                raise ConfigurationError(
+                    f"Progression '{target_status.value}' not found in executor",
+                    details={
+                        "status": target_status.value,
+                        "available": [p.name for p in self.states.progressions],
+                    },
+                ) from e
 
     async def forward(self) -> None:
         """Process queued events immediately."""
@@ -384,6 +469,34 @@ class Executor:
     def status_counts(self) -> dict[str, int]:
         """Get event count per status."""
         return {prog.name: len(prog) for prog in self.states.progressions}
+
+    def cleanup_events(self, statuses: list[EventStatus] | None = None) -> int:
+        """Remove events with specified statuses from executor.
+
+        This is a manual cleanup method for memory management. Events are removed
+        from both progressions and the Flow.items pile.
+
+        Args:
+            statuses: List of statuses to clean up (default: [COMPLETED, FAILED, ABORTED])
+
+        Returns:
+            Number of events removed
+
+        Example:
+            # Clean up after events are logged elsewhere
+            executor.cleanup_events([EventStatus.COMPLETED, EventStatus.FAILED])
+        """
+        if statuses is None:
+            statuses = [EventStatus.COMPLETED, EventStatus.FAILED, EventStatus.ABORTED]
+
+        removed_count = 0
+        for status in statuses:
+            events = self.get_events_by_status(status)
+            for event in events:
+                self.states.remove_item(event.id)
+                removed_count += 1
+
+        return removed_count
 
     def inspect_state(self) -> str:
         """Debug helper: show counts per status."""

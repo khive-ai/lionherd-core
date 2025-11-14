@@ -451,7 +451,7 @@ async def test_executor_completed_events_property():
     assert executor.completed_events == []
 
     # Move to COMPLETED
-    executor._update_progression(event, EventStatus.COMPLETED)
+    await executor._update_progression(event, EventStatus.COMPLETED)
 
     # Now completed_events should have the event
     assert len(executor.completed_events) == 1
@@ -479,7 +479,7 @@ async def test_executor_failed_events_property():
     event = ExecTestEvent(return_value=42)
 
     await executor.append(event)
-    executor._update_progression(event, EventStatus.FAILED)
+    await executor._update_progression(event, EventStatus.FAILED)
 
     assert len(executor.failed_events) == 1
     assert executor.failed_events[0] == event
@@ -492,7 +492,7 @@ async def test_executor_processing_events_property():
     event = ExecTestEvent(return_value=42)
 
     await executor.append(event)
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
 
     assert len(executor.processing_events) == 1
     assert executor.processing_events[0] == event
@@ -547,7 +547,7 @@ async def test_executor_update_progression_moves_event():
     assert event.id in executor.states.get_progression("pending")
 
     # Move to "processing"
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
 
     # Should be in "processing", not "pending"
     assert event.id not in executor.states.get_progression("pending")
@@ -566,7 +566,7 @@ async def test_executor_update_progression_uses_event_status_by_default():
     event.execution.status = EventStatus.COMPLETED
 
     # Call _update_progression without force_status
-    executor._update_progression(event)
+    await executor._update_progression(event)
 
     # Should move to "completed" based on event.execution.status
     assert event.id in executor.states.get_progression("completed")
@@ -590,7 +590,7 @@ async def test_executor_update_progression_with_force_status():
     assert event.execution.status == EventStatus.PENDING
 
     # Force move to PROCESSING (without changing event status)
-    executor._update_progression(event, force_status=EventStatus.PROCESSING)
+    await executor._update_progression(event, force_status=EventStatus.PROCESSING)
 
     # Should be in "processing" progression
     assert event.id in executor.states.get_progression("processing")
@@ -618,7 +618,7 @@ async def test_executor_update_progression_removes_from_all_old_progressions():
     assert event.id in executor.states.get_progression("processing")
 
     # Update to "completed"
-    executor._update_progression(event, EventStatus.COMPLETED)
+    await executor._update_progression(event, EventStatus.COMPLETED)
 
     # Should be ONLY in "completed"
     assert event.id in executor.states.get_progression("completed")
@@ -645,13 +645,13 @@ async def test_executor_update_progression_full_lifecycle():
     assert event.id in executor.states.get_progression("pending")
 
     # 2. Start processing
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
     assert event.id in executor.states.get_progression("processing")
     assert event.id not in executor.states.get_progression("pending")
 
     # 3. Complete
     event.execution.status = EventStatus.COMPLETED
-    executor._update_progression(event)
+    await executor._update_progression(event)
     assert event.id in executor.states.get_progression("completed")
     assert event.id not in executor.states.get_progression("processing")
 
@@ -687,11 +687,11 @@ async def test_executor_status_counts_with_events():
 
     # Move 1 to processing
     event1 = next(iter(executor.states.items))
-    executor._update_progression(event1, EventStatus.PROCESSING)
+    await executor._update_progression(event1, EventStatus.PROCESSING)
 
     # Move 1 to completed
     event2 = next(islice(executor.states.items, 1, 2))
-    executor._update_progression(event2, EventStatus.COMPLETED)
+    await executor._update_progression(event2, EventStatus.COMPLETED)
 
     counts = executor.status_counts()
 
@@ -790,7 +790,7 @@ async def test_executor_states_flow_serialization():
     await executor.append(event2)
 
     # Move one to completed
-    executor._update_progression(event1, EventStatus.COMPLETED)
+    await executor._update_progression(event1, EventStatus.COMPLETED)
 
     # Serialize
     state_dict = executor.states.to_dict()
@@ -893,7 +893,7 @@ async def test_executor_state_transitions_pending_to_processing():
     assert len(executor.processing_events) == 0
 
     # Transition to processing
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
 
     # After: processing
     assert len(executor.pending_events) == 0
@@ -907,7 +907,7 @@ async def test_executor_state_transitions_processing_to_completed():
     event = ExecTestEvent(return_value=42)
 
     await executor.append(event)
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
 
     # Initial: processing
     assert len(executor.processing_events) == 1
@@ -915,7 +915,7 @@ async def test_executor_state_transitions_processing_to_completed():
 
     # Transition to completed
     event.execution.status = EventStatus.COMPLETED
-    executor._update_progression(event)
+    await executor._update_progression(event)
 
     # After: completed
     assert len(executor.processing_events) == 0
@@ -929,11 +929,11 @@ async def test_executor_state_transitions_processing_to_failed():
     event = ExecTestEvent(return_value=42)
 
     await executor.append(event)
-    executor._update_progression(event, EventStatus.PROCESSING)
+    await executor._update_progression(event, EventStatus.PROCESSING)
 
     # Transition to failed
     event.execution.status = EventStatus.FAILED
-    executor._update_progression(event)
+    await executor._update_progression(event)
 
     assert len(executor.processing_events) == 0
     assert len(executor.failed_events) == 1
@@ -958,14 +958,14 @@ async def test_executor_multiple_events_different_states():
         await executor.append(event)
 
     # Distribute across states
-    executor._update_progression(events[0], EventStatus.PROCESSING)
-    executor._update_progression(events[1], EventStatus.PROCESSING)
+    await executor._update_progression(events[0], EventStatus.PROCESSING)
+    await executor._update_progression(events[1], EventStatus.PROCESSING)
 
     events[2].execution.status = EventStatus.COMPLETED
-    executor._update_progression(events[2])
+    await executor._update_progression(events[2])
 
     events[3].execution.status = EventStatus.FAILED
-    executor._update_progression(events[3])
+    await executor._update_progression(events[3])
 
     # Verify distribution
     assert len(executor.pending_events) == 2  # events[4], events[5]
@@ -1042,7 +1042,7 @@ async def test_executor_repr_shows_counts():
     await executor.append(event2)
     await executor.append(event3)
 
-    executor._update_progression(event1, EventStatus.COMPLETED)
+    await executor._update_progression(event1, EventStatus.COMPLETED)
 
     repr_str = repr(executor)
 
@@ -1204,7 +1204,7 @@ async def test_executor_status_query_performance_scales_with_status_count():
 
     # Move 10 to completed
     for i in range(10):
-        executor._update_progression(all_events[i], EventStatus.COMPLETED)
+        await executor._update_progression(all_events[i], EventStatus.COMPLETED)
 
     # Query completed events
     completed = executor.get_events_by_status(EventStatus.COMPLETED)

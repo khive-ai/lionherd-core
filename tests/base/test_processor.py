@@ -179,12 +179,13 @@ async def test_processor_init_valid():
 
 
 @pytest.mark.asyncio
-async def test_processor_init_no_concurrency_limit():
-    """Test Processor initialization without concurrency limit."""
+async def test_processor_init_default_concurrency_limit():
+    """Test Processor initialization with default concurrency limit (100)."""
     pile = Pile[Event]()
     proc = SimpleProcessor(queue_capacity=5, capacity_refresh_time=0.1, pile=pile)
 
-    assert proc._concurrency_sem is None
+    # Default concurrency limit is 100 (safe default)
+    assert proc._concurrency_sem is not None
 
 
 @pytest.mark.asyncio
@@ -214,14 +215,22 @@ async def test_processor_init_invalid_queue_capacity():
 
 @pytest.mark.asyncio
 async def test_processor_init_invalid_refresh_time():
-    """Test Processor raises ValueError for invalid capacity_refresh_time."""
+    """Test Processor raises ValueError for invalid capacity_refresh_time.
+
+    Validation: capacity_refresh_time must be in [0.01, 3600] seconds.
+    """
     pile = Pile[Event]()
 
-    with pytest.raises(ValueError, match="Capacity refresh time must be larger than 0"):
+    # Too low (< 0.01s = 10ms) - prevents CPU hot loop
+    with pytest.raises(ValueError, match=r"Capacity refresh time must be >= 0\.01s"):
         SimpleProcessor(queue_capacity=10, capacity_refresh_time=0, pile=pile)
 
-    with pytest.raises(ValueError, match="Capacity refresh time must be larger than 0"):
-        SimpleProcessor(queue_capacity=10, capacity_refresh_time=-0.1, pile=pile)
+    with pytest.raises(ValueError, match=r"Capacity refresh time must be >= 0\.01s"):
+        SimpleProcessor(queue_capacity=10, capacity_refresh_time=0.001, pile=pile)
+
+    # Too high (> 3600s = 1 hour) - prevents starvation
+    with pytest.raises(ValueError, match=r"Capacity refresh time must be <= 3600s"):
+        SimpleProcessor(queue_capacity=10, capacity_refresh_time=7200, pile=pile)
 
 
 @pytest.mark.asyncio
@@ -377,7 +386,7 @@ async def test_processor_capacity_decreases_during_process():
     """Test capacity decreases as events are processed."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=3, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -417,7 +426,7 @@ async def test_processor_capacity_reset_after_batch():
     """
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=5, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -486,7 +495,7 @@ async def test_processor_process_single_event():
     """
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -513,7 +522,7 @@ async def test_processor_process_multiple_events():
     """Test processing multiple events in batch."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -537,7 +546,7 @@ async def test_processor_process_respects_capacity_limit():
     """Test process() respects available_capacity limit."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=2, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -583,7 +592,7 @@ async def test_processor_process_handles_event_failure():
     """Test process() handles event execution failures gracefully."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = FailingProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -606,7 +615,7 @@ async def test_processor_process_streaming_event():
     """Test process() handles streaming events correctly."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = StreamingProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -629,7 +638,7 @@ async def test_processor_process_streaming_event_with_error():
     """Test process() handles streaming event errors."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     # Create event that fails during streaming
     class FailingStreamingEvent(StreamingEvent):
@@ -656,7 +665,7 @@ async def test_processor_process_with_concurrency_limit():
     """Test process() respects concurrency semaphore."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     # Create processor with concurrency limit of 2
     proc = SlowProcessor(
@@ -696,7 +705,7 @@ async def test_processor_request_permission_custom():
     """Test custom request_permission() can deny events."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = PermissionProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -787,7 +796,7 @@ async def test_processor_execute_background_loop():
     """Test execute() runs background loop until stopped."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=10, capacity_refresh_time=0.05, pile=pile, executor=executor_mock
@@ -883,7 +892,7 @@ async def test_processor_process_with_pending_event_retry():
     """Test process() waits for pending events before processing next."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=10, capacity_refresh_time=0.01, pile=pile, executor=executor_mock
@@ -925,10 +934,10 @@ async def test_processor_process_with_pending_event_retry():
 
 @pytest.mark.asyncio
 async def test_processor_with_zero_capacity_refresh_time_rejected():
-    """Test processor rejects zero capacity_refresh_time."""
+    """Test processor rejects zero capacity_refresh_time (prevents CPU hot loop)."""
     pile = Pile[Event]()
 
-    with pytest.raises(ValueError, match="Capacity refresh time must be larger than 0"):
+    with pytest.raises(ValueError, match=r"Capacity refresh time must be >= 0\.01s"):
         SimpleProcessor(queue_capacity=10, capacity_refresh_time=0.0, pile=pile)
 
 
@@ -937,7 +946,7 @@ async def test_processor_streaming_with_concurrency_limit():
     """Test streaming events work with concurrency semaphore."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = StreamingProcessor(
         queue_capacity=10,
@@ -964,7 +973,7 @@ async def test_processor_non_streaming_with_concurrency_limit():
     """Test non-streaming events work with concurrency semaphore."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     proc = SimpleProcessor(
         queue_capacity=10,
@@ -1020,7 +1029,7 @@ async def test_processor_capacity_boundary_conditions():
     """Test processor handles capacity=1 edge case."""
     pile = Pile[Event]()
     executor_mock = Mock()
-    executor_mock._update_progression = Mock()
+    executor_mock._update_progression = AsyncMock()
 
     # Minimum capacity
     proc = SimpleProcessor(

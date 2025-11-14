@@ -14,6 +14,7 @@ __all__ = (
     "ExistsError",
     "LionherdError",
     "NotFoundError",
+    "QueueFullError",
     "TimeoutError",
     "ValidationError",
 )
@@ -118,3 +119,10 @@ class ExistsError(LionherdError):
 
     default_message = "Item already exists"
     default_retryable = False  # Duplicate items won't resolve on retry
+
+
+class QueueFullError(LionherdError):
+    """Queue capacity exceeded. Retryable."""
+
+    default_message = "Queue is full"
+    default_retryable = True  # Queue might have space later
