@@ -340,7 +340,6 @@ class Executor:
         """
         self.processor_config = processor_config or {}
         self.processor: Processor | None = None
-        self._progression_lock = concurrency.Lock()  # Thread-safe progression updates
 
         # Create Flow with progressions for each EventStatus
         self.states = Flow[Event, Progression](
@@ -366,7 +365,7 @@ class Executor:
     async def _update_progression(
         self, event: Event, force_status: EventStatus | None = None
     ) -> None:
-        """Update Flow progression to match event status (thread-safe).
+        """Update Flow progression to match event status (thread-safe via Pile lock).
 
         Raises:
             ConfigurationError: If progression for status doesn't exist
@@ -375,7 +374,7 @@ class Executor:
 
         target_status = force_status if force_status else event.execution.status
 
-        async with self._progression_lock:
+        async with self.states.progressions:  # Use Pile's built-in async lock
             # Remove from all progressions (enforce single-ownership invariant)
             for prog in self.states.progressions:
                 if event.id in prog:
@@ -470,11 +469,15 @@ class Executor:
         """Get event count per status."""
         return {prog.name: len(prog) for prog in self.states.progressions}
 
-    def cleanup_events(self, statuses: list[EventStatus] | None = None) -> int:
+    async def cleanup_events(self, statuses: list[EventStatus] | None = None) -> int:
         """Remove events with specified statuses from executor.
 
         This is a manual cleanup method for memory management. Events are removed
-        from both progressions and the Flow.items pile.
+        from both progressions and the Flow.items pile. Also cleans up processor
+        denial tracking to prevent memory leaks.
+
+        Thread-safe: Uses Pile's built-in async locks to prevent race conditions
+        with concurrent _update_progression() calls.
 
         Args:
             statuses: List of statuses to clean up (default: [COMPLETED, FAILED, ABORTED])
@@ -484,17 +487,22 @@ class Executor:
 
         Example:
             # Clean up after events are logged elsewhere
-            executor.cleanup_events([EventStatus.COMPLETED, EventStatus.FAILED])
+            await executor.cleanup_events([EventStatus.COMPLETED, EventStatus.FAILED])
         """
         if statuses is None:
             statuses = [EventStatus.COMPLETED, EventStatus.FAILED, EventStatus.ABORTED]
 
         removed_count = 0
-        for status in statuses:
-            events = self.get_events_by_status(status)
-            for event in events:
-                self.states.remove_item(event.id)
-                removed_count += 1
+        # Acquire locks in consistent order to prevent deadlock: items first, then progressions
+        async with self.states.items, self.states.progressions:
+            for status in statuses:
+                events = self.get_events_by_status(status)
+                for event in events:
+                    # Clean up processor denial tracking (prevent memory leak)
+                    if self.processor:
+                        self.processor._denial_counts.pop(event.id, None)
+                    self.states.remove_item(event.id)
+                    removed_count += 1
 
         return removed_count
 

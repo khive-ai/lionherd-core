@@ -266,3 +266,96 @@ async def test_processor_validates_concurrency_limit_positive():
         SecTestProcessor(
             queue_capacity=10, capacity_refresh_time=0.1, pile=pile, concurrency_limit=0
         )
+
+
+# ==================== Cleanup Memory Leak Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_cleanup_events_removes_denial_tracking():
+    """Test cleanup_events() cleans up processor denial counts (C1 fix).
+
+    Security Fix: Prevents memory leak where denial_counts accumulate forever
+    when events are manually removed via cleanup_events().
+    """
+    from lionherd_core.base.processor import Executor
+
+    class CleanupTestProcessor(SecTestProcessor):
+        """Processor that denies first time."""
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.deny_first = True
+
+        async def request_permission(self, **kwargs):
+            if self.deny_first:
+                self.deny_first = False
+                return False
+            return True
+
+    class CleanupTestExecutor(Executor):
+        processor_type = CleanupTestProcessor
+
+    executor = CleanupTestExecutor(
+        processor_config={"queue_capacity": 10, "capacity_refresh_time": 0.1}
+    )
+    await executor.start()
+
+    # Create event and deny it once
+    event = SecTestEvent(return_value="test")
+    await executor.append(event)
+
+    # Process - will be denied once and requeued
+    await executor.processor.process()
+
+    # Verify denial tracked
+    assert event.id in executor.processor._denial_counts
+    assert executor.processor._denial_counts[event.id] == 1
+
+    # Manually clean up the event (simulates logging + cleanup)
+    removed = await executor.cleanup_events([EventStatus.PENDING])
+
+    # C1 FIX VERIFICATION: Denial tracking should be cleaned up
+    assert removed == 1
+    assert event.id not in executor.processor._denial_counts, (
+        "Memory leak: denial_counts not cleaned up by cleanup_events()"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_events_uses_pile_locks():
+    """Test cleanup_events() uses Pile's async locks to prevent race conditions (C2 fix).
+
+    Security Fix: Prevents TOCTOU race where cleanup_events() modifies progressions
+    concurrently with _update_progression(), causing data corruption.
+
+    Uses Pile's built-in async context manager locks instead of custom lock.
+    """
+    from lionherd_core.base.processor import Executor
+
+    executor = Executor.__new__(Executor)  # Create without __init__ to set processor_type
+    executor.processor_type = SecTestProcessor
+    executor.__init__(processor_config={"queue_capacity": 10, "capacity_refresh_time": 0.1})
+    await executor.start()
+
+    # Create and complete an event
+    event = SecTestEvent(return_value="test")
+    await executor.append(event)
+    event.execution.status = EventStatus.COMPLETED
+    await executor._update_progression(event, EventStatus.COMPLETED)
+
+    # Verify event in COMPLETED progression
+    assert event.id in executor.states.get_progression("completed")
+
+    # C2 FIX VERIFICATION: cleanup_events should use Pile locks (no custom _progression_lock)
+    assert not hasattr(executor, "_progression_lock"), (
+        "Executor should NOT have custom _progression_lock, should use Pile locks"
+    )
+
+    # Clean up and verify removal
+    removed = await executor.cleanup_events([EventStatus.COMPLETED])
+
+    assert removed == 1
+    assert event.id not in executor.states.get_progression("completed"), (
+        "Event should be removed by cleanup_events()"
+    )
