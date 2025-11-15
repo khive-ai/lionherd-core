@@ -15,15 +15,15 @@ class TestExtractLvars:
 
     def test_single_lvar(self):
         """Test extracting single lvar."""
-        text = "<lvar x>42</lvar>"
+        text = "<lvar x>630</lvar>"
         result = extract_lvars(text)
-        assert result == {"x": "42"}
+        assert result == {"x": "630"}
 
     def test_multiple_lvars(self):
         """Test extracting multiple lvars."""
-        text = "<lvar x>42</lvar> <lvar y>hello</lvar>"
+        text = "<lvar x>630</lvar> <lvar y>hello</lvar>"
         result = extract_lvars(text)
-        assert result == {"x": "42", "y": "hello"}
+        assert result == {"x": "630", "y": "hello"}
 
     def test_multiline_content(self):
         """Test lvar with multiline content."""
@@ -39,9 +39,9 @@ class TestExtractLvars:
 
     def test_lvar_with_whitespace(self):
         """Test lvar content whitespace handling."""
-        text = "<lvar x>  42  </lvar>"
+        text = "<lvar x>  630  </lvar>"
         result = extract_lvars(text)
-        assert result == {"x": "42"}  # Trimmed
+        assert result == {"x": "630"}  # Trimmed
 
     def test_lvar_with_special_chars(self):
         """Test lvar content with special characters."""

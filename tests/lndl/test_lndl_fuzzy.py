@@ -882,12 +882,12 @@ class TestFuzzyCoverageEdgeCases:
 
         lndl_text = """\
         ```lndl
-        OUT{count: 42}
+        OUT{count: 630}
         ```\
         """
 
         result = parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
-        assert result.count == 42
+        assert result.count == 630
 
 
 class TestFuzzyNamespacedActions:
