@@ -140,12 +140,84 @@ def extract_lacts(text: str) -> dict[str, str]:
     return lacts
 
 
-def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
-    """Extract <lact> action declarations with optional namespace prefix.
+def _parse_call_array(array_str: str) -> list[str]:
+    """Parse array of function calls with balanced delimiter handling.
 
-    Supports two patterns:
-        Namespaced: <lact Model.field alias>function_call()</lact>
-        Direct: <lact name>function_call()</lact>
+    Handles:
+    - String literals with commas: func("hello, world")
+    - Nested parentheses: func(a, nested(b, c))
+    - Nested brackets: func([1, [2, 3]])
+    - Mixed nesting: func({key: [1, 2]}, "test")
+
+    Args:
+        array_str: String like "[call1(), call2(), call3()]" or "call1(), call2()"
+
+    Returns:
+        List of individual call strings
+
+    Example:
+        >>> _parse_call_array('[find.by_name(query="ocean"), search(query="AI, ML")]')
+        ['find.by_name(query="ocean")', 'search(query="AI, ML")']
+    """
+    # Strip array brackets if present
+    content = array_str.strip()
+    if content.startswith("[") and content.endswith("]"):
+        content = content[1:-1].strip()
+
+    calls = []
+    current_call = []
+    depth_paren = 0
+    depth_bracket = 0
+    depth_brace = 0
+    in_string = False
+    string_char = None
+
+    for i, char in enumerate(content):
+        # Track string literals
+        if char in ('"', "'") and (i == 0 or content[i - 1] != "\\"):
+            if not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char:
+                in_string = False
+                string_char = None
+
+        # Track nesting depth (only outside strings)
+        if not in_string:
+            if char == "(":
+                depth_paren += 1
+            elif char == ")":
+                depth_paren -= 1
+            elif char == "[":
+                depth_bracket += 1
+            elif char == "]":
+                depth_bracket -= 1
+            elif char == "{":
+                depth_brace += 1
+            elif char == "}":
+                depth_brace -= 1
+            elif char == "," and depth_paren == 0 and depth_bracket == 0 and depth_brace == 0:
+                # Top-level comma - split here
+                calls.append("".join(current_call).strip())
+                current_call = []
+                continue
+
+        current_call.append(char)
+
+    # Add last call
+    if current_call:
+        calls.append("".join(current_call).strip())
+
+    return [c for c in calls if c]  # Filter empty strings
+
+
+def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
+    """Extract <lact> action declarations with optional namespace prefix and array support.
+
+    Supports three patterns:
+        1. Namespaced: <lact Model.field alias>function_call()</lact>
+        2. Direct: <lact name>function_call()</lact>
+        3. Array: <lact namespace a b c>[call1(), call2(), call3()]</lact>
 
     Args:
         text: Response text containing <lact> declarations
@@ -161,49 +233,86 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
     Examples:
         >>> text = "<lact Report.summary s>generate_summary(...)</lact>"
         >>> extract_lacts_prefixed(text)
-        {'s': LactMetadata(model="Report", field="summary", local_name="s", call="generate_summary(...)")}
+        {'s': LactMetadata(model="Report", field="summary", local_names=["s"], calls=["generate_summary(...)"])}
 
         >>> text = '<lact search>search(query="AI")</lact>'
         >>> extract_lacts_prefixed(text)
-        {'search': LactMetadata(model=None, field=None, local_name="search", call='search(query="AI")')}
+        {'search': LactMetadata(model=None, field=None, local_names=["search"], calls=['search(query="AI")'])}
+
+        >>> text = '<lact cognition a b c>[find.by_name(query="ocean"), recall.search(...), remember(...)]</lact>'
+        >>> result = extract_lacts_prefixed(text)
+        >>> result["a"].model
+        'cognition'
+        >>> len(result["a"].calls)
+        3
     """
-    # Pattern matches both forms with strict identifier validation:
-    # <lact Model.field alias>call</lact>  OR  <lact name>call</lact>
-    # Groups: (1) identifier (Model or name), (2) optional .field, (3) optional alias, (4) call
-    # Rejects: multiple dots, leading/trailing dots, numeric prefixes
-    # Note: \w* allows single-character identifiers (e.g., alias="t")
-    pattern = r"<lact\s+([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?(?:\s+([A-Za-z_]\w*))?>(.*?)</lact>"
+    # Pattern matches all forms:
+    # <lact Model.field alias>call</lact>  OR  <lact name>call</lact>  OR  <lact namespace a b c>[...]</lact>
+    # Groups: (1) identifier, (2) optional .field, (3) optional aliases, (4) call content (can be empty)
+    pattern = r"<lact\s+([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?(?:\s+([A-Za-z_][\w\s]*))?>(.*?)</lact>"
     matches = re.findall(pattern, text, re.DOTALL)
 
     lacts = {}
-    for identifier, field, alias, call_str in matches:
-        # Check if field group is present (namespaced pattern)
-        if field:
-            # Namespaced: <lact Model.field alias>
+    for identifier, field, aliases_str, call_content in matches:
+        call_content = call_content.strip()
+
+        # Parse aliases (space-separated)
+        alias_list = [a.strip() for a in aliases_str.split() if a.strip()] if aliases_str else []
+
+        # Detect array syntax
+        is_array = call_content.startswith("[") and "]" in call_content
+
+        if is_array:
+            # Array pattern: <lact namespace a b c>[call1(), call2()]</lact>
+            calls = _parse_call_array(call_content)
+
+            # Validate: number of aliases must match number of calls
+            if alias_list and len(alias_list) != len(calls):
+                warnings.warn(
+                    f"Alias count mismatch: {len(alias_list)} aliases for {len(calls)} calls. "
+                    f"Aliases: {alias_list}, Calls: {len(calls)}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            # If no aliases provided, generate default ones
+            if not alias_list:
+                alias_list = [f"{identifier}_{i}" for i in range(len(calls))]
+
+            # Namespace pattern (no .field)
             model = identifier
-            local_name = alias if alias else field  # Use alias or default to field name
+            field = None
+            local_names = alias_list
+        elif field:
+            # Namespaced: <lact Model.field alias>call</lact>
+            model = identifier
+            local_names = [alias_list[0]] if alias_list else [field]
+            calls = [call_content]
         else:
-            # Direct: <lact name>
+            # Direct: <lact name>call</lact>
             model = None
             field = None
-            local_name = identifier  # identifier is the name
+            local_names = [alias_list[0]] if alias_list else [identifier]
+            calls = [call_content]
 
-        # Warn if action name conflicts with Python reserved keywords (deduplicated)
-        if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
-            _warned_action_names.add(local_name)
-            warnings.warn(
-                f"Action name '{local_name}' is a Python reserved keyword or builtin. "
-                f"While this works in LNDL (string keys), it may cause confusion.",
-                UserWarning,
-                stacklevel=2,
+        # Create metadata for each alias
+        for local_name in local_names:
+            # Warn if action name conflicts with Python reserved keywords
+            if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
+                _warned_action_names.add(local_name)
+                warnings.warn(
+                    f"Action name '{local_name}' is a Python reserved keyword or builtin. "
+                    f"While this works in LNDL (string keys), it may cause confusion.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            lacts[local_name] = LactMetadata(
+                model=model,
+                field=field,
+                local_names=local_names,
+                calls=calls,
             )
-
-        lacts[local_name] = LactMetadata(
-            model=model,
-            field=field,
-            local_name=local_name,
-            call=call_str.strip(),
-        )
 
     return lacts
 

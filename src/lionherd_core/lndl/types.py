@@ -29,16 +29,44 @@ class LactMetadata:
 
     Examples:
         Namespaced: <lact Report.summary s>generate_summary(...)</lact>
-        → LactMetadata(model="Report", field="summary", local_name="s", call="generate_summary(...)")
+        → LactMetadata(model="Report", field="summary", local_names=["s"], calls=["generate_summary(...)"])
 
         Direct: <lact search>search(...)</lact>
-        → LactMetadata(model=None, field=None, local_name="search", call="search(...)")
+        → LactMetadata(model=None, field=None, local_names=["search"], calls=["search(...)"])
+
+        Array: <lact cognition a b c>[find.by_name(...), recall.search(...), remember(...)]</lact>
+        → LactMetadata(model="cognition", field=None, local_names=["a", "b", "c"],
+                       calls=["find.by_name(...)", "recall.search(...)", "remember(...)"])
     """
 
-    model: str | None  # Model name (e.g., "Report") or None for direct actions
-    field: str | None  # Field name (e.g., "summary") or None for direct actions
-    local_name: str  # Local reference name (e.g., "s", "search")
-    call: str  # Raw function call string
+    model: str | None  # Namespace/Model name (e.g., "cognition", "Report") or None for direct
+    field: str | None  # Field name (e.g., "summary") or None for namespace/direct
+    local_names: list[str]  # Local reference names (e.g., ["a", "b", "c"])
+    calls: list[str]  # Raw function call strings
+
+    def __post_init__(self):
+        """Convert old single-value format to list format for backward compatibility."""
+        # Detect if old format was used (strings instead of lists)
+        if isinstance(self.local_names, str):
+            # Old format: local_name was a string, call was a string
+            object.__setattr__(self, "local_names", [self.local_names])
+        if isinstance(self.calls, str):
+            object.__setattr__(self, "calls", [self.calls])
+
+    @property
+    def local_name(self) -> str:
+        """Backward compatibility: Return first local name."""
+        return self.local_names[0] if self.local_names else ""
+
+    @property
+    def call(self) -> str:
+        """Backward compatibility: Return first call."""
+        return self.calls[0] if self.calls else ""
+
+    @property
+    def is_array(self) -> bool:
+        """Check if this is an array declaration (multiple calls)."""
+        return len(self.calls) > 1
 
 
 @dataclass(slots=True, frozen=True)
