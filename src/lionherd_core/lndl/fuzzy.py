@@ -278,8 +278,8 @@ def parse_lndl_fuzzy(
             lacts_corrected[local_name] = LactMetadata(
                 model=corrected_model,
                 field=corrected_field,
-                local_name=lact.local_name,
-                call=lact.call,
+                local_names=lact.local_names,
+                calls=lact.calls,
             )
         else:  # Direct action - no correction needed
             lacts_corrected[local_name] = lact

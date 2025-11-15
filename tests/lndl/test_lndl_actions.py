@@ -587,6 +587,11 @@ class TestActionErrorHandling:
         """Test warning when action name is Python reserved keyword or builtin."""
         import warnings
 
+        # Clear warned set for this test to ensure warning is triggered
+        from lionherd_core.lndl.parser import _warned_action_names
+
+        _warned_action_names.discard(keyword)
+
         response = f"<lact {keyword}>some_function()</lact>\nOUT{{result:[{keyword}]}}"
         operable = Operable([Spec(SearchResults, name="result")])
 
