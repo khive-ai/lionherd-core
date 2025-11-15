@@ -181,6 +181,38 @@ path = graph.find_path(start, end)
 path = await graph.find_path(start, end)
 ```
 
+### 5. LNDL array aliases must map 1:1 to calls
+
+**Known Bug Pattern** (Fixed in PR #192):
+
+```python
+# ❌ WRONG: All aliases share all calls
+# <lact cognition a b>[find(), remember()]</lact>
+for local_name in local_names:
+    lacts[local_name] = LactMetadata(
+        local_names=local_names,  # All aliases
+        calls=calls,              # All calls
+    )
+# Result: lacts["a"].call == find()
+#         lacts["b"].call == find()  # BUG: should be remember()
+
+# ✅ CORRECT: Each alias maps to its specific call
+for i, local_name in enumerate(local_names):
+    lacts[local_name] = LactMetadata(
+        local_names=[local_name],  # Single alias
+        calls=[calls[i]],          # Corresponding call at index i
+    )
+# Result: lacts["a"].call == find()
+#         lacts["b"].call == remember()  # Correct!
+```
+
+**Why**: Array syntax `<lact cognition a b>[find(), remember()]</lact>` means:
+
+- `a` executes `find()` (index 0)
+- `b` executes `remember()` (index 1)
+
+Storing all calls with all aliases defeats the batch syntax. Each alias needs its own metadata with only its specific call.
+
 ---
 
 ## Adapter Pattern Details

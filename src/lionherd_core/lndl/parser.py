@@ -296,7 +296,10 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
             calls = [call_content]
 
         # Create metadata for each alias
-        for local_name in local_names:
+        # CRITICAL: Each alias gets its own metadata with only its specific call
+        # to support array syntax like <lact cognition a b>[find(), remember()]</lact>
+        # where "a" should execute find() and "b" should execute remember()
+        for i, local_name in enumerate(local_names):
             # Warn if action name conflicts with Python reserved keywords
             if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
                 _warned_action_names.add(local_name)
@@ -307,11 +310,13 @@ def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
                     stacklevel=2,
                 )
 
+            # Each alias gets its own metadata with only its specific call (at index i)
+            # This ensures lacts["a"].call returns the first call, lacts["b"].call returns the second, etc.
             lacts[local_name] = LactMetadata(
                 model=model,
                 field=field,
-                local_names=local_names,
-                calls=calls,
+                local_names=[local_name],  # Single alias for this metadata
+                calls=[calls[i]],  # Corresponding call at same index
             )
 
     return lacts

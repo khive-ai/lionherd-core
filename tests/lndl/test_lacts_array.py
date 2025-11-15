@@ -122,7 +122,14 @@ class TestExtractLactsArraySyntax:
     """Test extract_lacts_prefixed() with array syntax."""
 
     def test_namespace_array_basic(self):
-        """Test basic namespace array syntax."""
+        """Test basic namespace array syntax.
+
+        CRITICAL: Each alias should map to its corresponding call by index.
+        <lact cognition a b c>[find(), recall(), remember()]</lact>
+        - a should execute find() (index 0)
+        - b should execute recall() (index 1)
+        - c should execute remember() (index 2)
+        """
         text = '<lact cognition a b c>[find.by_name(query="ocean"), recall.search(query="test"), remember(content="x")]</lact>'
         lacts = extract_lacts_prefixed(text)
 
@@ -131,17 +138,29 @@ class TestExtractLactsArraySyntax:
         assert "b" in lacts
         assert "c" in lacts
 
-        # All share same metadata structure
+        # Each alias gets its own metadata with only its specific call
         assert lacts["a"].model == "cognition"
         assert lacts["a"].field is None
-        assert lacts["a"].local_names == ["a", "b", "c"]
-        assert len(lacts["a"].calls) == 3
-        assert lacts["a"].calls[0] == 'find.by_name(query="ocean")'
-        assert lacts["a"].calls[1] == 'recall.search(query="test")'
-        assert lacts["a"].calls[2] == 'remember(content="x")'
+        assert lacts["a"].local_names == ["a"]
+        assert lacts["a"].calls == ['find.by_name(query="ocean")']
+        assert lacts["a"].call == 'find.by_name(query="ocean")'  # First call for "a"
 
-        # Verify is_array property
-        assert lacts["a"].is_array is True
+        assert lacts["b"].model == "cognition"
+        assert lacts["b"].field is None
+        assert lacts["b"].local_names == ["b"]
+        assert lacts["b"].calls == ['recall.search(query="test")']
+        assert lacts["b"].call == 'recall.search(query="test")'  # Second call for "b"
+
+        assert lacts["c"].model == "cognition"
+        assert lacts["c"].field is None
+        assert lacts["c"].local_names == ["c"]
+        assert lacts["c"].calls == ['remember(content="x")']
+        assert lacts["c"].call == 'remember(content="x")'  # Third call for "c"
+
+        # Each has single call, so is_array is False for individual metadata
+        assert lacts["a"].is_array is False
+        assert lacts["b"].is_array is False
+        assert lacts["c"].is_array is False
 
     def test_namespace_array_default_aliases(self):
         """Test namespace array without explicit aliases (auto-generated)."""
@@ -152,8 +171,14 @@ class TestExtractLactsArraySyntax:
         assert "cognition_0" in lacts
         assert "cognition_1" in lacts
 
-        assert lacts["cognition_0"].local_names == ["cognition_0", "cognition_1"]
-        assert lacts["cognition_0"].calls[0] == 'find.by_name(query="ocean")'
+        # Each auto-generated alias gets its own metadata with its specific call
+        assert lacts["cognition_0"].local_names == ["cognition_0"]
+        assert lacts["cognition_0"].calls == ['find.by_name(query="ocean")']
+        assert lacts["cognition_0"].call == 'find.by_name(query="ocean")'
+
+        assert lacts["cognition_1"].local_names == ["cognition_1"]
+        assert lacts["cognition_1"].calls == ['recall.search(query="test")']
+        assert lacts["cognition_1"].call == 'recall.search(query="test")'
 
     def test_namespace_array_mismatch_warning(self):
         """Test warning when alias count doesn't match call count."""
@@ -232,9 +257,11 @@ class TestExtractLactsArraySyntax:
         assert "s" in lacts
         assert "search" in lacts
 
-        # Array pattern
+        # Array pattern - each alias has single call
         assert lacts["a"].model == "cognition"
-        assert lacts["a"].is_array is True
+        assert lacts["a"].is_array is False  # Single call per alias
+        assert lacts["a"].call == 'find.by_name(query="ocean")'
+        assert lacts["b"].call == 'recall.search(query="test")'
 
         # Namespaced pattern
         assert lacts["s"].model == "Report"
@@ -297,8 +324,9 @@ class TestExtractLactsArraySyntax:
         assert len(lacts) == 2
         assert "a" in lacts
         assert "b" in lacts
+        # Each alias has its own call
         assert 'func(data={"key": [1, 2, 3]}, msg="hello, world")' in lacts["a"].calls[0]
-        assert 'other(nested=(1, (2, 3)), config={"a": {"b": "c"}})' in lacts["a"].calls[1]
+        assert 'other(nested=(1, (2, 3)), config={"a": {"b": "c"}})' in lacts["b"].calls[0]
 
     def test_multiline_array(self):
         """Test array syntax with multiline formatting."""
@@ -310,9 +338,10 @@ class TestExtractLactsArraySyntax:
         lacts = extract_lacts_prefixed(text)
 
         assert len(lacts) == 3
+        # Each alias has its own call at the corresponding index
         assert lacts["a"].calls[0].strip() == 'find.by_name(query="ocean")'
-        assert 'recall.search(query="patterns", limit=10)' in lacts["a"].calls[1]
-        assert 'remember(content="important insight")' in lacts["a"].calls[2]
+        assert 'recall.search(query="patterns", limit=10)' in lacts["b"].calls[0]
+        assert 'remember(content="important insight")' in lacts["c"].calls[0]
 
     def test_empty_text_returns_empty_dict(self):
         """Test that empty text returns empty dict."""
@@ -332,30 +361,39 @@ class TestExtractLactsArraySyntax:
 
 
 class TestLactMetadataBackwardCompatibility:
-    """Test backward compatibility of LactMetadata changes."""
+    """Test backward compatibility of LactMetadata changes.
+
+    NOTE: With the array alias fix, each alias gets its own metadata with a single call.
+    The properties still work for backward compatibility but with different semantics:
+    - local_name returns the first (and only) name in local_names
+    - call returns the first (and only) call in calls
+    - is_array is False for single-call metadata (which is now the norm)
+    """
 
     def test_local_name_property(self):
-        """Test backward-compatible local_name property."""
+        """Test backward-compatible local_name property with single alias."""
         metadata = LactMetadata(
             model="cognition",
             field=None,
-            local_names=["a", "b", "c"],
-            calls=["find()", "recall()", "remember()"],
+            local_names=["a"],  # Single alias per metadata now
+            calls=["find()"],  # Single call per metadata now
         )
         assert metadata.local_name == "a"
 
     def test_call_property(self):
-        """Test backward-compatible call property."""
+        """Test backward-compatible call property with single call."""
         metadata = LactMetadata(
             model="cognition",
             field=None,
-            local_names=["a", "b", "c"],
-            calls=["find()", "recall()", "remember()"],
+            local_names=["a"],  # Single alias per metadata now
+            calls=["find()"],  # Single call per metadata now
         )
         assert metadata.call == "find()"
 
     def test_is_array_property_true(self):
-        """Test is_array property for array declarations."""
+        """Test is_array property for multi-call metadata (legacy format)."""
+        # This format is no longer created by extract_lacts_prefixed after the fix
+        # but the property still works for backward compatibility
         metadata = LactMetadata(
             model="cognition", field=None, local_names=["a", "b"], calls=["find()", "recall()"]
         )
@@ -418,5 +456,8 @@ class TestEdgeCases:
         assert len(lacts) == 100
         assert "ops_0" in lacts
         assert "ops_99" in lacts
-        assert lacts["ops_0"].calls[0] == "call0(arg=0)"
-        assert lacts["ops_0"].calls[99] == "call99(arg=99)"
+        # Each alias has only its own call
+        assert lacts["ops_0"].calls == ["call0(arg=0)"]
+        assert lacts["ops_99"].calls == ["call99(arg=99)"]
+        assert lacts["ops_0"].call == "call0(arg=0)"
+        assert lacts["ops_99"].call == "call99(arg=99)"
