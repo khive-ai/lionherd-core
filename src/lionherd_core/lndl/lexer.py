@@ -297,6 +297,17 @@ class Lexer:
                 self.tokens.append(Token(TokenType.ID, identifier, start_line, start_column))
                 continue
 
+            # Negative numbers (only inside OUT{} blocks)
+            if char == "-" and in_out_block:
+                next_char = self.peek_char()
+                if next_char and next_char.isdigit():
+                    start_line = self.line
+                    start_column = self.column
+                    self.advance()  # consume minus
+                    number = "-" + self.read_number()
+                    self.tokens.append(Token(TokenType.NUM, number, start_line, start_column))
+                    continue
+
             # Numbers
             if char.isdigit():
                 start_line = self.line

@@ -513,6 +513,17 @@ class Parser:
                     if self.match(TokenType.ID):
                         refs.append(self.current_token().value)
                         self.advance()
+                    elif self.match(TokenType.NUM):
+                        # Handle numeric literals in arrays (e.g., [0.8, 0.9])
+                        refs.append(self.current_token().value)
+                        self.advance()
+                    elif self.match(TokenType.STR):
+                        # Handle string literals in arrays (e.g., ["a", "b"])
+                        refs.append(self.current_token().value)
+                        self.advance()
+                    else:
+                        # Unknown token in array - skip to avoid infinite loop
+                        self.advance()
 
                     self.skip_newlines()
 
