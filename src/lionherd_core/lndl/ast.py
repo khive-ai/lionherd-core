@@ -12,7 +12,7 @@ AST Design Philosophy:
 - Simple and clear (no over-engineering)
 
 Node Hierarchy:
-- Node (base)
+- ASTNode (base)
   - Expr (expressions)
     - Literal: Scalar values (int, float, str, bool)
     - Identifier: Variable references
@@ -27,14 +27,14 @@ from dataclasses import dataclass
 
 
 # Base Nodes
-class Node:
+class ASTNode:
     """Base AST node for all LNDL constructs."""
 
     pass
 
 
 # Expressions (evaluate to values)
-class Expr(Node):
+class Expr(ASTNode):
     """Base expression node."""
 
     pass
@@ -67,7 +67,7 @@ class Identifier(Expr):
 
 
 # Statements (declarations, no return value)
-class Stmt(Node):
+class Stmt(ASTNode):
     """Base statement node."""
 
     pass
@@ -163,12 +163,12 @@ class Program:
 
 
 __all__ = (
+    "ASTNode",
     "Expr",
     "Identifier",
     "Lact",
     "Literal",
     "Lvar",
-    "Node",
     "OutBlock",
     "Program",
     "Stmt",
