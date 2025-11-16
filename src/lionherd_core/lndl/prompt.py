@@ -5,11 +5,23 @@ LNDL_SYSTEM_PROMPT = """LNDL - Structured Output with Natural Thinking
 
 SYNTAX
 
-Variables:
+Variables (two patterns):
+
+Namespaced (for Pydantic models):
 <lvar Model.field alias>value</lvar>
 
 - Model.field: Explicit mapping (Report.title, Reason.confidence)
 - alias: Short name for OUT{} reference (optional, defaults to field name)
+- Use for structured outputs that need type validation
+
+Raw (for simple capture):
+<lvar alias>value</lvar>
+
+- alias: Local name for OUT{} reference
+- Use for intermediate values or scalar fields
+- No model mapping, simple string capture
+
+Both patterns:
 - Declare anywhere, revise anytime, think naturally
 
 Actions (two patterns):
@@ -104,26 +116,28 @@ Actions (tool/function calls):
 
 ERRORS TO AVOID
 
-<lvar title>value</lvar>                    # WRONG: Missing Model.field prefix
-<lvar Report.title>val</var>                # WRONG: Mismatched tags
+<lvar Report.title>val</var>                # WRONG: Mismatched tags (should be </lvar>)
 <lact search>search(...)</lvar>             # WRONG: Mismatched tags (should be </lact>)
 OUT{report:Report(title=t)}                 # WRONG: No constructors, use arrays
 OUT{report:[t, s2], reason:[c, a]}          # WRONG: field name must match spec
 OUT{quality_score:[x, y]}                   # WRONG: scalars need single var or literal
+<lvar x>value</lvar>
+OUT{report:[x]}                             # WRONG: raw lvar cannot be used in BaseModel fields
 <lact Report.field data>search(...)</lact>
 <lvar Report.field data>value</lvar>
 OUT{field:[data]}                           # WRONG: name collision (both lvar and lact named "data")
 
 CORRECT
 
-<lvar Model.field alias>value</lvar>              # Proper namespace for variables
+<lvar Model.field alias>value</lvar>              # Namespaced lvar for Pydantic models
+<lvar x>value</lvar>                              # Raw lvar for simple capture (scalars only)
 <lact Model.field alias>function(args)</lact>     # Namespaced action (for mixing)
 <lact name>function(args)</lact>                  # Direct action (entire output)
-OUT{report:[var1, var2]}                          # Array maps to model fields (lvars)
+OUT{report:[var1, var2]}                          # Array maps to model fields (namespaced lvars)
 OUT{report:[var1, action1, var2]}                 # Mixing lvars and namespaced actions
 OUT{data:[action_name]}                           # Direct action for entire field
 OUT{quality_score:0.8}                            # Scalar literal
-OUT{quality_score:[q]}                            # Scalar from variable
+OUT{quality_score:[q]}                            # Scalar from namespaced or raw lvar
 OUT{result:[action]}                              # Scalar from action result
 """
 

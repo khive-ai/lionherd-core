@@ -3,7 +3,32 @@
 
 import pytest
 
-from lionherd_core.lndl import extract_lacts
+from lionherd_core.lndl import Lexer, Parser
+
+
+def extract_lacts(text: str) -> dict[str, str]:
+    """Adapter for old extract_lacts API using new Lexer + Parser.
+
+    This function provides backward compatibility for tests by wrapping
+    the new Lexer/Parser architecture.
+
+    Args:
+        text: LNDL text containing lact tags
+
+    Returns:
+        Dict mapping action alias to call string
+    """
+    lexer = Lexer(text)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=text)
+    program = parser.parse()
+
+    # Convert AST lacts to dict format (alias -> call)
+    lacts: dict[str, str] = {}
+    for lact in program.lacts:
+        lacts[lact.alias] = lact.call
+
+    return lacts
 
 
 class TestExtractLacts:
@@ -95,12 +120,14 @@ class TestExtractLacts:
         result = extract_lacts(text)
         assert result == {"calc": "calculate(10, 20, 30)"}
 
-    def test_name_collision_detection_ready(self):
-        """Test that names can collide (validation happens in resolver)."""
+    def test_name_collision_detection(self):
+        """Test that duplicate aliases are detected during parsing."""
+        from lionherd_core.lndl import ParseError
+
         text = """
         <lact data>search()</lact>
         <lvar Report.field data>value</lvar>
         """
-        # Extract should succeed - collision detection in resolver
-        lacts = extract_lacts(text)
-        assert "data" in lacts
+        # New Parser detects duplicate aliases during parsing (fail-fast)
+        with pytest.raises(ParseError, match="Duplicate alias"):
+            extract_lacts(text)

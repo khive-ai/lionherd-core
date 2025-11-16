@@ -9,15 +9,9 @@ from lionherd_core.libs.string_handlers._string_similarity import (
 )
 from lionherd_core.types import Operable
 
-from .errors import AmbiguousMatchError, MissingFieldError
-from .parser import (
-    extract_lacts_prefixed,
-    extract_lvars_prefixed,
-    extract_out_block,
-    parse_out_block_array,
-)
+from .errors import AmbiguousMatchError, MissingFieldError, MissingOutBlockError
 from .resolver import resolve_references_prefixed
-from .types import LactMetadata, LNDLOutput, LvarMetadata
+from .types import LactMetadata, LNDLOutput, LvarMetadata, RLvarMetadata
 
 __all__ = ("parse_lndl_fuzzy",)
 
@@ -92,8 +86,8 @@ def _correct_name(
             f"Multiple candidates scored within 0.05. Be more specific."
         )
 
-    # Single clear winner
-    match = result[0]
+    # Single clear winner - use argmax instead of relying on result order
+    match = max(scores.items(), key=lambda kv: kv[1])[0]
 
     # Log correction
     if match != target:
@@ -159,11 +153,48 @@ def parse_lndl_fuzzy(
     )  # Stricter for model names
     threshold_spec = threshold_spec if threshold_spec is not None else threshold
 
-    # 1. Extract namespace-prefixed lvars, lacts, and OUT{} block
-    lvars_raw = extract_lvars_prefixed(response)
-    lacts_raw = extract_lacts_prefixed(response)
-    out_content = extract_out_block(response)
-    out_fields_raw = parse_out_block_array(out_content)
+    # 1. Parse using new lexer/parser (hybrid approach)
+    from .ast import Lvar
+    from .lexer import Lexer
+    from .parser import Parser
+
+    lexer = Lexer(response)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=response)
+    program = parser.parse()
+
+    # Convert AST to resolver input format (supports both Lvar and RLvar)
+    lvars_raw: dict[str, LvarMetadata | RLvarMetadata] = {}
+    for lvar in program.lvars:
+        if isinstance(lvar, Lvar):
+            # Namespaced lvar - maps to Pydantic model
+            lvars_raw[lvar.alias] = LvarMetadata(
+                model=lvar.model,
+                field=lvar.field,
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
+        else:  # RLvar
+            # Raw lvar - simple string capture
+            lvars_raw[lvar.alias] = RLvarMetadata(
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
+
+    lacts_raw: dict[str, LactMetadata] = {}
+    for lact in program.lacts:
+        lacts_raw[lact.alias] = LactMetadata(
+            model=lact.model,
+            field=lact.field,
+            local_name=lact.alias,
+            call=lact.call,
+        )
+
+    # Check for OUT{} block
+    if not program.out_block:
+        raise MissingOutBlockError("No OUT{} block found in response")
+
+    out_fields_raw = program.out_block.fields
 
     # Build spec map for O(1) lookups (used in both strict and fuzzy modes)
     spec_map = {spec.base_type.__name__: spec for spec in operable.get_specs()}
@@ -171,15 +202,20 @@ def parse_lndl_fuzzy(
 
     # If threshold is 1.0 (strict mode), validate strictly then call resolver
     if threshold >= 1.0:
+        # Validate lvar model names (skip raw lvars - they have no model/field)
         for lvar in lvars_raw.values():
+            if isinstance(lvar, RLvarMetadata):
+                continue  # Raw lvars don't need model validation
             if lvar.model not in expected_models:
                 raise MissingFieldError(
                     f"Model '{lvar.model}' not found. "
                     f"Available: {list(expected_models)} (strict mode: exact match required)"
                 )
 
-        # Validate field names exist for each model
+        # Validate field names exist for each model (skip raw lvars)
         for lvar in lvars_raw.values():
+            if isinstance(lvar, RLvarMetadata):
+                continue  # Raw lvars don't have fields
             # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
             spec = spec_map[lvar.model]
 
@@ -220,11 +256,13 @@ def parse_lndl_fuzzy(
 
         return resolve_references_prefixed(out_fields_raw, lvars_raw, lacts_raw, operable)
 
-    # 2. Pre-correct lvar metadata (model names and field names)
-    # Collect all unique model names and field names from lvars
-    raw_model_names = {lvar.model for lvar in lvars_raw.values()}
+    # 2. Pre-correct lvar metadata (model names and field names - skip raw lvars)
+    # Collect all unique model names and field names from namespaced lvars only
+    raw_model_names = {lvar.model for lvar in lvars_raw.values() if isinstance(lvar, LvarMetadata)}
     raw_field_names_by_model: dict[str, set[str]] = {}
     for lvar in lvars_raw.values():
+        if isinstance(lvar, RLvarMetadata):
+            continue  # Skip raw lvars - no model/field to correct
         if lvar.model not in raw_field_names_by_model:
             raw_field_names_by_model[lvar.model] = set()
         raw_field_names_by_model[lvar.model].add(lvar.field)
@@ -251,18 +289,23 @@ def parse_lndl_fuzzy(
             )
             field_corrections[(raw_model, raw_field)] = corrected_field
 
-    # Rebuild lvars with corrected model and field names
-    lvars_corrected: dict[str, LvarMetadata] = {}
+    # Rebuild lvars with corrected model and field names (preserve raw lvars as-is)
+    lvars_corrected: dict[str, LvarMetadata | RLvarMetadata] = {}
     for local_name, lvar in lvars_raw.items():
-        corrected_model = model_corrections.get(lvar.model, lvar.model)
-        corrected_field = field_corrections.get((lvar.model, lvar.field), lvar.field)
+        if isinstance(lvar, RLvarMetadata):
+            # Raw lvars pass through unchanged
+            lvars_corrected[local_name] = lvar
+        else:
+            # Namespaced lvars get fuzzy correction
+            corrected_model = model_corrections.get(lvar.model, lvar.model)
+            corrected_field = field_corrections.get((lvar.model, lvar.field), lvar.field)
 
-        lvars_corrected[local_name] = LvarMetadata(
-            model=corrected_model,
-            field=corrected_field,
-            local_name=lvar.local_name,
-            value=lvar.value,
-        )
+            lvars_corrected[local_name] = LvarMetadata(
+                model=corrected_model,
+                field=corrected_field,
+                local_name=lvar.local_name,
+                value=lvar.value,
+            )
 
     # 2b. Pre-correct lact metadata (model names and field names for namespaced actions)
     # Namespaced actions share the same model/field correction as lvars
