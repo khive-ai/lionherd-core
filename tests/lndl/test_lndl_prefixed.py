@@ -12,6 +12,7 @@ from lionherd_core.lndl import (
 )
 from lionherd_core.lndl.lexer import Lexer
 from lionherd_core.lndl.parser import Parser
+from lionherd_core.lndl.types import LvarMetadata
 from lionherd_core.types import Operable, Spec
 
 
@@ -51,14 +52,26 @@ def parse_lvars(text: str) -> dict[str, dict]:
     program = parser.parse()
 
     # Convert to dict format matching old API
+    from lionherd_core.lndl.ast import Lvar, RLvar
+
     result = {}
     for lvar in program.lvars:
-        result[lvar.alias] = {
-            "model": lvar.model,
-            "field": lvar.field,
-            "local_name": lvar.alias,
-            "value": lvar.content,
-        }
+        if isinstance(lvar, Lvar):
+            # Namespaced lvar
+            result[lvar.alias] = {
+                "model": lvar.model,
+                "field": lvar.field,
+                "local_name": lvar.alias,
+                "value": lvar.content,
+            }
+        else:  # RLvar
+            # Raw lvar - no model/field
+            result[lvar.alias] = {
+                "model": None,
+                "field": None,
+                "local_name": lvar.alias,
+                "value": lvar.content,
+            }
     return result
 
 
@@ -169,14 +182,17 @@ class TestExtractLvarsPrefixed:
 
         assert lvars == {}
 
-    def test_legacy_syntax_raises_error(self):
-        """Test that legacy syntax (no namespace) raises ParseError."""
-        from lionherd_core.lndl.parser import ParseError
+    def test_raw_lvar_syntax(self):
+        """Test that raw syntax (no namespace) returns RLvar."""
+        text = "<lvar x>raw content</lvar>"
+        lvars = parse_lvars(text)
 
-        text = "<lvar x>legacy content</lvar>"
-
-        with pytest.raises(ParseError, match="Legacy lvar syntax"):
-            parse_lvars(text)
+        assert len(lvars) == 1
+        assert "x" in lvars
+        assert lvars["x"]["model"] is None  # Raw lvar has no model
+        assert lvars["x"]["field"] is None  # Raw lvar has no field
+        assert lvars["x"]["local_name"] == "x"
+        assert lvars["x"]["value"] == "raw content"
 
 
 class TestResolveReferencesPrefixed:
@@ -184,7 +200,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_simple_fields(self):
         """Test resolving simple prefixed variables."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"report": ["title", "summary"]}
         lvars = {
@@ -200,7 +215,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_with_type_conversion(self):
         """Test resolving with automatic type conversion."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"reasoning": ["conf", "ana"]}
         lvars = {
@@ -216,7 +230,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_multiple_specs(self):
         """Test resolving multiple specs at once."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {
             "report": ["title", "summary"],
@@ -237,7 +250,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_with_custom_alias(self):
         """Test resolving with custom local aliases."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"reasoning": ["conf", "ana"]}
         lvars = {
@@ -253,7 +265,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_missing_required_field_error(self):
         """Test error when required field missing from OUT{}."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {}
         lvars = {}
@@ -264,7 +275,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_type_mismatch_error(self):
         """Test error when variable model doesn't match spec."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"reasoning": ["title"]}
         lvars = {
@@ -283,7 +293,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_missing_variable_error(self):
         """Test error when referenced variable not declared."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"reasoning": ["conf", "missing_var"]}
         lvars = {
@@ -302,7 +311,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_scalar_missing_variable_error(self):
         """Test error when scalar field references undeclared variable."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         # Scalar field with array syntax pointing to missing variable
         out_fields = {"quality_score": ["missing_score"]}
@@ -320,7 +328,6 @@ class TestResolveReferencesPrefixed:
 
     def test_resolve_pydantic_validation_error(self):
         """Test Pydantic validation errors bubble up."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"reasoning": ["conf", "ana"]}
         lvars = {
@@ -339,7 +346,6 @@ class TestResolveReferencesPrefixed:
 
     def test_out_field_no_spec_error(self):
         """Test error when OUT{} field has no Spec in Operable."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"unknown_field": ["var1"]}
         lvars = {"var1": LvarMetadata("Report", "title", "var1", "value")}
@@ -363,7 +369,6 @@ class TestResolveReferencesPrefixed:
 
     def test_spec_invalid_type_error(self):
         """Test error when Spec base_type is not BaseModel or scalar."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"invalid": ["var1"]}
         lvars = {"var1": LvarMetadata("Invalid", "field", "var1", "value")}
@@ -380,8 +385,6 @@ class TestResolveReferencesPrefixed:
     def test_operable_get_returns_none(self):
         """Test defensive code when operable.get() returns None."""
         from unittest.mock import Mock
-
-        from lionherd_core.lndl.types import LvarMetadata
 
         out_fields = {"field1": ["var1"]}
         lvars = {"var1": LvarMetadata("Report", "title", "var1", "value")}
@@ -891,7 +894,6 @@ class TestHardeningImprovements:
 
     def test_multi_error_aggregation_three_fields(self):
         """Test ExceptionGroup with 3 failing fields."""
-        from lionherd_core.lndl.types import LvarMetadata
 
         # Create lvars with mismatched model
         lvars = {

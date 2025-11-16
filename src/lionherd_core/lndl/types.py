@@ -14,17 +14,32 @@ Scalar = float | int | str | bool
 
 @dataclass(slots=True, frozen=True)
 class LvarMetadata:
-    """Metadata for namespaced lvar (only namespaced format supported).
+    """Metadata for namespaced lvar - maps to Pydantic model field.
 
     Example: <lvar Report.title t>Good Title</lvar>
     → LvarMetadata(model="Report", field="title", local_name="t", value="Good Title")
-
-    Note: Legacy format <lvar alias>content</lvar> is not supported.
     """
 
     model: str  # Model name (e.g., "Report")
     field: str  # Field name (e.g., "title")
     local_name: str  # Local variable name (e.g., "t")
+    value: str  # Raw string value
+
+
+@dataclass(slots=True, frozen=True)
+class RLvarMetadata:
+    """Metadata for raw lvar - simple string capture without model mapping.
+
+    Example: <lvar reasoning>The analysis shows...</lvar>
+    → RLvarMetadata(local_name="reasoning", value="The analysis shows...")
+
+    Usage:
+        - Use for intermediate LLM outputs not mapped to Pydantic models
+        - Can only resolve to scalar OUT{} fields (str, int, float, bool)
+        - Cannot be used in BaseModel OUT{} fields
+    """
+
+    local_name: str  # Local variable name
     value: str  # Raw string value
 
 
@@ -294,4 +309,4 @@ def revalidate_with_action_results(
             kwargs[field_name] = action_results[value.name]
 
     # Re-construct with full validation
-    return type(model)(**kwargs)
+    return type(model).model_validate(kwargs)

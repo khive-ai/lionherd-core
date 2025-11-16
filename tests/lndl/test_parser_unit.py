@@ -45,15 +45,21 @@ class TestParseLvarNamespaced:
         assert lvar.alias == "name"  # Uses field name as alias
         assert lvar.content == "Jane Smith"
 
-    def test_lvar_legacy_pattern_raises_error(self):
-        """Test <lvar alias>content</lvar> - legacy pattern is not supported"""
+    def test_lvar_raw_pattern(self):
+        """Test <lvar alias>content</lvar> - raw pattern returns RLvar"""
+        from lionherd_core.lndl.ast import RLvar
+
         source = "<lvar result>42</lvar>"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
 
-        with pytest.raises(ParseError, match="Legacy lvar syntax"):
-            parser.parse_lvar()
+        lvar = parser.parse_lvar()
+
+        # Should return RLvar (raw pattern)
+        assert isinstance(lvar, RLvar)
+        assert lvar.alias == "result"
+        assert lvar.content == "42"
 
     def test_lvar_multiline_content(self):
         """Test lvar with multiline content including newlines"""

@@ -11,12 +11,12 @@ from lionherd_core.types import Operable
 
 from .errors import MissingFieldError, MissingOutBlockError, TypeMismatchError
 from .parser import parse_value
-from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata
+from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata, RLvarMetadata
 
 
 def resolve_references_prefixed(
     out_fields: dict[str, list[str] | str],
-    lvars: dict[str, LvarMetadata],
+    lvars: dict[str, LvarMetadata | RLvarMetadata],
     lacts: dict[str, LactMetadata],
     operable: Operable,
 ) -> LNDLOutput:
@@ -240,6 +240,13 @@ def resolve_references_prefixed(
 
                     lvar_meta = lvars[var_name]
 
+                    # Raw lvars cannot be used in BaseModel fields (no type validation)
+                    if isinstance(lvar_meta, RLvarMetadata):
+                        raise ValueError(
+                            f"Raw lvar '{var_name}' cannot be used in BaseModel field '{field_name}'. "
+                            f"Use namespaced format: <lvar Model.field alias>"
+                        )
+
                     # Validate: model name matches
                     if lvar_meta.model != target_type.__name__:
                         raise TypeMismatchError(
@@ -320,15 +327,25 @@ def parse_lndl(response: str, operable: Operable) -> LNDLOutput:
     parser = Parser(tokens, source_text=response)
     program = parser.parse()
 
-    # 3. Convert AST to resolver input format
-    lvars_prefixed: dict[str, LvarMetadata] = {}
+    # 3. Convert AST to resolver input format (supports both Lvar and RLvar)
+    from .ast import Lvar
+
+    lvars_prefixed: dict[str, LvarMetadata | RLvarMetadata] = {}
     for lvar in program.lvars:
-        lvars_prefixed[lvar.alias] = LvarMetadata(
-            model=lvar.model,
-            field=lvar.field,
-            local_name=lvar.alias,
-            value=lvar.content,
-        )
+        if isinstance(lvar, Lvar):
+            # Namespaced lvar
+            lvars_prefixed[lvar.alias] = LvarMetadata(
+                model=lvar.model,
+                field=lvar.field,
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
+        else:  # RLvar
+            # Raw lvar
+            lvars_prefixed[lvar.alias] = RLvarMetadata(
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
 
     lacts_prefixed: dict[str, LactMetadata] = {}
     for lact in program.lacts:

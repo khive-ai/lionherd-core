@@ -33,7 +33,7 @@ import re
 import warnings
 from typing import Any
 
-from .ast import Lact, Lvar, OutBlock, Program
+from .ast import Lact, Lvar, OutBlock, Program, RLvar
 from .lexer import Token, TokenType
 
 # Track warned action names to prevent duplicate warnings
@@ -272,37 +272,39 @@ class Parser:
 
         return Program(lvars=lvars, lacts=lacts, out_block=out_block)
 
-    def parse_lvar(self) -> Lvar:
-        """Parse lvar declaration.
+    def parse_lvar(self) -> Lvar | RLvar:
+        """Parse lvar declaration (namespaced or raw).
 
         Grammar:
-            Lvar ::= '<lvar' ID '.' ID ID? '>' Content '</lvar>'
+            Lvar  ::= '<lvar' ID '.' ID ID? '>' Content '</lvar>'  # Namespaced
+            RLvar ::= '<lvar' ID '>' Content '</lvar>'              # Raw
 
-        Supports only namespaced pattern:
+        Namespaced pattern (maps to Pydantic model):
             <lvar Model.field alias>content</lvar>
             <lvar Model.field>content</lvar>  # Uses field as alias
 
-        Returns:
-            Lvar node with model, field, alias, and content
+        Raw pattern (simple string capture):
+            <lvar alias>content</lvar>
 
-        Example:
+        Returns:
+            Lvar node (namespaced) or RLvar node (raw)
+
+        Examples:
             <lvar Report.title t>AI Safety Analysis</lvar>
             → Lvar(model="Report", field="title", alias="t", content="AI Safety Analysis")
 
-            <lvar Report.title>Safety Analysis</lvar>
-            → Lvar(model="Report", field="title", alias="title", content="Safety Analysis")
+            <lvar reasoning>The analysis shows...</lvar>
+            → RLvar(alias="reasoning", content="The analysis shows...")
         """
         self.expect(TokenType.LVAR_OPEN)  # <lvar
         self.skip_newlines()
 
-        # Parse identifier (must be Model name)
+        # Parse first identifier
         first_id = self.expect(TokenType.ID).value
 
-        # Track whether alias was explicitly provided
-        has_explicit_alias = False
-
-        # Require namespaced pattern: Model.field [alias]
+        # Check for DOT to distinguish namespaced vs raw pattern
         if self.match(TokenType.DOT):
+            # Namespaced pattern: Model.field [alias]
             self.advance()  # consume dot
             field = self.expect(TokenType.ID).value
             model = first_id
@@ -317,13 +319,15 @@ class Parser:
                 alias = field
                 has_explicit_alias = False
 
+            is_raw = False
+
         else:
-            # Legacy pattern not supported - must use Model.field
-            raise ParseError(
-                f"Legacy lvar syntax '<lvar {first_id}>' is not supported. "
-                f"Use namespaced format: '<lvar Model.field alias>' or '<lvar Model.field>'",
-                self.current_token(),
-            )
+            # Raw pattern: just alias
+            alias = first_id
+            model = None
+            field = None
+            has_explicit_alias = False
+            is_raw = True
 
         # Expect closing '>' for tag
         self.expect(TokenType.GT)
@@ -337,16 +341,17 @@ class Parser:
             )
 
         # Build regex pattern based on parsed structure
-        if model:
+        if is_raw:
+            # Raw: <lvar alias>content</lvar>
+            pattern = rf"<lvar\s+{re.escape(alias)}\s*>(.*?)</lvar>"
+        else:
+            # Namespaced
             if has_explicit_alias:
                 # Explicit alias: <lvar Model.field alias>content</lvar>
                 pattern = rf"<lvar\s+{re.escape(model)}\.{re.escape(field)}\s+{re.escape(alias)}\s*>(.*?)</lvar>"
             else:
                 # No alias: <lvar Model.field>content</lvar>
                 pattern = rf"<lvar\s+{re.escape(model)}\.{re.escape(field)}\s*>(.*?)</lvar>"
-        else:
-            # Legacy: <lvar alias>content</lvar>
-            pattern = rf"<lvar\s+{re.escape(alias)}\s*>(.*?)</lvar>"
 
         match = re.search(pattern, self.source_text, re.DOTALL)
         if not match:
@@ -367,7 +372,11 @@ class Parser:
 
         self.expect(TokenType.LVAR_CLOSE)  # </lvar>
 
-        return Lvar(model=model, field=field, alias=alias, content=content)
+        # Return appropriate node type based on pattern
+        if is_raw:
+            return RLvar(alias=alias, content=content)
+        else:
+            return Lvar(model=model, field=field, alias=alias, content=content)
 
     def parse_lact(self) -> Lact:
         """Parse lact (action) declaration.

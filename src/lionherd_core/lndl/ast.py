@@ -30,17 +30,17 @@ from dataclasses import dataclass
 class ASTNode:
     """Base AST node for all LNDL constructs."""
 
-    pass
+    __slots__ = ()  # Empty slots for proper inheritance
 
 
 # Expressions (evaluate to values)
 class Expr(ASTNode):
     """Base expression node."""
 
-    pass
+    __slots__ = ()
 
 
-@dataclass
+@dataclass(slots=True)
 class Literal(Expr):
     """Literal scalar value.
 
@@ -54,7 +54,7 @@ class Literal(Expr):
     value: str | int | float | bool
 
 
-@dataclass
+@dataclass(slots=True)
 class Identifier(Expr):
     """Variable reference.
 
@@ -70,12 +70,12 @@ class Identifier(Expr):
 class Stmt(ASTNode):
     """Base statement node."""
 
-    pass
+    __slots__ = ()
 
 
-@dataclass
+@dataclass(slots=True)
 class Lvar(Stmt):
-    """Variable declaration (namespaced format only).
+    """Namespaced variable declaration - maps to Pydantic model field.
 
     Syntax:
         <lvar Model.field alias>content</lvar>
@@ -95,7 +95,31 @@ class Lvar(Stmt):
     content: str  # Raw string value
 
 
-@dataclass
+@dataclass(slots=True)
+class RLvar(Stmt):
+    """Raw variable declaration - simple string capture without model mapping.
+
+    Syntax:
+        <lvar alias>content</lvar>
+
+    Examples:
+        <lvar reasoning>The analysis shows...</lvar>
+        → RLvar(alias="reasoning", content="The analysis shows...")
+
+        <lvar score>0.95</lvar>
+        → RLvar(alias="score", content="0.95")
+
+    Usage:
+        - Use for intermediate LLM outputs not mapped to Pydantic models
+        - Can only resolve to scalar OUT{} fields (str, int, float, bool)
+        - Cannot be used in BaseModel OUT{} fields (no type validation)
+    """
+
+    alias: str  # Local variable name
+    content: str  # Raw string value
+
+
+@dataclass(slots=True)
 class Lact(Stmt):
     """Action declaration.
 
@@ -117,7 +141,7 @@ class Lact(Stmt):
     call: str  # Raw function call string
 
 
-@dataclass
+@dataclass(slots=True)
 class OutBlock(Stmt):
     """Output specification block.
 
@@ -136,28 +160,29 @@ class OutBlock(Stmt):
     fields: dict[str, list[str] | str | int | float | bool]
 
 
-@dataclass
+@dataclass(slots=True)
 class Program:
     """Root AST node containing all declarations.
 
     A complete LNDL program consists of:
-        - Variable declarations (lvars)
+        - Variable declarations (lvars + rlvars)
         - Action declarations (lacts)
         - Output specification (out_block)
 
     Example:
         <lvar Report.title t>Title</lvar>
+        <lvar reasoning>Analysis text</lvar>
         <lact Report.summary s>summarize()</lact>
-        OUT{title: [t], summary: [s]}
+        OUT{title: [t], summary: [s], reasoning: [reasoning]}
 
         → Program(
-            lvars=[Lvar(...)],
+            lvars=[Lvar(...), RLvar(...)],
             lacts=[Lact(...)],
             out_block=OutBlock(...)
         )
     """
 
-    lvars: list[Lvar]
+    lvars: list[Lvar | RLvar]  # Both namespaced and raw lvars
     lacts: list[Lact]
     out_block: OutBlock | None
 
@@ -171,5 +196,6 @@ __all__ = (
     "Lvar",
     "OutBlock",
     "Program",
+    "RLvar",
     "Stmt",
 )

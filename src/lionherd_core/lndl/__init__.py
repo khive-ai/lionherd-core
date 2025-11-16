@@ -1,7 +1,7 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-from .ast import Identifier, Lact, Literal, Lvar, OutBlock, Program
+from .ast import Identifier, Lact, Literal, Lvar, OutBlock, Program, RLvar
 from .errors import (
     AmbiguousMatchError,
     InvalidConstructorError,
@@ -22,6 +22,7 @@ from .types import (
     LNDLOutput,
     LvarMetadata,
     ParsedConstructor,
+    RLvarMetadata,
     Scalar,
     ensure_no_action_calls,
     has_action_calls,
@@ -50,6 +51,8 @@ __all__ = (
     "ParsedConstructor",
     "Parser",
     "Program",
+    "RLvar",
+    "RLvarMetadata",
     "Scalar",
     "Token",
     "TokenType",
