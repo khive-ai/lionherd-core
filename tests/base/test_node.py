@@ -853,6 +853,10 @@ node_metadata:
 
 def test_node_adapt_roundtrip_toml():
     """Test Node survives TOML roundtrip with correct type."""
+    from pydapter.adapters import TomlAdapter
+
+    PersonNode.register_adapter(TomlAdapter)
+
     original = PersonNode(name="Charlie", age=35, content={"value": "manager"})
 
     # Adapt to TOML and back
@@ -868,6 +872,10 @@ def test_node_adapt_roundtrip_toml():
 
 def test_node_adapt_many_toml():
     """Test Node can adapt multiple instances to/from TOML."""
+    from pydapter.adapters import TomlAdapter
+
+    PersonNode.register_adapter(TomlAdapter)
+
     nodes = [
         PersonNode(name="Alice", age=30),
         PersonNode(name="Bob", age=25),
