@@ -765,36 +765,3 @@ def multi_model_operable():
             Spec(float, name="confidence"),
         ]
     )
-
-
-class TestNegativeNumbers:
-    """Test negative number support - addresses P1 bot feedback."""
-
-    def test_negative_integer_in_out_block(self):
-        """Negative integers should be parsed correctly."""
-        source = "OUT{temp: -10}"
-        operable = Operable([Spec(int, name="temp")])
-        result = parse_lndl(source, operable)
-        assert result.temp == -10
-
-    def test_negative_float_in_out_block(self):
-        """Negative floats should be parsed correctly."""
-        source = "OUT{delta: -3.14}"
-        operable = Operable([Spec(float, name="delta")])
-        result = parse_lndl(source, operable)
-        assert result.delta == -3.14
-
-    def test_mixed_positive_negative_numbers(self):
-        """Mix of positive and negative numbers."""
-        source = "OUT{high: 100, low: -50, avg: 25}"
-        operable = Operable(
-            [
-                Spec(int, name="high"),
-                Spec(int, name="low"),
-                Spec(int, name="avg"),
-            ]
-        )
-        result = parse_lndl(source, operable)
-        assert result.high == 100
-        assert result.low == -50
-        assert result.avg == 25

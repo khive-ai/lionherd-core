@@ -11,13 +11,7 @@ Design Philosophy:
 - Structured outputs only (defer semantic operations)
 - Clean error messages with line/column context
 - Support both namespaced and legacy syntax
-- Hybrid approach: Regex extraction for lvar/lact (content preservation),
-  token-based parsing for OUT{} blocks (structural validation)
-
-Parsing Strategy:
-- Lvars/Lacts: Regex extraction preserves exact syntax (quotes, whitespace, function calls)
-- OUT{} blocks: Token-based parsing enables structured validation and future extensions
-- This division optimizes for different data types - simple tags vs structured data
+- Hybrid approach: Lexer/Parser for structure, regex for content preservation
 
 Grammar (Simplified for Structured Outputs):
     Program    ::= (Lvar | Lact)* OutBlock?
@@ -32,7 +26,6 @@ Performance:
 - Typical LNDL response: <5ms
 - Linear complexity O(n) for token stream
 - Minimal lookahead (efficient single-pass)
-- Negative number support: -123, -3.14
 """
 
 import ast
@@ -276,6 +269,176 @@ class Parser:
             self.advance()
 
         return Program(lvars=lvars, lacts=lacts, out_block=out_block)
+
+    def parse_lvar(self) -> Lvar:
+        """Parse lvar declaration.
+
+        Grammar:
+            Lvar ::= '<lvar' (ID '.' ID ID? | ID) '>' Content '</lvar>'
+
+        Supports:
+            Namespaced: <lvar Model.field alias>content</lvar>
+            Legacy: <lvar alias>content</lvar>
+
+        Returns:
+            Lvar node with model, field, alias, and content
+
+        Example:
+            <lvar Report.title t>AI Safety Analysis</lvar>
+            → Lvar(model="Report", field="title", alias="t", content="AI Safety Analysis")
+
+            <lvar t>Simple content</lvar>
+            → Lvar(model=None, field=None, alias="t", content="Simple content")
+        """
+        self.expect(TokenType.LVAR_OPEN)  # <lvar
+        self.skip_newlines()
+
+        # Parse identifier (could be Model, field, or alias)
+        first_id = self.expect(TokenType.ID).value
+
+        # Check for namespaced pattern: Model.field [alias]
+        if self.match(TokenType.DOT):
+            self.advance()  # consume dot
+            field = self.expect(TokenType.ID).value
+            model = first_id
+
+            # Check for optional alias
+            if self.match(TokenType.ID):
+                alias = self.current_token().value
+                self.advance()
+            else:
+                # No alias - use field name
+                alias = field
+
+        else:
+            # Legacy pattern: <lvar alias>
+            model = None
+            field = None
+            alias = first_id
+
+        # Skip closing '>' if present (lexer may have consumed it as separate token)
+        self.skip_newlines()
+
+        # Read content until </lvar>
+        content_parts: list[str] = []
+        while not self.match(TokenType.LVAR_CLOSE):
+            if self.match(TokenType.EOF):
+                raise ParseError("Unclosed lvar tag - missing </lvar>", self.current_token())
+
+            token = self.current_token()
+
+            # Collect all tokens as content
+            if (
+                token.type == TokenType.STR
+                or token.type == TokenType.NUM
+                or token.type == TokenType.ID
+            ):
+                content_parts.append(token.value)
+            elif token.type == TokenType.NEWLINE:
+                content_parts.append("\n")
+            elif token.type in (TokenType.DOT, TokenType.COMMA, TokenType.COLON):
+                content_parts.append(token.value)
+            elif token.type == TokenType.LPAREN:
+                content_parts.append("(")
+            elif token.type == TokenType.RPAREN:
+                content_parts.append(")")
+            elif token.type == TokenType.LBRACKET:
+                content_parts.append("[")
+            elif token.type == TokenType.RBRACKET:
+                content_parts.append("]")
+            else:
+                content_parts.append(token.value)
+
+            self.advance()
+
+        self.expect(TokenType.LVAR_CLOSE)  # </lvar>
+
+        content = "".join(content_parts).strip()
+        return Lvar(model=model, field=field, alias=alias, content=content)
+
+    def parse_lact(self) -> Lact:
+        """Parse lact (action) declaration.
+
+        Grammar:
+            Lact ::= '<lact' (ID '.' ID ID? | ID) '>' FuncCall '</lact>'
+
+        Supports:
+            Namespaced: <lact Model.field alias>func(...)</lact>
+            Direct: <lact alias>func(...)</lact>
+
+        Returns:
+            Lact node with model, field, alias, and call string
+
+        Example:
+            <lact Report.summary s>generate_summary(prompt="...")</lact>
+            → Lact(model="Report", field="summary", alias="s", call="generate_summary(...)")
+
+            <lact search>search(query="AI")</lact>
+            → Lact(model=None, field=None, alias="search", call="search(...)")
+        """
+        self.expect(TokenType.LACT_OPEN)  # <lact
+        self.skip_newlines()
+
+        # Parse identifier (could be Model, field, or alias)
+        first_id = self.expect(TokenType.ID).value
+
+        # Check for namespaced pattern: Model.field [alias]
+        if self.match(TokenType.DOT):
+            self.advance()  # consume dot
+            field = self.expect(TokenType.ID).value
+            model = first_id
+
+            # Check for optional alias
+            if self.match(TokenType.ID):
+                alias = self.current_token().value
+                self.advance()
+            else:
+                # No alias - use field name
+                alias = field
+
+        else:
+            # Direct pattern: <lact alias>
+            model = None
+            field = None
+            alias = first_id
+
+        self.skip_newlines()
+
+        # Read function call until </lact>
+        call_parts: list[str] = []
+        while not self.match(TokenType.LACT_CLOSE):
+            if self.match(TokenType.EOF):
+                raise ParseError("Unclosed lact tag - missing </lact>", self.current_token())
+
+            token = self.current_token()
+
+            # Collect all tokens as call string
+            if token.type == TokenType.STR:
+                # Preserve quotes for strings
+                call_parts.append(f'"{token.value}"')
+            elif token.type == TokenType.NUM or token.type == TokenType.ID:
+                call_parts.append(token.value)
+            elif token.type == TokenType.NEWLINE:
+                call_parts.append(" ")  # Preserve spacing but normalize newlines
+            elif token.type in (TokenType.DOT, TokenType.COMMA, TokenType.COLON):
+                call_parts.append(token.value)
+            elif token.type == TokenType.LPAREN:
+                call_parts.append("(")
+            elif token.type == TokenType.RPAREN:
+                call_parts.append(")")
+            elif token.type == TokenType.LBRACKET:
+                call_parts.append("[")
+            elif token.type == TokenType.RBRACKET:
+                call_parts.append("]")
+            else:
+                call_parts.append(token.value)
+
+            self.advance()
+
+        self.expect(TokenType.LACT_CLOSE)  # </lact>
+
+        call = "".join(call_parts).strip()
+        return Lact(model=model, field=field, alias=alias, call=call)
 
     def parse_out_block(self) -> OutBlock:
         """Parse OUT{} block.
