@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**Background Processing** (#185):
+
+- `Processor`: Priority queue-based event execution with capacity control and concurrency limiting
+- `Executor`: Flow-based state tracking with O(1) status queries via named progressions
+- `Event.streaming` field for processor streaming support
+
+**Benchmarking Infrastructure** (#174, #182, #183):
+
+- Component-organized benchmark suites (`benchmarks/graph/`, `benchmarks/flow/`, `benchmarks/pile/`, `benchmarks/lndl/`)
+- CI workflow for benchmark regression detection (>10% slower fails PR, 5-10% warns)
+- Manual workflow to generate benchmark baselines as GitHub artifacts
+
+### Changed
+
+**LNDL Architecture** (#194):
+
+- Refactored from regex-based parsing to unified Lexer/Parser/AST architecture
+- New files: `ast.py` (AST nodes), `lexer.py` (context-aware tokenizer with 17 token types)
+- Context-aware lexing (strings only tokenized inside OUT{} blocks)
+- Position tracking for improved error messages
+- Fully backward compatible via adapter functions
+
+### Fixed
+
+- **LNDL**: Removed dead code in OUT{} block parsing (#194)
+- **Documentation**: Fixed broken links and redirects (#173)
+
 ## [1.0.0-alpha5](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha5) - 2025-11-12
 
 ### Changed
