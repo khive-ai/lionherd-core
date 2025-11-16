@@ -1,6 +1,7 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
+from .ast import Identifier, Lact, Literal, Lvar, OutBlock, Program
 from .errors import (
     AmbiguousMatchError,
     InvalidConstructorError,
@@ -11,14 +12,8 @@ from .errors import (
     TypeMismatchError,
 )
 from .fuzzy import parse_lndl_fuzzy
-from .parser import (
-    extract_lacts,
-    extract_lacts_prefixed,
-    extract_lvars,
-    extract_lvars_prefixed,
-    extract_out_block,
-    parse_out_block_array,
-)
+from .lexer import Lexer, Token, TokenType
+from .parser import ParseError, Parser
 from .prompt import LNDL_SYSTEM_PROMPT, get_lndl_system_prompt
 from .resolver import parse_lndl, resolve_references_prefixed
 from .types import (
@@ -36,27 +31,32 @@ __all__ = (
     "LNDL_SYSTEM_PROMPT",
     "ActionCall",
     "AmbiguousMatchError",
+    "Identifier",
     "InvalidConstructorError",
     "LNDLError",
     "LNDLOutput",
+    "Lact",
     "LactMetadata",
+    "Lexer",
+    "Literal",
+    "Lvar",
     "LvarMetadata",
     "MissingFieldError",
     "MissingLvarError",
     "MissingOutBlockError",
+    "OutBlock",
+    "ParseError",
     "ParsedConstructor",
+    "Parser",
+    "Program",
+    "Token",
+    "TokenType",
     "TypeMismatchError",
     "ensure_no_action_calls",
-    "extract_lacts",
-    "extract_lacts_prefixed",
-    "extract_lvars",  # backward compatibility
-    "extract_lvars_prefixed",
-    "extract_out_block",
     "get_lndl_system_prompt",
     "has_action_calls",
     "parse_lndl",
     "parse_lndl_fuzzy",
-    "parse_out_block_array",
     "resolve_references_prefixed",
     "revalidate_with_action_results",
 )

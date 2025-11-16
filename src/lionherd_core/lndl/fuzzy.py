@@ -9,13 +9,7 @@ from lionherd_core.libs.string_handlers._string_similarity import (
 )
 from lionherd_core.types import Operable
 
-from .errors import AmbiguousMatchError, MissingFieldError
-from .parser import (
-    extract_lacts_prefixed,
-    extract_lvars_prefixed,
-    extract_out_block,
-    parse_out_block_array,
-)
+from .errors import AmbiguousMatchError, MissingFieldError, MissingOutBlockError
 from .resolver import resolve_references_prefixed
 from .types import LactMetadata, LNDLOutput, LvarMetadata
 
@@ -159,11 +153,39 @@ def parse_lndl_fuzzy(
     )  # Stricter for model names
     threshold_spec = threshold_spec if threshold_spec is not None else threshold
 
-    # 1. Extract namespace-prefixed lvars, lacts, and OUT{} block
-    lvars_raw = extract_lvars_prefixed(response)
-    lacts_raw = extract_lacts_prefixed(response)
-    out_content = extract_out_block(response)
-    out_fields_raw = parse_out_block_array(out_content)
+    # 1. Parse using new lexer/parser (hybrid approach)
+    from .lexer import Lexer
+    from .parser import Parser
+
+    lexer = Lexer(response)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=response)
+    program = parser.parse()
+
+    # Convert AST to resolver input format
+    lvars_raw: dict[str, LvarMetadata] = {}
+    for lvar in program.lvars:
+        lvars_raw[lvar.alias] = LvarMetadata(
+            model=lvar.model,
+            field=lvar.field,
+            local_name=lvar.alias,
+            value=lvar.content,
+        )
+
+    lacts_raw: dict[str, LactMetadata] = {}
+    for lact in program.lacts:
+        lacts_raw[lact.alias] = LactMetadata(
+            model=lact.model,
+            field=lact.field,
+            local_name=lact.alias,
+            call=lact.call,
+        )
+
+    # Check for OUT{} block
+    if not program.out_block:
+        raise MissingOutBlockError("No OUT{} block found in response")
+
+    out_fields_raw = program.out_block.fields
 
     # Build spec map for O(1) lookups (used in both strict and fuzzy modes)
     spec_map = {spec.base_type.__name__: spec for spec in operable.get_specs()}
