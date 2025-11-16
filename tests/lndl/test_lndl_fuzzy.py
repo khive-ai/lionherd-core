@@ -964,3 +964,68 @@ OUT{model:[f]}
 
         # Should correct "fild" -> "field" (single candidate, returned in list)
         assert output.model.field == "Value"
+
+    def test_fuzzy_with_raw_lvar(self):
+        """Test fuzzy parsing with raw lvar (RLvar)."""
+
+        from lionherd_core.types import Operable, Spec
+
+        response = """
+<lvar reasoning>This is raw reasoning text</lvar>
+
+OUT{text:[reasoning]}
+"""
+        operable = Operable([Spec(str, name="text")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        assert output.text == "This is raw reasoning text"
+
+    def test_strict_mode_with_raw_lvar(self):
+        """Test strict mode validation skips raw lvars."""
+
+        from lionherd_core.types import Operable, Spec
+
+        response = """
+<lvar reasoning>Raw text</lvar>
+
+OUT{text:[reasoning]}
+"""
+        operable = Operable([Spec(str, name="text")])
+        # Strict mode should work with raw lvars (they skip validation)
+        output = parse_lndl_fuzzy(response, operable, threshold=1.0)
+
+        assert output.text == "Raw text"
+
+    def test_fuzzy_raw_lvar_passes_through(self):
+        """Test raw lvar passes through fuzzy correction unchanged."""
+
+        from lionherd_core.types import Operable, Spec
+
+        class Report(BaseModel):
+            title: str
+
+        # Mix namespaced and raw lvars
+        response = """
+<lvar Report.titel t>Title</lvar>
+<lvar reasoning>Raw reasoning</lvar>
+
+OUT{report:[t], text:[reasoning]}
+"""
+        operable = Operable([Spec(Report, name="report"), Spec(str, name="text")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        assert output.report.title == "Title"  # Corrected
+        assert output.text == "Raw reasoning"  # Unchanged
+
+    def test_fuzzy_literal_value_in_out_block(self):
+        """Test fuzzy with literal scalar value (not array)."""
+
+        from lionherd_core.types import Operable, Spec
+
+        response = """
+OUT{count: 42}
+"""
+        operable = Operable([Spec(int, name="count")])
+        output = parse_lndl_fuzzy(response, operable, threshold=0.85)
+
+        assert output.count == 42

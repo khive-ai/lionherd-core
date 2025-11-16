@@ -482,3 +482,186 @@ class TestParseValueUtility:
 
         result = parse_value("hello")
         assert result == "hello"
+
+    def test_parse_value_invalid_literal_returns_string(self):
+        """Test parse_value returns original string when literal_eval fails."""
+
+        result = parse_value("invalid{syntax")
+        assert result == "invalid{syntax"
+
+    def test_parse_value_non_string_returns_as_is(self):
+        """Test parse_value returns non-string values unchanged (line 617)."""
+
+        # Integer
+        result = parse_value(42)
+        assert result == 42
+
+        # Float
+        result = parse_value(3.14)
+        assert result == 3.14
+
+        # Boolean
+        result = parse_value(True)
+        assert result is True
+
+        # None
+        result = parse_value(None)
+        assert result is None
+
+        # List
+        result = parse_value([1, 2, 3])
+        assert result == [1, 2, 3]
+
+
+class TestParserEdgeCases:
+    """Test edge cases for 100% coverage."""
+
+    def test_current_token_when_past_end(self, tokenize):
+        """Test current_token() returns EOF when pos >= len(tokens)."""
+        text = "<lvar Report.title t>AI</lvar>"
+        tokens = tokenize(text)
+        parser = Parser(tokens, source_text=text)
+        # Move parser past end of tokens
+        parser.pos = len(tokens) + 5
+        token = parser.current_token()
+        assert token.type.name == "EOF"
+
+    def test_peek_token_when_beyond_bounds(self, tokenize):
+        """Test peek_token() returns EOF when peek_pos >= len(tokens)."""
+        text = "<lvar Report.title t>AI</lvar>"
+        tokens = tokenize(text)
+        parser = Parser(tokens, source_text=text)
+        # Peek very far ahead
+        token = parser.peek_token(offset=100)
+        assert token.type.name == "EOF"
+
+    def test_parse_lvar_without_source_text(self, tokenize):
+        """Test parse_lvar() raises error when source_text is None."""
+        text = "<lvar Report.title t>AI Safety</lvar>"
+        tokens = tokenize(text)
+        parser = Parser(tokens, source_text=None)
+        # Manually call parse_lvar after positioning
+        parser.pos = 0
+        with pytest.raises(ParseError, match="requires source_text"):
+            parser.parse_lvar()
+
+    def test_parse_lact_without_source_text(self, tokenize):
+        """Test parse_lact() raises error when source_text is None."""
+        text = "<lact Report.summary s>generate()</lact>"
+        tokens = tokenize(text)
+        parser = Parser(tokens, source_text=None)
+        parser.pos = 0
+        with pytest.raises(ParseError, match="requires source_text"):
+            parser.parse_lact()
+
+    def test_parse_lvar_regex_mismatch(self):
+        """Test parse_lvar() error when regex can't extract content."""
+        # Create malformed lvar where regex won't match but </lvar> exists
+        text = "<lvar Report.title t>content</lvar> extra </lvar>"
+        lexer = Lexer(text)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text="<lvar Report.wrongfield t>content</lvar>")
+        with pytest.raises(ParseError, match="Could not extract lvar content"):
+            parser.parse()
+
+    def test_parse_lact_regex_mismatch(self):
+        """Test parse_lact() error when regex can't extract call."""
+        # Create malformed lact where regex won't match but </lact> exists
+        text = "<lact Report.summary s>generate()</lact>"
+        lexer = Lexer(text)
+        tokens = lexer.tokenize()
+        # Give wrong source_text so regex doesn't match
+        parser = Parser(tokens, source_text="<lact Report.wrongfield s>generate()</lact>")
+        with pytest.raises(ParseError, match="Could not extract lact call"):
+            parser.parse()
+
+    def test_parse_lvar_eof_in_token_loop(self):
+        """Test parse_lvar() when EOF reached in token loop before closing tag."""
+        # Create source_text with </lvar> so regex succeeds, but truncate tokens
+        source_text = "<lvar Report.title t>content</lvar>"
+        lexer = Lexer(source_text)
+        tokens = lexer.tokenize()
+        # Remove the LVAR_CLOSE token to simulate EOF before closing
+        tokens = [t for t in tokens if t.type.name != "LVAR_CLOSE"]
+        parser = Parser(tokens, source_text=source_text)
+        with pytest.raises(ParseError, match=r"Unclosed lvar tag.*missing"):
+            parser.parse()
+
+    def test_parse_lact_eof_in_token_loop(self):
+        """Test parse_lact() when EOF reached in token loop before closing tag."""
+        # Create source_text with </lact> so regex succeeds, but truncate tokens
+        source_text = "<lact Report.summary s>generate()</lact>"
+        lexer = Lexer(source_text)
+        tokens = lexer.tokenize()
+        # Remove the LACT_CLOSE token to simulate EOF before closing
+        tokens = [t for t in tokens if t.type.name != "LACT_CLOSE"]
+        parser = Parser(tokens, source_text=source_text)
+        with pytest.raises(ParseError, match=r"Unclosed lact tag.*missing"):
+            parser.parse()
+
+    def test_out_block_immediate_close_after_newlines(self, parse_lndl_ast):
+        """Test OUT block closes after skipping newlines (line 512)."""
+        # The while loop checks OUT_CLOSE/EOF, then skips newlines
+        # After skipping, it checks again and breaks (line 512)
+        # Multiple variations to ensure the break is hit
+        texts = [
+            "OUT{\n}",  # Newline then close
+            "OUT{\n\n}",  # Multiple newlines then close
+            "OUT{\n\n\n\n}",  # Many newlines then close
+        ]
+        for text in texts:
+            program = parse_lndl_ast(text)
+            assert program.out_block is not None
+            assert program.out_block.fields == {}
+
+    def test_out_block_eof_after_newlines(self, parse_lndl_ast):
+        """Test OUT block EOF after skipping newlines (line 512)."""
+        # Same as above but with EOF instead of OUT_CLOSE
+        text = "OUT{\n\n"
+        program = parse_lndl_ast(text)
+        assert program.out_block is not None
+
+    def test_out_block_non_id_token_skipped(self, parse_lndl_ast):
+        """Test OUT block skips non-ID tokens where field name expected."""
+        text = "OUT{\n, : , field: value}"
+        program = parse_lndl_ast(text)
+        # Non-ID tokens should be skipped, only valid field parsed
+        assert "field" in program.out_block.fields
+
+    def test_out_block_field_without_colon(self, parse_lndl_ast):
+        """Test OUT block skips field without colon."""
+        text = "OUT{field_without_colon, valid_field: value}"
+        program = parse_lndl_ast(text)
+        # Field without colon should be skipped
+        assert "field_without_colon" not in program.out_block.fields
+        assert "valid_field" in program.out_block.fields
+
+    def test_out_block_array_immediate_close_after_newlines(self, parse_lndl_ast):
+        """Test OUT block array closes after skipping newlines (line 544)."""
+        # The while loop checks RBRACKET/EOF, then skips newlines
+        # After skipping, it checks again and breaks (line 544)
+        # Multiple variations to ensure the break is hit
+        texts = [
+            "OUT{field: [\n]}",  # Newline then close
+            "OUT{field: [\n\n]}",  # Multiple newlines then close
+            "OUT{field: [\n\n\n\n]}",  # Many newlines then close
+        ]
+        for text in texts:
+            program = parse_lndl_ast(text)
+            assert program.out_block.fields["field"] == []
+
+    def test_out_block_array_eof_after_newlines(self, parse_lndl_ast):
+        """Test OUT block array EOF after newlines (line 544)."""
+        # Same as above but with EOF instead of RBRACKET
+        text = "OUT{field: [\n\n"
+        program = parse_lndl_ast(text)
+        assert program.out_block is not None
+
+    def test_out_block_unknown_value_type(self, parse_lndl_ast):
+        """Test OUT block with unknown/unsupported value type."""
+        # Use LVAR_OPEN token where value expected (completely wrong token)
+        text = "OUT{field: <lvar}"
+        program = parse_lndl_ast(text)
+        # Parser should skip unknown value and move on
+        # Field might be missing or empty
+        assert program.out_block is not None

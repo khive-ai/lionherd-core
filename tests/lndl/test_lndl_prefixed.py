@@ -5,73 +5,13 @@ import pytest
 from pydantic import BaseModel, field_validator
 
 from lionherd_core.lndl import (
-    Lexer,
     MissingFieldError,
-    Parser,
     TypeMismatchError,
     parse_lndl,
     resolve_references_prefixed,
 )
-from lionherd_core.lndl.ast import Lvar
-from lionherd_core.lndl.types import LvarMetadata, RLvarMetadata
+from lionherd_core.lndl.types import LvarMetadata
 from lionherd_core.types import Operable, Spec
-
-# ============================================================================
-# Helper Functions (New API Adapters)
-# ============================================================================
-
-
-def extract_lvars_prefixed(text: str) -> dict[str, LvarMetadata | RLvarMetadata]:
-    """Extract lvars using new Lexer/Parser architecture.
-
-    This function adapts the new Parser API to match the old extract_lvars_prefixed
-    interface for backward compatibility in tests.
-    """
-    lexer = Lexer(text)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, source_text=text)
-    program = parser.parse()
-
-    lvars = {}
-    for lvar in program.lvars:
-        if isinstance(lvar, Lvar):
-            # Namespaced lvar
-            lvars[lvar.alias] = LvarMetadata(
-                model=lvar.model,
-                field=lvar.field,
-                local_name=lvar.alias,
-                value=lvar.content,
-            )
-        else:  # RLvar
-            # Raw lvar
-            lvars[lvar.alias] = RLvarMetadata(
-                local_name=lvar.alias,
-                value=lvar.content,
-            )
-
-    return lvars
-
-
-def parse_out_block_array(content: str) -> dict[str, list[str] | str | int | float | bool]:
-    """Parse OUT{} block using new Parser.
-
-    This function adapts the new Parser API to match the old parse_out_block_array
-    interface for backward compatibility in tests.
-    """
-    # Wrap content in OUT{} if not already wrapped
-    text = content.strip()
-    if not text.startswith("OUT{"):
-        text = f"OUT{{{text}}}"
-
-    lexer = Lexer(text)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, source_text=text)
-    program = parser.parse()
-
-    if program.out_block:
-        return program.out_block.fields
-    return {}
-
 
 # ============================================================================
 # Test Models
@@ -114,7 +54,7 @@ class ValidatedReport(BaseModel):
 class TestExtractLvarsPrefixed:
     """Test namespace-prefixed lvar extraction using new Parser."""
 
-    def test_extract_with_local_name(self):
+    def test_extract_with_local_name(self, extract_lvars_prefixed):
         """Test extracting lvar with explicit local name."""
         text = "<lvar Report.title title>here is a good title</lvar>"
         lvars = extract_lvars_prefixed(text)
@@ -126,7 +66,7 @@ class TestExtractLvarsPrefixed:
         assert lvars["title"].local_name == "title"
         assert lvars["title"].value == "here is a good title"
 
-    def test_extract_without_local_name(self):
+    def test_extract_without_local_name(self, extract_lvars_prefixed):
         """Test extracting lvar without local name (uses field name)."""
         text = "<lvar Report.title>here is a good title</lvar>"
         lvars = extract_lvars_prefixed(text)
@@ -138,7 +78,7 @@ class TestExtractLvarsPrefixed:
         assert lvars["title"].local_name == "title"
         assert lvars["title"].value == "here is a good title"
 
-    def test_extract_with_custom_alias(self):
+    def test_extract_with_custom_alias(self, extract_lvars_prefixed):
         """Test extracting lvar with custom local alias."""
         text = "<lvar Reason.confidence conf>0.85</lvar>"
         lvars = extract_lvars_prefixed(text)
@@ -150,7 +90,7 @@ class TestExtractLvarsPrefixed:
         assert lvars["conf"].local_name == "conf"
         assert lvars["conf"].value == "0.85"
 
-    def test_extract_multiple_lvars(self):
+    def test_extract_multiple_lvars(self, extract_lvars_prefixed):
         """Test extracting multiple namespace-prefixed lvars."""
         text = """
         <lvar Report.title title>here is a good title</lvar>
@@ -166,7 +106,7 @@ class TestExtractLvarsPrefixed:
         assert "summ" in lvars
         assert "ana" in lvars
 
-    def test_extract_with_revision(self):
+    def test_extract_with_revision(self, extract_lvars_prefixed):
         """Test extracting multiple versions of same field (revision tracking)."""
         text = """
         <lvar Report.summary summ>first version</lvar>
@@ -178,7 +118,7 @@ class TestExtractLvarsPrefixed:
         assert lvars["summ"].value == "first version"
         assert lvars["summ2"].value == "revised version"
 
-    def test_extract_with_multiline_value(self):
+    def test_extract_with_multiline_value(self, extract_lvars_prefixed):
         """Test extracting lvar with multiline value."""
         text = """
         <lvar Report.summary summ>
@@ -193,7 +133,7 @@ class TestExtractLvarsPrefixed:
         assert "This is a long summary" in lvars["summ"].value
         assert "multiple lines" in lvars["summ"].value
 
-    def test_extract_from_thinking_flow(self):
+    def test_extract_from_thinking_flow(self, extract_lvars_prefixed):
         """Test extraction from natural thinking flow with prose."""
         text = """
         Let me work through this step by step...
@@ -211,7 +151,7 @@ class TestExtractLvarsPrefixed:
         assert lvars["title"].value == "here is a good title"
         assert lvars["conf"].value == "0.85"
 
-    def test_extract_empty_returns_empty_dict(self):
+    def test_extract_empty_returns_empty_dict(self, extract_lvars_prefixed):
         """Test that text without prefixed lvars returns empty dict."""
         text = "Just some plain text without any lvars"
         lvars = extract_lvars_prefixed(text)
@@ -222,7 +162,7 @@ class TestExtractLvarsPrefixed:
 class TestParseOutBlockArray:
     """Test array syntax OUT block parsing using new Parser."""
 
-    def test_parse_array_syntax_single_field(self):
+    def test_parse_array_syntax_single_field(self, parse_out_block_array):
         """Test parsing OUT block with array syntax for single field."""
         content = "report:[title, summary]"
         out_fields = parse_out_block_array(content)
@@ -231,7 +171,7 @@ class TestParseOutBlockArray:
         assert "report" in out_fields
         assert out_fields["report"] == ["title", "summary"]
 
-    def test_parse_array_syntax_multiple_fields(self):
+    def test_parse_array_syntax_multiple_fields(self, parse_out_block_array):
         """Test parsing OUT block with multiple fields."""
         content = "report:[title, summary], reasoning:[conf, ana]"
         out_fields = parse_out_block_array(content)
@@ -240,7 +180,7 @@ class TestParseOutBlockArray:
         assert out_fields["report"] == ["title", "summary"]
         assert out_fields["reasoning"] == ["conf", "ana"]
 
-    def test_parse_single_variable_no_brackets(self):
+    def test_parse_single_variable_no_brackets(self, parse_out_block_array):
         """Test parsing single variable without brackets."""
         content = "report:title, reasoning:conf"
         out_fields = parse_out_block_array(content)
@@ -249,7 +189,7 @@ class TestParseOutBlockArray:
         assert out_fields["report"] == ["title"]
         assert out_fields["reasoning"] == ["conf"]
 
-    def test_parse_mixed_array_and_single(self):
+    def test_parse_mixed_array_and_single(self, parse_out_block_array):
         """Test parsing mix of array and single variable syntax."""
         content = "report:[title, summary], reasoning:conf"
         out_fields = parse_out_block_array(content)
@@ -258,7 +198,7 @@ class TestParseOutBlockArray:
         assert out_fields["report"] == ["title", "summary"]
         assert out_fields["reasoning"] == ["conf"]
 
-    def test_parse_with_whitespace(self):
+    def test_parse_with_whitespace(self, parse_out_block_array):
         """Test parsing with various whitespace."""
         content = """
         report : [ title , summary ] ,
@@ -270,7 +210,7 @@ class TestParseOutBlockArray:
         assert out_fields["report"] == ["title", "summary"]
         assert out_fields["reasoning"] == ["conf", "ana"]
 
-    def test_parse_with_revision_variable(self):
+    def test_parse_with_revision_variable(self, parse_out_block_array):
         """Test parsing with revised variable names."""
         content = "report:[title, summ2], reasoning:[conf, ana]"
         out_fields = parse_out_block_array(content)
@@ -934,6 +874,102 @@ class TestValidators:
         output = parse_lndl(response, operable)
 
         assert output.report.title == "[report] GOOD TITLE"
+
+
+class TestResolverEdgeCases:
+    def test_scalar_field_multiple_variables_error(self):
+        """Test error when scalar field uses multiple variables."""
+        response = """
+        <lvar Report.title t1>Title1</lvar>
+        <lvar Report.summary t2>Title2</lvar>
+
+        OUT{report:[t1, t2], quality_score:[t1, t2]}
+        """
+
+        operable = Operable([Spec(Report, name="report"), Spec(float, name="quality_score")])
+
+        with pytest.raises(ExceptionGroup) as exc_info:
+            parse_lndl(response, operable)
+
+        # Should have error about multiple variables for scalar
+        assert any("cannot use multiple variables" in str(e) for e in exc_info.value.exceptions)
+
+    def test_lvar_value_already_typed(self):
+        """Test resolver with lvar value already typed (not string)."""
+        # Manually create metadata with typed value (as parser would)
+        out_fields = {"quality_score": ["score"]}
+        lvars = {
+            "score": LvarMetadata("Score", "value", "score", 0.95),  # Already float, not string
+        }
+        operable = Operable([Spec(float, name="quality_score")])
+
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
+
+        assert output.quality_score == 0.95
+
+    def test_raw_lvar_in_basemodel_field_error(self):
+        """Test error when raw lvar used in BaseModel field."""
+        response = """
+        <lvar reasoning>Raw reasoning text</lvar>
+
+        OUT{report:[reasoning]}
+        """
+
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(ExceptionGroup) as exc_info:
+            parse_lndl(response, operable)
+
+        # Should have error about raw lvar in BaseModel field
+        assert any(
+            "Raw lvar" in str(e) and "cannot be used in BaseModel" in str(e)
+            for e in exc_info.value.exceptions
+        )
+
+    def test_basemodel_lvar_value_not_string(self):
+        """Test BaseModel construction with lvar value already typed."""
+        # Manually create metadata with typed values
+        out_fields = {"reasoning": ["conf", "ana"]}
+
+        class Reason(BaseModel):
+            confidence: float
+            analysis: str
+
+        lvars = {
+            "conf": LvarMetadata("Reason", "confidence", "conf", 0.85),  # Already float
+            "ana": LvarMetadata("Reason", "analysis", "ana", "Text"),
+        }
+        operable = Operable([Spec(Reason, name="reasoning")])
+
+        output = resolve_references_prefixed(out_fields, lvars, {}, operable)
+
+        assert output.reasoning.confidence == 0.85
+
+    def test_parse_lndl_with_raw_lvar(self):
+        """Test parse_lndl with raw lvar (RLvar)."""
+        response = """
+        <lvar reasoning>This is raw reasoning</lvar>
+
+        OUT{text:[reasoning]}
+        """
+
+        operable = Operable([Spec(str, name="text")])
+        output = parse_lndl(response, operable)
+
+        assert output.text == "This is raw reasoning"
+
+    def test_parse_lndl_missing_out_block(self):
+        """Test parse_lndl raises error when OUT block missing."""
+        from lionherd_core.lndl.errors import MissingOutBlockError
+
+        response = """
+        <lvar Report.title t>Title</lvar>
+        """
+
+        operable = Operable([Spec(Report, name="report")])
+
+        with pytest.raises(MissingOutBlockError):
+            parse_lndl(response, operable)
 
 
 class TestHardeningImprovements:

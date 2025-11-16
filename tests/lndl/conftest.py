@@ -14,6 +14,8 @@ import pytest
 from pydantic import BaseModel
 
 from lionherd_core.lndl import Lexer, Parser
+from lionherd_core.lndl.ast import Lvar
+from lionherd_core.lndl.types import LvarMetadata, RLvarMetadata
 from lionherd_core.types import Operable, Spec
 
 # ============================================================================
@@ -216,5 +218,56 @@ def parse_lndl_ast():
         tokens = lexer.tokenize()
         parser = Parser(tokens, text)
         return parser.parse()
+
+    return _parse
+
+
+@pytest.fixture
+def extract_lvars_prefixed():
+    """Helper to extract lvars using new Lexer/Parser architecture."""
+
+    def _extract(text: str) -> dict[str, LvarMetadata | RLvarMetadata]:
+        lexer = Lexer(text)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=text)
+        program = parser.parse()
+
+        lvars = {}
+        for lvar in program.lvars:
+            if isinstance(lvar, Lvar):
+                # Namespaced lvar
+                lvars[lvar.alias] = LvarMetadata(
+                    model=lvar.model,
+                    field=lvar.field,
+                    local_name=lvar.alias,
+                    value=lvar.content,
+                )
+            else:  # RLvar
+                # Raw lvar
+                lvars[lvar.alias] = RLvarMetadata(
+                    local_name=lvar.alias,
+                    value=lvar.content,
+                )
+
+        return lvars
+
+    return _extract
+
+
+@pytest.fixture
+def parse_out_block_array():
+    """Helper to parse OUT{} block using new Parser."""
+
+    def _parse(content: str) -> dict[str, list[str] | str | int | float | bool]:
+        text = content.strip()
+        if not text.startswith("OUT{"):
+            text = f"OUT{{{text}}}"
+
+        lexer = Lexer(text)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=text)
+        program = parser.parse()
+
+        return program.out_block.fields if program.out_block else {}
 
     return _parse
