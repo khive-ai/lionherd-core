@@ -411,40 +411,36 @@ def test_benchmark_lndl_fuzzy_with_case_issues(benchmark, lndl_with_case_issues,
 
 
 def test_benchmark_lndl_tokenization(benchmark, perfect_lndl_100b):
-    """Measure tokenization stage overhead (extract lvars/lacts, tokenize OUT{}).
+    """Measure tokenization + parsing overhead.
 
-    Note: New architecture integrates OUT{} tokenization with parsing.
-    This benchmark measures regex extraction + lexer tokenization overhead.
+    New architecture uses token-based parser throughout for consistency.
+    This benchmark measures full lexer + parser overhead.
     """
-    import re
-
     from lionherd_core.lndl.lexer import Lexer
-    from lionherd_core.lndl.parser import extract_lacts_prefixed, extract_lvars_prefixed
+    from lionherd_core.lndl.parser import Parser
 
-    def tokenize():
-        # Extract lvars and lacts (regex-based)
-        lvars = extract_lvars_prefixed(perfect_lndl_100b)
-        lacts = extract_lacts_prefixed(perfect_lndl_100b)
+    def tokenize_and_parse():
+        # Full tokenization and parsing
+        lexer = Lexer(perfect_lndl_100b)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=perfect_lndl_100b)
+        program = parser.parse()
 
-        # Extract OUT{} block content (regex)
-        out_match = re.search(r"OUT\{([^}]+)\}", perfect_lndl_100b, re.DOTALL)
-        out_content = out_match.group(0) if out_match else ""
+        return program
 
-        # Tokenize OUT{} block (new architecture uses Lexer)
-        lexer = Lexer(out_content)
-        out_tokens = lexer.tokenize()
-
-        return lvars, lacts, out_tokens
-
-    benchmark(tokenize)
+    benchmark(tokenize_and_parse)
 
 
 def test_benchmark_lndl_fuzzy_correction(benchmark, lndl_with_typos):
     """Measure fuzzy matching overhead (typo correction)."""
-    from lionherd_core.lndl.parser import extract_lvars_prefixed
+    from lionherd_core.lndl.lexer import Lexer
+    from lionherd_core.lndl.parser import Parser
 
-    # Pre-extract to isolate fuzzy matching
-    lvars_raw = extract_lvars_prefixed(lndl_with_typos)
+    # Pre-parse to isolate fuzzy matching
+    lexer = Lexer(lndl_with_typos)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=lndl_with_typos)
+    program = parser.parse()
 
     # Operable for correction
     operable = Operable([Spec(Report, name="report")])
@@ -457,9 +453,10 @@ def test_benchmark_lndl_fuzzy_correction(benchmark, lndl_with_typos):
         expected_models = list(spec_map.keys())
 
         model_corrections = {}
-        for lvar in lvars_raw.values():
-            corrected = _correct_name(lvar.model, expected_models, 0.90, "model")
-            model_corrections[lvar.model] = corrected
+        for lvar in program.lvars:
+            if lvar.model:
+                corrected = _correct_name(lvar.model, expected_models, 0.90, "model")
+                model_corrections[lvar.model] = corrected
 
         return model_corrections
 
