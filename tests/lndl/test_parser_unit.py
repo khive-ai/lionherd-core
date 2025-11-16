@@ -326,3 +326,39 @@ class TestDuplicateAliases:
         assert program.lvars[0].alias == "t"
         assert program.lvars[1].alias == "s"
         assert program.lacts[0].alias == "p"
+
+
+class TestOutBlockArrayRestrictions:
+    """Test OUT{} array parsing restrictions."""
+
+    def test_array_with_numeric_literal_raises_error(self):
+        """Test that arrays with numeric literals raise ParseError."""
+        source = "OUT{scores: [0.8, 0.9]}"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
+            parser.parse_out_block()
+
+    def test_array_with_string_literal_raises_error(self):
+        """Test that arrays with string literals raise ParseError."""
+        source = 'OUT{tags: ["tag1", "tag2"]}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
+            parser.parse_out_block()
+
+    def test_array_with_ids_succeeds(self):
+        """Test that arrays with IDs (variable references) parse successfully."""
+        source = "OUT{report: [title, summary, score]}"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        out_block = parser.parse_out_block()
+
+        assert "report" in out_block.fields
+        assert out_block.fields["report"] == ["title", "summary", "score"]

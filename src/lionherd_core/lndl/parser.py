@@ -537,17 +537,14 @@ class Parser:
                     if self.match(TokenType.ID):
                         refs.append(self.current_token().value)
                         self.advance()
-                    elif self.match(TokenType.NUM):
-                        # Handle numeric literals in arrays (e.g., [0.8, 0.9])
-                        refs.append(self.current_token().value)
-                        self.advance()
-                    elif self.match(TokenType.STR):
-                        # Handle string literals in arrays (e.g., ["a", "b"])
-                        refs.append(self.current_token().value)
-                        self.advance()
                     else:
-                        # Unknown token in array - skip to avoid infinite loop
-                        self.advance()
+                        # Only IDs allowed in arrays (variable/action references)
+                        # Literals not supported - resolver expects references only
+                        raise ParseError(
+                            f"Arrays must contain only variable/action references (IDs), "
+                            f"not literals. Got: {self.current_token().type}",
+                            self.current_token(),
+                        )
 
                     self.skip_newlines()
 

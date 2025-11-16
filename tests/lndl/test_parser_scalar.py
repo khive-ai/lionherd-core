@@ -337,35 +337,29 @@ class TestOutBlockArrayParsing:
         assert out_block.fields["field"] == ["ref1"]
 
     def test_array_with_string_literals(self):
-        """Test array parsing with string literals (lines 520-523)."""
+        """Test array parsing rejects string literals (arrays must contain only IDs)."""
         source = 'OUT{field:["str1", "str2", "str3"]}'
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source_text=source)
 
-        out_block = parser.parse_out_block()
-
-        # Should parse string array (STR tokens have quotes stripped by lexer)
-        assert "field" in out_block.fields
-        assert out_block.fields["field"] == ["str1", "str2", "str3"]
+        # Arrays must contain only variable/action references (IDs), not literals
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
+            parser.parse_out_block()
 
     def test_array_with_mixed_types(self):
-        """Test array with IDs, numbers, and strings (lines 513-526)."""
+        """Test array rejects mixed types (only IDs allowed)."""
         source = 'OUT{field:[ref1, 630, 4.02, "text"]}'
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source_text=source)
 
-        out_block = parser.parse_out_block()
-
-        assert "field" in out_block.fields
-        # All converted to strings in refs list
-        assert len(out_block.fields["field"]) == 4
-        assert "ref1" in out_block.fields["field"]
-        assert "630" in out_block.fields["field"]
+        # First non-ID token (630) should trigger error
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
+            parser.parse_out_block()
 
     def test_array_with_unknown_token_type(self):
-        """Test array with unknown token type gets skipped (lines 524-526)."""
+        """Test array rejects unknown token types (only IDs allowed)."""
         # Manually create tokens with unknown type
         tokens = [
             Token(TokenType.OUT_OPEN, "OUT{", 1, 1),
@@ -384,12 +378,9 @@ class TestOutBlockArrayParsing:
         ]
         parser = Parser(tokens, source_text="OUT{field:[ref1,OUT{,ref2]}")
 
-        out_block = parser.parse_out_block()
-
-        # Should skip unknown token and parse valid ones
-        assert "field" in out_block.fields
-        assert "ref1" in out_block.fields["field"]
-        assert "ref2" in out_block.fields["field"]
+        # OUT_OPEN token should trigger error
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
+            parser.parse_out_block()
 
 
 class TestOutBlockValueTypes:
@@ -484,7 +475,7 @@ class TestComplexParsingScenarios:
     """Test complex parsing scenarios combining multiple edge cases."""
 
     def test_out_block_with_all_value_types(self):
-        """Test OUT{} with IDs, strings, numbers, booleans, and arrays."""
+        """Test OUT{} with IDs, strings, numbers, booleans, and arrays (IDs only)."""
         source = """OUT{
             single_ref: ref1,
             str_val: "text",
@@ -492,9 +483,7 @@ class TestComplexParsingScenarios:
             float_val: 4.02,
             bool_true: true,
             bool_false: false,
-            array_refs: [r1, r2, r3],
-            array_nums: [1, 2, 3],
-            array_strs: ["a", "b"]
+            array_refs: [r1, r2, r3]
         }"""
         lexer = Lexer(source)
         tokens = lexer.tokenize()
@@ -509,7 +498,6 @@ class TestComplexParsingScenarios:
         assert out_block.fields["bool_true"] is True
         assert out_block.fields["bool_false"] is False
         assert out_block.fields["array_refs"] == ["r1", "r2", "r3"]
-        assert "1" in out_block.fields["array_nums"]
 
     def test_malformed_out_block_recovery(self):
         """Test parser recovers from malformed fields in OUT{} block."""

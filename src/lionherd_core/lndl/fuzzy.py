@@ -86,8 +86,8 @@ def _correct_name(
             f"Multiple candidates scored within 0.05. Be more specific."
         )
 
-    # Single clear winner
-    match = result[0]
+    # Single clear winner - use argmax instead of relying on result order
+    match = max(scores.items(), key=lambda kv: kv[1])[0]
 
     # Log correction
     if match != target:

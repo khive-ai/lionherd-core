@@ -778,7 +778,9 @@ class TestScalarLiterals:
         assert "Failed to convert" in str(exc_info.value.exceptions[0])
 
     def test_scalar_with_array_syntax_error(self):
-        """Test error when scalar uses array syntax with multiple variables."""
+        """Test error when scalar field uses array literals (parser rejects literals)."""
+        from lionherd_core.lndl.parser import ParseError
+
         response = """
         <lvar Report.title t>Title</lvar>
         <lvar Report.summary s>Summary</lvar>
@@ -788,13 +790,9 @@ class TestScalarLiterals:
 
         operable = Operable([Spec(Report, name="report"), Spec(float, name="quality_score")])
 
-        with pytest.raises(ExceptionGroup) as exc_info:
+        # Parser now rejects array literals (0.8, 0.9) before reaching resolver
+        with pytest.raises(ParseError, match=r"Arrays must contain only.*references"):
             parse_lndl(response, operable)
-
-        # Verify ExceptionGroup contains ValueError about multiple variables
-        assert len(exc_info.value.exceptions) == 1
-        assert isinstance(exc_info.value.exceptions[0], ValueError)
-        assert "cannot use multiple variables" in str(exc_info.value.exceptions[0])
 
     def test_scalar_from_single_variable_array(self):
         """Test scalar field with single-variable array syntax."""

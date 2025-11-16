@@ -208,8 +208,8 @@ class TestPositionTracking:
         for token in tokens[:-1]:  # Exclude EOF
             assert token.line == 1
 
-        # Column should advance
-        assert tokens[0].column == 0  # OUT_OPEN at position 0
+        # Column should advance (1-indexed)
+        assert tokens[0].column == 1  # OUT_OPEN at column 1
 
     def test_multiline_positions(self):
         """Test line numbers advance correctly across newlines"""

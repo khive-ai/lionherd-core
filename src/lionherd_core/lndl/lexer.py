@@ -98,7 +98,7 @@ class Lexer:
         self.text = text
         self.pos = 0
         self.line = 1
-        self.column = 0
+        self.column = 1  # 1-indexed column tracking
         self.tokens: list[Token] = []
 
     def current_char(self) -> str | None:
