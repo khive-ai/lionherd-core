@@ -11,44 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Background Processing** (#185):
 
-- `Processor`: Priority queue-based event execution with capacity control, background loop, and concurrency limiting
-- `Executor`: Flow-based state tracking where `EventStatus` → `Progression` map 1:1
-- O(1) status queries via named progressions (`pending`, `processing`, `completed`, `failed`)
-- UUID-based queueing (lightweight references, events stored in `Flow.items`)
+- `Processor`: Priority queue-based event execution with capacity control and concurrency limiting
+- `Executor`: Flow-based state tracking with O(1) status queries via named progressions
 - `Event.streaming` field for processor streaming support
-- 91 comprehensive tests with verbose architectural documentation (39 Processor, 52 Executor)
 
 **Benchmarking Infrastructure** (#174, #182, #183):
 
-- Component-organized benchmark suites (`benchmarks/graph/`, `benchmarks/flow/`, `benchmarks/pile/`, `benchmarks/lndl/`) (#174)
-- Dependencies: `pytest-benchmark>=5.1.0`, `memory-profiler>=0.61.0` (#174)
-- CI workflow for benchmark regression detection with >10% threshold (fails PR), 5-10% warnings (#182)
-- Manual workflow to generate benchmark baselines as GitHub artifacts (90-day retention) (#183)
-- Baselines stored as artifacts (145 MB, exceeds commit limits) (#183)
+- Component-organized benchmark suites (`benchmarks/graph/`, `benchmarks/flow/`, `benchmarks/pile/`, `benchmarks/lndl/`)
+- CI workflow for benchmark regression detection (>10% slower fails PR, 5-10% warns)
+- Manual workflow to generate benchmark baselines as GitHub artifacts
 
 ### Changed
 
 **LNDL Architecture** (#194):
 
-- **BREAKING**: None - full backward compatibility maintained via adapter functions
 - Refactored from regex-based parsing to unified Lexer/Parser/AST architecture
-- New files: `ast.py` (AST nodes: Lvar, RLvar, Lact, OutBlock, Program), `lexer.py` (context-aware tokenizer with 17 token types)
-- Modified: `parser.py` (hybrid regex content + token structure validation), `fuzzy.py`, `resolver.py`
+- New files: `ast.py` (AST nodes), `lexer.py` (context-aware tokenizer with 17 token types)
 - Context-aware lexing (strings only tokenized inside OUT{} blocks)
-- Position tracking (line/column info for better error messages)
-- Fail-fast validation (duplicate aliases caught during parsing, not resolution)
-- Performance overhead: ~160μs total (97μs strict + 63μs fuzzy)
-- Test coverage: 99.16% (453 tests passing, only 2 defensive break statements uncovered)
+- Position tracking for improved error messages
+- Fully backward compatible via adapter functions
 
 ### Fixed
 
-- **LNDL Security**: Removed dead code preventing potential confusion in OUT{} block parsing (#194)
-- **Documentation Links**: Removed 404 link (RealPython), updated redirects to final URLs (anyio, Pydantic, Codecov, Apache License) (#173)
-
-### Performance
-
-- **LNDL**: Quantified overhead at ~160μs (97μs strict + 63μs fuzzy) with 99.16% test coverage (#194)
-- **Executor**: 8% memory overhead for Flow-based state tracking vs raw pile (trade-off for O(1) queries and explainability) (#185)
+- **LNDL**: Removed dead code in OUT{} block parsing (#194)
+- **Documentation**: Fixed broken links and redirects (#173)
 
 ## [1.0.0-alpha5](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha5) - 2025-11-12
 
