@@ -4,25 +4,12 @@
 """Tests for resolver.py uncovered lines - scalar handling edge cases."""
 
 import pytest
-from pydantic import BaseModel
 
 from lionherd_core.lndl import MissingOutBlockError, parse_lndl, resolve_references_prefixed
 from lionherd_core.lndl.types import LvarMetadata
 from lionherd_core.types import Operable, Spec
 
-
-class Report(BaseModel):
-    """Test model for reports."""
-
-    title: str
-    summary: str
-
-
-class Reason(BaseModel):
-    """Test model for reasoning."""
-
-    confidence: float
-    analysis: str
+from .conftest import Reason, Report
 
 
 class TestResolverPreTypedValues:

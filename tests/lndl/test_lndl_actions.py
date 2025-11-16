@@ -11,42 +11,10 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
-from lionherd_core.lndl.lexer import Lexer
-from lionherd_core.lndl.parser import PYTHON_RESERVED, Parser
+from lionherd_core.lndl.parser import PYTHON_RESERVED
 from lionherd_core.types import Operable, Spec
 
-
-def parse_lacts(text: str) -> dict[str, dict]:
-    """Helper to parse lacts and return as dict for testing."""
-    lexer = Lexer(text)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, source_text=text)
-    program = parser.parse()
-
-    # Convert to dict format matching old API
-    result = {}
-    for lact in program.lacts:
-        result[lact.alias] = {
-            "model": lact.model,
-            "field": lact.field,
-            "local_name": lact.alias,
-            "call": lact.call,
-        }
-    return result
-
-
-class SearchResults(BaseModel):
-    """Test model for search results."""
-
-    items: list[str]
-    count: int
-
-
-class Report(BaseModel):
-    """Test model for reports."""
-
-    title: str
-    summary: str
+from .conftest import Report, SearchResults, parse_lacts
 
 
 class TestActionResolution:

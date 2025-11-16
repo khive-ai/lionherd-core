@@ -11,13 +11,7 @@ from pydantic import BaseModel, Field
 
 from lionherd_core.lndl.types import ActionCall, ensure_no_action_calls, has_action_calls
 
-
-class Report(BaseModel):
-    """Test model for LNDL validation."""
-
-    title: str
-    summary: str = Field(..., min_length=10, max_length=500)
-    score: int = Field(..., ge=0, le=100)
+from .conftest import Report
 
 
 def test_has_action_calls_detects_placeholders():

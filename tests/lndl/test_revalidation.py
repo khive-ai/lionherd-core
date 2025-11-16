@@ -8,12 +8,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from lionherd_core.lndl import ActionCall, has_action_calls, revalidate_with_action_results
 
-
-class Report(BaseModel):
-    """Test model for reports."""
-
-    title: str
-    summary: str
+from .conftest import Report
 
 
 class StrictReport(BaseModel):

@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-from pydantic import BaseModel, field_validator
 
 from lionherd_core.lndl import (
     MissingFieldError,
@@ -10,69 +9,10 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
-from lionherd_core.lndl.lexer import Lexer
-from lionherd_core.lndl.parser import Parser
 from lionherd_core.lndl.types import LvarMetadata
 from lionherd_core.types import Operable, Spec
 
-
-class Reason(BaseModel):
-    """Test model for reasoning."""
-
-    confidence: float
-    analysis: str
-
-
-class Report(BaseModel):
-    """Test model for reports."""
-
-    title: str
-    summary: str
-
-
-class ValidatedReport(BaseModel):
-    """Report with validation."""
-
-    title: str
-    summary: str
-
-    @field_validator("title")
-    @classmethod
-    def validate_title_length(cls, v):
-        if len(v) < 3:
-            raise ValueError("Title too short")
-        return v
-
-
-def parse_lvars(text: str) -> dict[str, dict]:
-    """Helper to parse lvars and return as dict for testing."""
-    lexer = Lexer(text)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, source_text=text)
-    program = parser.parse()
-
-    # Convert to dict format matching old API
-    from lionherd_core.lndl.ast import Lvar, RLvar
-
-    result = {}
-    for lvar in program.lvars:
-        if isinstance(lvar, Lvar):
-            # Namespaced lvar
-            result[lvar.alias] = {
-                "model": lvar.model,
-                "field": lvar.field,
-                "local_name": lvar.alias,
-                "value": lvar.content,
-            }
-        else:  # RLvar
-            # Raw lvar - no model/field
-            result[lvar.alias] = {
-                "model": None,
-                "field": None,
-                "local_name": lvar.alias,
-                "value": lvar.content,
-            }
-    return result
+from .conftest import Reason, Report, ValidatedReport, parse_lvars
 
 
 class TestExtractLvarsPrefixed:
