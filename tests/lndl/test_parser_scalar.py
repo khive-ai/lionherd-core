@@ -103,14 +103,17 @@ class TestParserLvarErrors:
     """Test lvar parsing error conditions."""
 
     def test_parse_lvar_without_source_text(self):
-        """Test parse_lvar raises ParseError when source_text is None (line 326)."""
+        """Test parse_lvar raises ParseError when source_text is None (line 331)."""
+        # Namespaced format: <lvar Model.field>
         tokens = [
             Token(TokenType.LVAR_OPEN, "<lvar", 1, 1),
-            Token(TokenType.ID, "x", 1, 7),
-            Token(TokenType.GT, ">", 1, 8),
-            Token(TokenType.ID, "test", 1, 9),
-            Token(TokenType.LVAR_CLOSE, "</lvar>", 1, 13),
-            Token(TokenType.EOF, "", 1, 20),
+            Token(TokenType.ID, "Model", 1, 7),
+            Token(TokenType.DOT, ".", 1, 12),
+            Token(TokenType.ID, "field", 1, 13),
+            Token(TokenType.GT, ">", 1, 18),
+            Token(TokenType.ID, "test", 1, 19),
+            Token(TokenType.LVAR_CLOSE, "</lvar>", 1, 23),
+            Token(TokenType.EOF, "", 1, 30),
         ]
 
         # Create parser without source_text
@@ -125,24 +128,26 @@ class TestParserLvarErrors:
         # Use special characters that will cause regex pattern to fail
         tokens = [
             Token(TokenType.LVAR_OPEN, "<lvar", 1, 1),
-            Token(TokenType.ID, "x", 1, 7),
-            Token(TokenType.GT, ">", 1, 8),
-            Token(TokenType.ID, "content", 1, 9),
-            Token(TokenType.LVAR_CLOSE, "</lvar>", 1, 16),
-            Token(TokenType.EOF, "", 1, 23),
+            Token(TokenType.ID, "Model", 1, 7),
+            Token(TokenType.DOT, ".", 1, 12),
+            Token(TokenType.ID, "field", 1, 13),
+            Token(TokenType.GT, ">", 1, 18),
+            Token(TokenType.ID, "content", 1, 19),
+            Token(TokenType.LVAR_CLOSE, "</lvar>", 1, 26),
+            Token(TokenType.EOF, "", 1, 33),
         ]
 
-        # Source has closing tag but name contains special regex chars that break pattern
-        # The (x) in source will mess up the regex pattern matching
-        parser = Parser(tokens, source_text="<lvar x(>content</lvar>")
+        # Source has closing tag but contains malformed syntax that breaks regex
+        # Token stream says "Model.field" but source has special chars
+        parser = Parser(tokens, source_text="<lvar Model(.field>content</lvar>")
 
         with pytest.raises(ParseError, match="Could not extract lvar content"):
             parser.parse_lvar()
 
     def test_parse_lvar_unclosed_tag_eof(self):
         """Test parse_lvar raises ParseError for unclosed tag (line 356)."""
-        # Source with no closing tag
-        source = "<lvar x>content without closing tag"
+        # Source with no closing tag (namespaced format)
+        source = "<lvar Model.field>content without closing tag"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source_text=source)
@@ -155,14 +160,16 @@ class TestParserLvarErrors:
         # Manually create token stream that has content but EOF before LVAR_CLOSE
         tokens = [
             Token(TokenType.LVAR_OPEN, "<lvar", 1, 1),
-            Token(TokenType.ID, "x", 1, 7),
-            Token(TokenType.GT, ">", 1, 8),
-            Token(TokenType.ID, "content", 1, 9),
-            Token(TokenType.ID, "more", 1, 17),
-            Token(TokenType.ID, "stuff", 1, 22),
-            Token(TokenType.EOF, "", 1, 28),  # EOF instead of LVAR_CLOSE
+            Token(TokenType.ID, "Model", 1, 7),
+            Token(TokenType.DOT, ".", 1, 12),
+            Token(TokenType.ID, "field", 1, 13),
+            Token(TokenType.GT, ">", 1, 18),
+            Token(TokenType.ID, "content", 1, 19),
+            Token(TokenType.ID, "more", 1, 27),
+            Token(TokenType.ID, "stuff", 1, 32),
+            Token(TokenType.EOF, "", 1, 38),  # EOF instead of LVAR_CLOSE
         ]
-        parser = Parser(tokens, source_text="<lvar x>content more stuff")
+        parser = Parser(tokens, source_text="<lvar Model.field>content more stuff")
 
         with pytest.raises(ParseError, match="Unclosed lvar tag"):
             parser.parse_lvar()

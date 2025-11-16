@@ -567,13 +567,11 @@ class TestIntegrationRealWorldScenarios:
 
 
 class TestIntegrationBackwardCompatibility:
-    """Test backward compatibility with legacy formats."""
+    """Test compatibility scenarios."""
 
-    def test_legacy_lvar_format(self):
-        """Test legacy <lvar name>content</lvar> format."""
-        # Note: Legacy format requires different parsing
-        # Current parse_lndl uses prefixed format only
-        # This test documents expected behavior with legacy format
+    def test_namespaced_lvar_format(self):
+        """Test namespaced <lvar Model.field alias>content</lvar> format."""
+        # Only namespaced format is supported
 
         response = """
         <lvar SimpleReport.title t>Title</lvar>
@@ -588,8 +586,8 @@ class TestIntegrationBackwardCompatibility:
         # Prefixed format works
         assert output.report.title == "Title"
 
-    def test_legacy_lact_format(self):
-        """Test direct action format (non-namespaced)."""
+    def test_direct_action_format(self):
+        """Test direct action format (non-namespaced lact, still supported)."""
         response = """
         <lact search>search(query="test")</lact>
 

@@ -45,23 +45,19 @@ class TestParseLvarNamespaced:
         assert lvar.alias == "name"  # Uses field name as alias
         assert lvar.content == "Jane Smith"
 
-    def test_lvar_legacy_pattern(self):
-        """Test <lvar alias>content</lvar> - legacy pattern without model.field"""
+    def test_lvar_legacy_pattern_raises_error(self):
+        """Test <lvar alias>content</lvar> - legacy pattern is not supported"""
         source = "<lvar result>42</lvar>"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
 
-        lvar = parser.parse_lvar()
-
-        assert lvar.model is None
-        assert lvar.field is None
-        assert lvar.alias == "result"
-        assert lvar.content == "42"
+        with pytest.raises(ParseError, match="Legacy lvar syntax"):
+            parser.parse_lvar()
 
     def test_lvar_multiline_content(self):
         """Test lvar with multiline content including newlines"""
-        source = """<lvar description>This is a
+        source = """<lvar Report.description>This is a
 multi-line
 description</lvar>"""
         lexer = Lexer(source)
@@ -70,19 +66,24 @@ description</lvar>"""
 
         lvar = parser.parse_lvar()
 
+        assert lvar.model == "Report"
+        assert lvar.field == "description"
         assert lvar.alias == "description"
         assert "multi-line" in lvar.content
         assert lvar.content.count("\n") >= 1
 
     def test_lvar_complex_content_with_punctuation(self):
         """Test lvar content with dots, commas, brackets"""
-        source = "<lvar data>[1, 2, 3], {key: value}, etc.</lvar>"
+        source = "<lvar Report.data>[1, 2, 3], {key: value}, etc.</lvar>"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
 
         lvar = parser.parse_lvar()
 
+        assert lvar.model == "Report"
+        assert lvar.field == "data"
+        assert lvar.alias == "data"
         assert "[" in lvar.content
         assert "," in lvar.content
         assert "{" in lvar.content
@@ -90,7 +91,7 @@ description</lvar>"""
 
     def test_lvar_unclosed_tag_error(self):
         """Test error handling for unclosed lvar tag"""
-        source = "<lvar result>content without closing tag"
+        source = "<lvar Report.result>content without closing tag"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
@@ -100,7 +101,7 @@ description</lvar>"""
 
     def test_lvar_empty_content(self):
         """Test lvar with empty content"""
-        source = "<lvar result></lvar>"
+        source = "<lvar Report.result></lvar>"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
@@ -226,7 +227,7 @@ class TestParserHelpers:
 
     def test_skip_newlines(self):
         """Test that skip_newlines() consumes multiple newlines"""
-        source = "<lvar test>\n\n\ncontent</lvar>"
+        source = "<lvar Test.value>\n\n\ncontent</lvar>"
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = Parser(tokens, source)
@@ -252,3 +253,76 @@ class TestParserHelpers:
 
         with pytest.raises(ParseError):
             parser.parse_lvar()
+
+
+class TestDuplicateAliases:
+    """Test duplicate alias detection - aliases must be unique across lvars and lacts."""
+
+    def test_duplicate_lvar_alias_raises_error(self):
+        """Test that duplicate lvar aliases raise ParseError."""
+        source = """
+        <lvar Report.title t>First Title</lvar>
+        <lvar Report.summary t>Summary</lvar>
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        with pytest.raises(ParseError) as exc_info:
+            parser.parse()
+
+        assert "Duplicate alias 't'" in str(exc_info.value)
+        assert "unique" in str(exc_info.value).lower()
+
+    def test_duplicate_lact_alias_raises_error(self):
+        """Test that duplicate lact aliases raise ParseError."""
+        source = """
+        <lact Report.process p>process(arg1)</lact>
+        <lact Report.analyze p>analyze(arg2)</lact>
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        with pytest.raises(ParseError) as exc_info:
+            parser.parse()
+
+        assert "Duplicate alias 'p'" in str(exc_info.value)
+        assert "unique" in str(exc_info.value).lower()
+
+    def test_lvar_and_lact_same_alias_raises_error(self):
+        """Test that lvar and lact cannot share the same alias (shared namespace)."""
+        source = """
+        <lvar Report.title x>Title</lvar>
+        <lact Report.process x>process()</lact>
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        with pytest.raises(ParseError) as exc_info:
+            parser.parse()
+
+        assert "Duplicate alias 'x'" in str(exc_info.value)
+        assert "lvars and lacts" in str(exc_info.value)
+
+    def test_unique_aliases_across_lvars_and_lacts_succeeds(self):
+        """Test that unique aliases across lvars and lacts parse successfully."""
+        source = """
+        <lvar Report.title t>Title</lvar>
+        <lvar Report.summary s>Summary</lvar>
+        <lact Report.process p>process()</lact>
+
+        OUT{report: [t, s, p]}
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=source)
+
+        program = parser.parse()
+
+        assert len(program.lvars) == 2
+        assert len(program.lacts) == 1
+        assert program.lvars[0].alias == "t"
+        assert program.lvars[1].alias == "s"
+        assert program.lacts[0].alias == "p"

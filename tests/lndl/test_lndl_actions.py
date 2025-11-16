@@ -293,7 +293,12 @@ class TestEndToEndActionParsing:
         assert output.result.arguments["_pos_2"] == 30
 
     def test_action_collision_with_lvar_name(self):
-        """Test name collision between lvar and lact triggers error."""
+        """Test name collision between lvar and lact triggers error.
+
+        Parser now catches duplicate aliases early, before resolver.
+        """
+        from lionherd_core.lndl.parser import ParseError
+
         response = """
         <lvar Report.title data>Title</lvar>
         <lact data>search(query="test")</lact>
@@ -303,7 +308,7 @@ class TestEndToEndActionParsing:
 
         operable = Operable([Spec(Report, name="report")])
 
-        with pytest.raises(ValueError, match="Name collision"):
+        with pytest.raises(ParseError, match="Duplicate alias 'data'"):
             parse_lndl(response, operable)
 
 

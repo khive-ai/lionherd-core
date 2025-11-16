@@ -227,6 +227,9 @@ class Parser:
         out_block: OutBlock | None = None
 
         # Token-based parsing for all LNDL constructs
+        # Track aliases to detect duplicates (lvars and lacts share same namespace)
+        aliases: set[str] = set()
+
         while not self.match(TokenType.EOF):
             self.skip_newlines()
 
@@ -236,12 +239,26 @@ class Parser:
             # Parse lvar declaration
             if self.match(TokenType.LVAR_OPEN):
                 lvar = self.parse_lvar()
+                # Check for duplicate alias (lvars and lacts share namespace)
+                if lvar.alias in aliases:
+                    raise ParseError(
+                        f"Duplicate alias '{lvar.alias}' - aliases must be unique across lvars and lacts",
+                        self.current_token(),
+                    )
+                aliases.add(lvar.alias)
                 lvars.append(lvar)
                 continue
 
             # Parse lact declaration
             if self.match(TokenType.LACT_OPEN):
                 lact = self.parse_lact()
+                # Check for duplicate alias (lvars and lacts share namespace)
+                if lact.alias in aliases:
+                    raise ParseError(
+                        f"Duplicate alias '{lact.alias}' - aliases must be unique across lvars and lacts",
+                        self.current_token(),
+                    )
+                aliases.add(lact.alias)
                 lacts.append(lact)
                 continue
 
@@ -259,11 +276,11 @@ class Parser:
         """Parse lvar declaration.
 
         Grammar:
-            Lvar ::= '<lvar' (ID '.' ID ID? | ID) '>' Content '</lvar>'
+            Lvar ::= '<lvar' ID '.' ID ID? '>' Content '</lvar>'
 
-        Supports:
-            Namespaced: <lvar Model.field alias>content</lvar>
-            Legacy: <lvar alias>content</lvar>
+        Supports only namespaced pattern:
+            <lvar Model.field alias>content</lvar>
+            <lvar Model.field>content</lvar>  # Uses field as alias
 
         Returns:
             Lvar node with model, field, alias, and content
@@ -272,19 +289,19 @@ class Parser:
             <lvar Report.title t>AI Safety Analysis</lvar>
             → Lvar(model="Report", field="title", alias="t", content="AI Safety Analysis")
 
-            <lvar t>Simple content</lvar>
-            → Lvar(model=None, field=None, alias="t", content="Simple content")
+            <lvar Report.title>Safety Analysis</lvar>
+            → Lvar(model="Report", field="title", alias="title", content="Safety Analysis")
         """
         self.expect(TokenType.LVAR_OPEN)  # <lvar
         self.skip_newlines()
 
-        # Parse identifier (could be Model, field, or alias)
+        # Parse identifier (must be Model name)
         first_id = self.expect(TokenType.ID).value
 
         # Track whether alias was explicitly provided
         has_explicit_alias = False
 
-        # Check for namespaced pattern: Model.field [alias]
+        # Require namespaced pattern: Model.field [alias]
         if self.match(TokenType.DOT):
             self.advance()  # consume dot
             field = self.expect(TokenType.ID).value
@@ -301,11 +318,12 @@ class Parser:
                 has_explicit_alias = False
 
         else:
-            # Legacy pattern: <lvar alias>
-            model = None
-            field = None
-            alias = first_id
-            has_explicit_alias = True  # Legacy always has explicit alias
+            # Legacy pattern not supported - must use Model.field
+            raise ParseError(
+                f"Legacy lvar syntax '<lvar {first_id}>' is not supported. "
+                f"Use namespaced format: '<lvar Model.field alias>' or '<lvar Model.field>'",
+                self.current_token(),
+            )
 
         # Expect closing '>' for tag
         self.expect(TokenType.GT)

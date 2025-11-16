@@ -169,17 +169,14 @@ class TestExtractLvarsPrefixed:
 
         assert lvars == {}
 
-    def test_extract_legacy_syntax_still_works(self):
-        """Test that legacy syntax (no namespace) is also parsed."""
-        text = "<lvar x>legacy content</lvar>"
-        lvars = parse_lvars(text)
+    def test_legacy_syntax_raises_error(self):
+        """Test that legacy syntax (no namespace) raises ParseError."""
+        from lionherd_core.lndl.parser import ParseError
 
-        assert len(lvars) == 1
-        assert "x" in lvars
-        assert lvars["x"]["model"] is None
-        assert lvars["x"]["field"] is None
-        assert lvars["x"]["local_name"] == "x"
-        assert lvars["x"]["value"] == "legacy content"
+        text = "<lvar x>legacy content</lvar>"
+
+        with pytest.raises(ParseError, match="Legacy lvar syntax"):
+            parse_lvars(text)
 
 
 class TestResolveReferencesPrefixed:

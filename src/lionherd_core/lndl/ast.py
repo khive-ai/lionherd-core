@@ -75,23 +75,23 @@ class Stmt(ASTNode):
 
 @dataclass
 class Lvar(Stmt):
-    """Variable declaration.
+    """Variable declaration (namespaced format only).
 
     Syntax:
-        - Namespaced: <lvar Model.field alias>content</lvar>
-        - Legacy: <lvar alias>content</lvar>
+        <lvar Model.field alias>content</lvar>
+        <lvar Model.field>content</lvar>  # Uses field as alias
 
     Examples:
         <lvar Report.title t>AI Safety Analysis</lvar>
         → Lvar(model="Report", field="title", alias="t", content="AI Safety Analysis")
 
-        <lvar t>Simple content</lvar>
-        → Lvar(model=None, field=None, alias="t", content="Simple content")
+        <lvar Report.score>0.95</lvar>
+        → Lvar(model="Report", field="score", alias="score", content="0.95")
     """
 
-    model: str | None  # Model name (e.g., "Report") or None for legacy
-    field: str | None  # Field name (e.g., "title") or None for legacy
-    alias: str  # Local variable name (e.g., "t")
+    model: str  # Model name (e.g., "Report")
+    field: str  # Field name (e.g., "title", "score")
+    alias: str  # Local variable name (e.g., "t", defaults to field)
     content: str  # Raw string value
 
 

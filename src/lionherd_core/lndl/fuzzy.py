@@ -193,27 +193,26 @@ def parse_lndl_fuzzy(
 
     # If threshold is 1.0 (strict mode), validate strictly then call resolver
     if threshold >= 1.0:
-        # Validate namespaced lvar model names (skip scalar lvars where model is None)
+        # Validate lvar model names
         for lvar in lvars_raw.values():
-            if lvar.model and lvar.model not in expected_models:
+            if lvar.model not in expected_models:
                 raise MissingFieldError(
                     f"Model '{lvar.model}' not found. "
                     f"Available: {list(expected_models)} (strict mode: exact match required)"
                 )
 
-        # Validate field names exist for each model (skip scalar lvars)
+        # Validate field names exist for each model
         for lvar in lvars_raw.values():
-            if lvar.model:  # Only validate namespaced lvars
-                # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
-                spec = spec_map[lvar.model]
+            # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
+            spec = spec_map[lvar.model]
 
-                # Check if field exists
-                expected_fields = list(spec.base_type.model_fields.keys())
-                if lvar.field not in expected_fields:
-                    raise MissingFieldError(
-                        f"Field '{lvar.field}' not found in model {lvar.model}. "
-                        f"Available: {expected_fields} (strict mode: exact match required)"
-                    )
+            # Check if field exists
+            expected_fields = list(spec.base_type.model_fields.keys())
+            if lvar.field not in expected_fields:
+                raise MissingFieldError(
+                    f"Field '{lvar.field}' not found in model {lvar.model}. "
+                    f"Available: {expected_fields} (strict mode: exact match required)"
+                )
 
         # Validate namespaced action model/field names (strict mode)
         for lact in lacts_raw.values():

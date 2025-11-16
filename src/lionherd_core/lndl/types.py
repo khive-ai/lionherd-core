@@ -8,18 +8,23 @@ from typing import Any
 
 from pydantic import BaseModel
 
+# Type alias for scalar values in OUT{} block
+Scalar = float | int | str | bool
+
 
 @dataclass(slots=True, frozen=True)
 class LvarMetadata:
-    """Metadata for namespace-prefixed lvar.
+    """Metadata for namespaced lvar (only namespaced format supported).
 
-    Example: <lvar Report.title title>Good Title</lvar>
-    → LvarMetadata(model="Report", field="title", local_name="title", value="Good Title")
+    Example: <lvar Report.title t>Good Title</lvar>
+    → LvarMetadata(model="Report", field="title", local_name="t", value="Good Title")
+
+    Note: Legacy format <lvar alias>content</lvar> is not supported.
     """
 
     model: str  # Model name (e.g., "Report")
     field: str  # Field name (e.g., "title")
-    local_name: str  # Local variable name (e.g., "title")
+    local_name: str  # Local variable name (e.g., "t")
     value: str  # Raw string value
 
 
@@ -79,6 +84,11 @@ class ActionCall:
 class LNDLOutput:
     """Validated LNDL output with action execution lifecycle.
 
+    Fields can contain:
+    - BaseModel instances (fully validated)
+    - ActionCall objects (pre-execution, partially validated)
+    - Scalar values (float, int, str, bool - fully validated)
+
     Action Execution Lifecycle:
     ---------------------------
     1. **Parse**: LNDL response parsed, ActionCall objects created for referenced actions
@@ -106,16 +116,16 @@ class LNDLOutput:
         >>>         output.fields[field_name] = value
     """
 
-    fields: dict[str, BaseModel | ActionCall]  # BaseModel instances or ActionCall (pre-execution)
+    fields: dict[str, BaseModel | ActionCall | Scalar]  # BaseModel, ActionCall, or scalar values
     lvars: dict[str, str] | dict[str, LvarMetadata]  # Preserved for debugging
     lacts: dict[str, LactMetadata]  # All declared actions (for debugging/reference)
     actions: dict[str, ActionCall]  # Actions referenced in OUT{} (pending execution)
     raw_out_block: str  # Preserved for debugging
 
-    def __getitem__(self, key: str) -> BaseModel | ActionCall:
+    def __getitem__(self, key: str) -> BaseModel | ActionCall | Scalar:
         return self.fields[key]
 
-    def __getattr__(self, key: str) -> BaseModel | ActionCall:
+    def __getattr__(self, key: str) -> BaseModel | ActionCall | Scalar:
         if key in ("fields", "lvars", "lacts", "actions", "raw_out_block"):
             return object.__getattribute__(self, key)
         return self.fields[key]

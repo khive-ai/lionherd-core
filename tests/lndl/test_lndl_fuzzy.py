@@ -518,53 +518,6 @@ class TestThresholdConfiguration:
         result = parse_lndl_fuzzy(lndl_text, operable)  # No threshold param
         assert result.report.title == "Title"
 
-    def test_strict_mode_skips_scalar_lvar_validation(self):
-        """Test threshold=1.0 (strict mode) skips validation for scalar lvars.
-
-        Regression test for bug where strict mode tried to validate scalar lvars
-        (lvar.model = None) against expected_models, raising MissingFieldError:
-        "Model 'None' not found. Available: ['Report']"
-
-        The fix ensures strict mode only validates namespaced lvars (lvar.model != None).
-        """
-        from pydantic import BaseModel
-
-        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
-        from lionherd_core.lndl.lexer import Lexer
-        from lionherd_core.lndl.parser import Parser
-        from lionherd_core.types import Operable, Spec
-
-        class Report(BaseModel):
-            title: str
-
-        operable = Operable([Spec(Report, name="report")])
-
-        # Scalar lvar (legacy syntax) should not crash during strict validation
-        lndl_text = "<lvar score>0.95</lvar>"
-
-        lexer = Lexer(lndl_text)
-        tokens = lexer.tokenize()
-        parser = Parser(tokens, source_text=lndl_text)
-        program = parser.parse()
-
-        # Verify scalar lvar was parsed (model=None)
-        assert len(program.lvars) == 1
-        assert program.lvars[0].alias == "score"
-        assert program.lvars[0].model is None  # Scalar lvar
-
-        # Before fix: This would raise MissingFieldError("Model 'None' not found...")
-        # After fix: Strict validation skips scalar lvars (lvar.model is None)
-        # Note: Full parsing may still fail in resolver, but validation shouldn't crash
-        try:
-            from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
-
-            parse_lndl_fuzzy(lndl_text, operable, threshold=1.0)
-        except Exception as e:
-            # Allow other errors (e.g., resolver errors), but NOT MissingFieldError about 'None'
-            assert "Model 'None' not found" not in str(e), (
-                f"Strict mode should skip scalar lvar validation, but got: {e}"
-            )
-
     def test_threshold_0_7_very_tolerant(self):
         """Test threshold=0.7 accepts more dissimilar matches."""
         from pydantic import BaseModel
