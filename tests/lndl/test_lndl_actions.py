@@ -11,8 +11,28 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
-from lionherd_core.lndl.parser import PYTHON_RESERVED, extract_lacts_prefixed
+from lionherd_core.lndl.lexer import Lexer
+from lionherd_core.lndl.parser import PYTHON_RESERVED, Parser
 from lionherd_core.types import Operable, Spec
+
+
+def parse_lacts(text: str) -> dict[str, dict]:
+    """Helper to parse lacts and return as dict for testing."""
+    lexer = Lexer(text)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=text)
+    program = parser.parse()
+
+    # Convert to dict format matching old API
+    result = {}
+    for lact in program.lacts:
+        result[lact.alias] = {
+            "model": lact.model,
+            "field": lact.field,
+            "local_name": lact.alias,
+            "call": lact.call,
+        }
+    return result
 
 
 class SearchResults(BaseModel):
@@ -299,25 +319,25 @@ class TestNamespacedActions:
         <lact search>search(query="test")</lact>
         """
 
-        lacts = extract_lacts_prefixed(response)
+        lacts = parse_lacts(response)
 
         # Namespaced actions
         assert "t" in lacts
-        assert lacts["t"].model == "Report"
-        assert lacts["t"].field == "title"
-        assert lacts["t"].local_name == "t"
-        assert lacts["t"].call == 'generate_title(topic="AI")'
+        assert lacts["t"]["model"] == "Report"
+        assert lacts["t"]["field"] == "title"
+        assert lacts["t"]["local_name"] == "t"
+        assert lacts["t"]["call"] == 'generate_title(topic="AI")'
 
         assert "summarize" in lacts
-        assert lacts["summarize"].model == "Report"
-        assert lacts["summarize"].field == "summary"
-        assert lacts["summarize"].local_name == "summarize"
+        assert lacts["summarize"]["model"] == "Report"
+        assert lacts["summarize"]["field"] == "summary"
+        assert lacts["summarize"]["local_name"] == "summarize"
 
         # Direct action
         assert "search" in lacts
-        assert lacts["search"].model is None
-        assert lacts["search"].field is None
-        assert lacts["search"].local_name == "search"
+        assert lacts["search"]["model"] is None
+        assert lacts["search"]["field"] is None
+        assert lacts["search"]["local_name"] == "search"
 
     def test_extract_namespaced_without_alias(self):
         """Test namespaced action defaults to field name when no alias provided."""
@@ -326,12 +346,12 @@ class TestNamespacedActions:
         <lact Report.summary>generate_summary(data="test")</lact>
         """
 
-        lacts = extract_lacts_prefixed(response)
+        lacts = parse_lacts(response)
 
         assert "summary" in lacts
-        assert lacts["summary"].model == "Report"
-        assert lacts["summary"].field == "summary"
-        assert lacts["summary"].local_name == "summary"
+        assert lacts["summary"]["model"] == "Report"
+        assert lacts["summary"]["field"] == "summary"
+        assert lacts["summary"]["local_name"] == "summary"
 
     def test_mixing_lvars_and_namespaced_actions(self):
         """Test mixing lvars and namespaced actions in same BaseModel."""
@@ -539,19 +559,19 @@ class TestActionErrorHandling:
         assert "Invalid function call syntax" in str(errors[0])
 
     def test_missing_closing_tag(self):
-        """Test unclosed lact tag (should not match regex, treated as missing)."""
+        """Test unclosed lact tag - token-based parser catches immediately."""
+        from lionherd_core.lndl.parser import ParseError
+
         response = '<lact action>search(query="test")\nOUT{result:[action]}'
         operable = Operable([Spec(SearchResults, name="result")])
 
-        # Missing closing tag means regex doesn't extract action
-        # Then reference resolution fails because "action" is undefined
-        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+        # Token-based parser detects unclosed tag immediately during parsing
+        # This is better than old regex-based approach which silently ignored it
+        with pytest.raises(ParseError) as exc_info:
             parse_lndl(response, operable)
 
-        errors = exc_info.value.exceptions
-        assert len(errors) == 1
-        assert "not declared" in str(errors[0])
-        assert "'action'" in str(errors[0])
+        assert "Unclosed lact tag" in str(exc_info.value)
+        assert "missing </lact>" in str(exc_info.value)
 
     def test_scalar_action_malformed_syntax(self):
         """Test error context for malformed action in scalar field."""

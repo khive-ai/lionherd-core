@@ -325,9 +325,32 @@ class TestNumberTokenization:
         lexer = Lexer(source)
         tokens = lexer.tokenize()
 
-        # Should have number token (may or may not include minus sign)
+        # Should have number token with negative value
         num_tokens = [t for t in tokens if t.type == TokenType.NUM]
-        assert len(num_tokens) >= 1
+        assert len(num_tokens) == 1
+        assert num_tokens[0].value == "-10"
+
+    def test_negative_float(self):
+        """Test negative float numbers are tokenized"""
+        source = "OUT{temp: -5.5}"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        num_tokens = [t for t in tokens if t.type == TokenType.NUM]
+        assert len(num_tokens) == 1
+        assert num_tokens[0].value == "-5.5"
+
+    def test_negative_number_outside_out_block(self):
+        """Test negative numbers outside OUT{} are not tokenized as single NUM"""
+        source = "The temperature is -10 degrees"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        # Outside OUT{}, minus is skipped and 10 is tokenized separately
+        num_tokens = [t for t in tokens if t.type == TokenType.NUM]
+        # Should have "10" not "-10" (minus not part of number outside OUT{})
+        if num_tokens:
+            assert num_tokens[0].value == "10"
 
 
 class TestIdentifierTokenization:

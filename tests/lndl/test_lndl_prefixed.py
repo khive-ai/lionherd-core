@@ -10,7 +10,8 @@ from lionherd_core.lndl import (
     parse_lndl,
     resolve_references_prefixed,
 )
-from lionherd_core.lndl.parser import extract_lvars_prefixed
+from lionherd_core.lndl.lexer import Lexer
+from lionherd_core.lndl.parser import Parser
 from lionherd_core.types import Operable, Spec
 
 
@@ -42,44 +43,63 @@ class ValidatedReport(BaseModel):
         return v
 
 
+def parse_lvars(text: str) -> dict[str, dict]:
+    """Helper to parse lvars and return as dict for testing."""
+    lexer = Lexer(text)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=text)
+    program = parser.parse()
+
+    # Convert to dict format matching old API
+    result = {}
+    for lvar in program.lvars:
+        result[lvar.alias] = {
+            "model": lvar.model,
+            "field": lvar.field,
+            "local_name": lvar.alias,
+            "value": lvar.content,
+        }
+    return result
+
+
 class TestExtractLvarsPrefixed:
-    """Test namespace-prefixed lvar extraction."""
+    """Test namespace-prefixed lvar extraction using token-based parser."""
 
     def test_extract_with_local_name(self):
         """Test extracting lvar with explicit local name."""
         text = "<lvar Report.title title>here is a good title</lvar>"
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 1
         assert "title" in lvars
-        assert lvars["title"].model == "Report"
-        assert lvars["title"].field == "title"
-        assert lvars["title"].local_name == "title"
-        assert lvars["title"].value == "here is a good title"
+        assert lvars["title"]["model"] == "Report"
+        assert lvars["title"]["field"] == "title"
+        assert lvars["title"]["local_name"] == "title"
+        assert lvars["title"]["value"] == "here is a good title"
 
     def test_extract_without_local_name(self):
         """Test extracting lvar without local name (uses field name)."""
         text = "<lvar Report.title>here is a good title</lvar>"
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 1
         assert "title" in lvars  # Uses field name as local
-        assert lvars["title"].model == "Report"
-        assert lvars["title"].field == "title"
-        assert lvars["title"].local_name == "title"
-        assert lvars["title"].value == "here is a good title"
+        assert lvars["title"]["model"] == "Report"
+        assert lvars["title"]["field"] == "title"
+        assert lvars["title"]["local_name"] == "title"
+        assert lvars["title"]["value"] == "here is a good title"
 
     def test_extract_with_custom_alias(self):
         """Test extracting lvar with custom local alias."""
         text = "<lvar Reason.confidence conf>0.85</lvar>"
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 1
         assert "conf" in lvars  # Custom alias
-        assert lvars["conf"].model == "Reason"
-        assert lvars["conf"].field == "confidence"
-        assert lvars["conf"].local_name == "conf"
-        assert lvars["conf"].value == "0.85"
+        assert lvars["conf"]["model"] == "Reason"
+        assert lvars["conf"]["field"] == "confidence"
+        assert lvars["conf"]["local_name"] == "conf"
+        assert lvars["conf"]["value"] == "0.85"
 
     def test_extract_multiple_lvars(self):
         """Test extracting multiple namespace-prefixed lvars."""
@@ -89,7 +109,7 @@ class TestExtractLvarsPrefixed:
         <lvar Report.summary summ>sdfghjklkjhgfdfghj</lvar>
         <lvar Reason.analysis ana>fghjklfghj</lvar>
         """
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 4
         assert "title" in lvars
@@ -103,11 +123,11 @@ class TestExtractLvarsPrefixed:
         <lvar Report.summary summ>first version</lvar>
         <lvar Report.summary summ2>revised version</lvar>
         """
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 2
-        assert lvars["summ"].value == "first version"
-        assert lvars["summ2"].value == "revised version"
+        assert lvars["summ"]["value"] == "first version"
+        assert lvars["summ2"]["value"] == "revised version"
 
     def test_extract_with_multiline_value(self):
         """Test extracting lvar with multiline value."""
@@ -118,11 +138,11 @@ class TestExtractLvarsPrefixed:
         with various content
         </lvar>
         """
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 1
-        assert "This is a long summary" in lvars["summ"].value
-        assert "multiple lines" in lvars["summ"].value
+        assert "This is a long summary" in lvars["summ"]["value"]
+        assert "multiple lines" in lvars["summ"]["value"]
 
     def test_extract_from_thinking_flow(self):
         """Test extraction from natural thinking flow with prose."""
@@ -136,18 +156,30 @@ class TestExtractLvarsPrefixed:
         Wait, more evidence: 85%
         <lvar Reason.confidence conf>0.85</lvar>
         """
-        lvars = extract_lvars_prefixed(text)
+        lvars = parse_lvars(text)
 
         assert len(lvars) == 2
-        assert lvars["title"].value == "here is a good title"
-        assert lvars["conf"].value == "0.85"
+        assert lvars["title"]["value"] == "here is a good title"
+        assert lvars["conf"]["value"] == "0.85"
 
     def test_extract_empty_returns_empty_dict(self):
-        """Test that text without prefixed lvars returns empty dict."""
-        text = "<lvar x>legacy syntax</lvar>"
-        lvars = extract_lvars_prefixed(text)
+        """Test that text without lvars returns empty dict."""
+        text = "Just some prose without any lvar tags"
+        lvars = parse_lvars(text)
 
         assert lvars == {}
+
+    def test_extract_legacy_syntax_still_works(self):
+        """Test that legacy syntax (no namespace) is also parsed."""
+        text = "<lvar x>legacy content</lvar>"
+        lvars = parse_lvars(text)
+
+        assert len(lvars) == 1
+        assert "x" in lvars
+        assert lvars["x"]["model"] is None
+        assert lvars["x"]["field"] is None
+        assert lvars["x"]["local_name"] == "x"
+        assert lvars["x"]["value"] == "legacy content"
 
 
 class TestResolveReferencesPrefixed:

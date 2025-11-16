@@ -35,7 +35,6 @@ from typing import Any
 
 from .ast import Lact, Lvar, OutBlock, Program
 from .lexer import Token, TokenType
-from .types import LactMetadata, LvarMetadata
 
 # Track warned action names to prevent duplicate warnings
 _warned_action_names: set[str] = set()
@@ -207,8 +206,7 @@ class Parser:
     def parse(self) -> Program:
         """Parse token stream into AST.
 
-        Uses hybrid approach: regex extraction for lvar/lact content (preserves syntax),
-        token-based parsing for OUT{} blocks (structured data).
+        Uses token-based parsing with regex content extraction to preserve whitespace and quotes.
 
         Returns:
             Program node containing lvars, lacts, and optional out_block
@@ -228,44 +226,31 @@ class Parser:
         lacts: list[Lact] = []
         out_block: OutBlock | None = None
 
-        # Use regex to extract lvars and lacts (preserves exact syntax)
-        lvars_dict = extract_lvars_prefixed(self.source_text)
-        lacts_dict = extract_lacts_prefixed(self.source_text)
-
-        # Convert to AST nodes
-        for _local_name, lvar_meta in lvars_dict.items():
-            lvars.append(
-                Lvar(
-                    model=lvar_meta.model,
-                    field=lvar_meta.field,
-                    alias=lvar_meta.local_name,
-                    content=lvar_meta.value,
-                )
-            )
-
-        for _local_name, lact_meta in lacts_dict.items():
-            lacts.append(
-                Lact(
-                    model=lact_meta.model,
-                    field=lact_meta.field,
-                    alias=lact_meta.local_name,
-                    call=lact_meta.call,
-                )
-            )
-
-        # Parse OUT{} block using tokens (structured data parsing)
+        # Token-based parsing for all LNDL constructs
         while not self.match(TokenType.EOF):
             self.skip_newlines()
 
             if self.match(TokenType.EOF):
                 break
 
+            # Parse lvar declaration
+            if self.match(TokenType.LVAR_OPEN):
+                lvar = self.parse_lvar()
+                lvars.append(lvar)
+                continue
+
+            # Parse lact declaration
+            if self.match(TokenType.LACT_OPEN):
+                lact = self.parse_lact()
+                lacts.append(lact)
+                continue
+
             # Parse OUT{} block
             if self.match(TokenType.OUT_OPEN):
                 out_block = self.parse_out_block()
                 break
 
-            # Skip all other tokens (already extracted lvars/lacts via regex)
+            # Skip all other tokens (narrative text, punctuation, etc.)
             self.advance()
 
         return Program(lvars=lvars, lacts=lacts, out_block=out_block)
@@ -296,6 +281,9 @@ class Parser:
         # Parse identifier (could be Model, field, or alias)
         first_id = self.expect(TokenType.ID).value
 
+        # Track whether alias was explicitly provided
+        has_explicit_alias = False
+
         # Check for namespaced pattern: Model.field [alias]
         if self.match(TokenType.DOT):
             self.advance()  # consume dot
@@ -306,15 +294,18 @@ class Parser:
             if self.match(TokenType.ID):
                 alias = self.current_token().value
                 self.advance()
+                has_explicit_alias = True
             else:
                 # No alias - use field name
                 alias = field
+                has_explicit_alias = False
 
         else:
             # Legacy pattern: <lvar alias>
             model = None
             field = None
             alias = first_id
+            has_explicit_alias = True  # Legacy always has explicit alias
 
         # Expect closing '>' for tag
         self.expect(TokenType.GT)
@@ -329,7 +320,7 @@ class Parser:
 
         # Build regex pattern based on parsed structure
         if model:
-            if alias != field:
+            if has_explicit_alias:
                 # Explicit alias: <lvar Model.field alias>content</lvar>
                 pattern = rf"<lvar\s+{re.escape(model)}\.{re.escape(field)}\s+{re.escape(alias)}\s*>(.*?)</lvar>"
             else:
@@ -386,6 +377,9 @@ class Parser:
         # Parse identifier (could be Model, field, or alias)
         first_id = self.expect(TokenType.ID).value
 
+        # Track whether alias was explicitly provided
+        has_explicit_alias = False
+
         # Check for namespaced pattern: Model.field [alias]
         if self.match(TokenType.DOT):
             self.advance()  # consume dot
@@ -396,15 +390,18 @@ class Parser:
             if self.match(TokenType.ID):
                 alias = self.current_token().value
                 self.advance()
+                has_explicit_alias = True
             else:
                 # No alias - use field name
                 alias = field
+                has_explicit_alias = False
 
         else:
             # Direct pattern: <lact alias>
             model = None
             field = None
             alias = first_id
+            has_explicit_alias = True  # Direct always has explicit alias
 
         # Expect closing '>' for tag
         self.expect(TokenType.GT)
@@ -418,7 +415,7 @@ class Parser:
 
         # Build regex pattern based on parsed structure
         if model:
-            if alias != field:
+            if has_explicit_alias:
                 # Explicit alias: <lact Model.field alias>call</lact>
                 pattern = rf"<lact\s+{re.escape(model)}\.{re.escape(field)}\s+{re.escape(alias)}\s*>(.*?)</lact>"
             else:
@@ -446,6 +443,15 @@ class Parser:
             self.advance()
 
         self.expect(TokenType.LACT_CLOSE)  # </lact>
+
+        # Warn if using reserved keyword as action name
+        if alias in PYTHON_RESERVED and alias not in _warned_action_names:
+            _warned_action_names.add(alias)
+            warnings.warn(
+                f"Action name '{alias}' is a Python reserved keyword or builtin.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         return Lact(model=model, field=field, alias=alias, call=call)
 
@@ -579,44 +585,6 @@ class Parser:
             self.advance()  # consume }
 
         return OutBlock(fields=fields)
-
-
-# Helper functions for hybrid parsing approach
-def extract_lvars_prefixed(text: str) -> dict[str, LvarMetadata]:
-    """Extract namespace-prefixed lvar declarations."""
-    pattern = r"<lvar\s+(\w+)\.(\w+)(?:\s+(\w+))?\s*>(.*?)</lvar>"
-    matches = re.findall(pattern, text, re.DOTALL)
-    lvars = {}
-    for model, field, local_name, value in matches:
-        local = local_name if local_name else field
-        lvars[local] = LvarMetadata(model=model, field=field, local_name=local, value=value.strip())
-    return lvars
-
-
-def extract_lacts_prefixed(text: str) -> dict[str, LactMetadata]:
-    """Extract <lact> action declarations with optional namespace prefix."""
-    pattern = r"<lact\s+([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?(?:\s+([A-Za-z_]\w*))?>(.*?)</lact>"
-    matches = re.findall(pattern, text, re.DOTALL)
-    lacts = {}
-    for identifier, field, alias, call_str in matches:
-        if field:
-            model = identifier
-            local_name = alias if alias else field
-        else:
-            model = None
-            field = None
-            local_name = identifier
-        if local_name in PYTHON_RESERVED and local_name not in _warned_action_names:
-            _warned_action_names.add(local_name)
-            warnings.warn(
-                f"Action name '{local_name}' is a Python reserved keyword or builtin.",
-                UserWarning,
-                stacklevel=2,
-            )
-        lacts[local_name] = LactMetadata(
-            model=model, field=field, local_name=local_name, call=call_str.strip()
-        )
-    return lacts
 
 
 def parse_value(value_str: Any) -> Any:
