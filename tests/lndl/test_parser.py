@@ -628,13 +628,14 @@ class TestParserEdgeCases:
         # Non-ID tokens should be skipped, only valid field parsed
         assert "field" in program.out_block.fields
 
-    def test_out_block_field_without_colon(self, parse_lndl_ast):
-        """Test OUT block skips field without colon."""
+    def test_out_block_field_without_colon(self, tokenize):
+        """Test OUT block raises error for field without colon."""
         text = "OUT{field_without_colon, valid_field: value}"
-        program = parse_lndl_ast(text)
-        # Field without colon should be skipped
-        assert "field_without_colon" not in program.out_block.fields
-        assert "valid_field" in program.out_block.fields
+        tokens = tokenize(text)
+        parser = Parser(tokens, source_text=text)
+        # Field without colon should raise ParseError (not skip silently)
+        with pytest.raises(ParseError, match="Expected COLON"):
+            parser.parse()
 
     def test_out_block_array_immediate_close_after_newlines(self, parse_lndl_ast):
         """Test OUT block array closes after skipping newlines (line 544)."""

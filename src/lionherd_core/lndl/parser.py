@@ -522,11 +522,7 @@ class Parser:
 
             self.skip_newlines()
 
-            # Expect colon
-            if not self.match(TokenType.COLON):
-                # Skip malformed field
-                continue
-
+            # Expect colon (raises ParseError if not found)
             self.expect(TokenType.COLON)
             self.skip_newlines()
 
