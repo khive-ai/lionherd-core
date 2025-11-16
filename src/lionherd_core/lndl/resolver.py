@@ -9,14 +9,14 @@ from pydantic import (
 from lionherd_core.libs.schema_handlers._function_call_parser import parse_function_call
 from lionherd_core.types import Operable
 
-from .errors import MissingFieldError, TypeMismatchError
+from .errors import MissingFieldError, MissingOutBlockError, TypeMismatchError
 from .parser import parse_value
-from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata
+from .types import ActionCall, LactMetadata, LNDLOutput, LvarMetadata, RLvarMetadata
 
 
 def resolve_references_prefixed(
     out_fields: dict[str, list[str] | str],
-    lvars: dict[str, LvarMetadata],
+    lvars: dict[str, LvarMetadata | RLvarMetadata],
     lacts: dict[str, LactMetadata],
     operable: Operable,
 ) -> LNDLOutput:
@@ -122,10 +122,14 @@ def resolve_references_prefixed(
                         )
 
                     lvar_meta = lvars[var_name]
-                    parsed_value = parse_value(lvar_meta.value)
+                    # Value might already be typed by new parser
+                    if isinstance(lvar_meta.value, str):
+                        parsed_value = parse_value(lvar_meta.value)
+                    else:
+                        parsed_value = lvar_meta.value
                 else:
-                    # Literal value (string)
-                    parsed_value = parse_value(value)
+                    # Literal value - might already be typed by new parser
+                    parsed_value = parse_value(value) if isinstance(value, str) else value
 
                 # Type conversion and validation
                 try:
@@ -236,6 +240,13 @@ def resolve_references_prefixed(
 
                     lvar_meta = lvars[var_name]
 
+                    # Raw lvars cannot be used in BaseModel fields (no type validation)
+                    if isinstance(lvar_meta, RLvarMetadata):
+                        raise ValueError(
+                            f"Raw lvar '{var_name}' cannot be used in BaseModel field '{field_name}'. "
+                            f"Use namespaced format: <lvar Model.field alias>"
+                        )
+
                     # Validate: model name matches
                     if lvar_meta.model != target_type.__name__:
                         raise TypeMismatchError(
@@ -243,8 +254,11 @@ def resolve_references_prefixed(
                             f"but field '{field_name}' expects '{target_type.__name__}'"
                         )
 
-                    # Map field name to kwargs
-                    kwargs[lvar_meta.field] = parse_value(lvar_meta.value)
+                    # Map field name to kwargs (value might already be typed)
+                    if isinstance(lvar_meta.value, str):
+                        kwargs[lvar_meta.field] = parse_value(lvar_meta.value)
+                    else:
+                        kwargs[lvar_meta.field] = lvar_meta.value
 
                 # Construct Pydantic model instance
                 # WARNING: model_construct() bypasses Pydantic validation when ActionCall objects present.
@@ -302,22 +316,51 @@ def parse_lndl(response: str, operable: Operable) -> LNDLOutput:
     Returns:
         LNDLOutput with validated fields and parsed actions
     """
-    from .parser import (
-        extract_lacts_prefixed,
-        extract_lvars_prefixed,
-        extract_out_block,
-        parse_out_block_array,
-    )
+    from .lexer import Lexer
+    from .parser import Parser
 
-    # 1. Extract namespace-prefixed lvars
-    lvars_prefixed = extract_lvars_prefixed(response)
+    # 1. Tokenize using new lexer
+    lexer = Lexer(response)
+    tokens = lexer.tokenize()
 
-    # 2. Extract action declarations (with namespace support)
-    lacts_prefixed = extract_lacts_prefixed(response)
+    # 2. Parse into AST (hybrid: regex for content, tokens for structure)
+    parser = Parser(tokens, source_text=response)
+    program = parser.parse()
 
-    # 3. Extract and parse OUT{} block with array syntax
-    out_content = extract_out_block(response)
-    out_fields = parse_out_block_array(out_content)
+    # 3. Convert AST to resolver input format (supports both Lvar and RLvar)
+    from .ast import Lvar
 
-    # 4. Resolve references and validate
+    lvars_prefixed: dict[str, LvarMetadata | RLvarMetadata] = {}
+    for lvar in program.lvars:
+        if isinstance(lvar, Lvar):
+            # Namespaced lvar
+            lvars_prefixed[lvar.alias] = LvarMetadata(
+                model=lvar.model,
+                field=lvar.field,
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
+        else:  # RLvar
+            # Raw lvar
+            lvars_prefixed[lvar.alias] = RLvarMetadata(
+                local_name=lvar.alias,
+                value=lvar.content,
+            )
+
+    lacts_prefixed: dict[str, LactMetadata] = {}
+    for lact in program.lacts:
+        lacts_prefixed[lact.alias] = LactMetadata(
+            model=lact.model,
+            field=lact.field,
+            local_name=lact.alias,
+            call=lact.call,
+        )
+
+    # 4. Extract OUT{} fields (already in correct format from parser)
+    if not program.out_block:
+        raise MissingOutBlockError("No OUT{} block found in response")
+
+    out_fields = program.out_block.fields
+
+    # 5. Resolve references and validate
     return resolve_references_prefixed(out_fields, lvars_prefixed, lacts_prefixed, operable)

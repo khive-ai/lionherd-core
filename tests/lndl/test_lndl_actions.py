@@ -8,7 +8,9 @@ from pydantic import BaseModel
 
 from lionherd_core.lndl import (
     ActionCall,
-    extract_lacts,
+    LactMetadata,
+    Lexer,
+    Parser,
     parse_lndl,
     resolve_references_prefixed,
 )
@@ -275,6 +277,8 @@ class TestEndToEndActionParsing:
 
     def test_action_collision_with_lvar_name(self):
         """Test name collision between lvar and lact triggers error."""
+        from lionherd_core.lndl import ParseError
+
         response = """
         <lvar Report.title data>Title</lvar>
         <lact data>search(query="test")</lact>
@@ -284,24 +288,41 @@ class TestEndToEndActionParsing:
 
         operable = Operable([Spec(Report, name="report")])
 
-        with pytest.raises(ValueError, match="Name collision"):
+        # New Parser detects duplicate aliases during parsing (fail fast)
+        with pytest.raises(ParseError, match="Duplicate alias"):
             parse_lndl(response, operable)
 
 
 class TestNamespacedActions:
     """Test namespaced action pattern for mixing lvars and actions."""
 
+    def _extract_lacts_from_response(self, response: str) -> dict[str, LactMetadata]:
+        """Helper to extract lacts using new Parser API."""
+        lexer = Lexer(response)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens, source_text=response)
+        program = parser.parse()
+
+        # Convert AST lacts to LactMetadata dict
+        lacts: dict[str, LactMetadata] = {}
+        for lact in program.lacts:
+            lacts[lact.alias] = LactMetadata(
+                model=lact.model,
+                field=lact.field,
+                local_name=lact.alias,
+                call=lact.call,
+            )
+        return lacts
+
     def test_extract_namespaced_actions(self):
         """Test extracting namespaced actions with Model.field syntax."""
-        from lionherd_core.lndl import extract_lacts_prefixed
-
         response = """
         <lact Report.title t>generate_title(topic="AI")</lact>
         <lact Report.summary summarize>generate_summary(data="metrics")</lact>
         <lact search>search(query="test")</lact>
         """
 
-        lacts = extract_lacts_prefixed(response)
+        lacts = self._extract_lacts_from_response(response)
 
         # Namespaced actions
         assert "t" in lacts
@@ -323,13 +344,11 @@ class TestNamespacedActions:
 
     def test_extract_namespaced_without_alias(self):
         """Test namespaced action defaults to field name when no alias provided."""
-        from lionherd_core.lndl import extract_lacts_prefixed
-
         response = """
         <lact Report.summary>generate_summary(data="test")</lact>
         """
 
-        lacts = extract_lacts_prefixed(response)
+        lacts = self._extract_lacts_from_response(response)
 
         assert "summary" in lacts
         assert lacts["summary"].model == "Report"
@@ -542,19 +561,15 @@ class TestActionErrorHandling:
         assert "Invalid function call syntax" in str(errors[0])
 
     def test_missing_closing_tag(self):
-        """Test unclosed lact tag (should not match regex, treated as missing)."""
+        """Test unclosed lact tag (parser detects during parsing)."""
+        from lionherd_core.lndl import ParseError
+
         response = '<lact action>search(query="test")\nOUT{result:[action]}'
         operable = Operable([Spec(SearchResults, name="result")])
 
-        # Missing closing tag means regex doesn't extract action
-        # Then reference resolution fails because "action" is undefined
-        with pytest.raises(ExceptionGroup, match="LNDL validation failed") as exc_info:
+        # New Parser detects unclosed tags during parsing
+        with pytest.raises(ParseError, match="Unclosed lact tag"):
             parse_lndl(response, operable)
-
-        errors = exc_info.value.exceptions
-        assert len(errors) == 1
-        assert "not declared" in str(errors[0])
-        assert "'action'" in str(errors[0])
 
     def test_scalar_action_malformed_syntax(self):
         """Test error context for malformed action in scalar field."""
