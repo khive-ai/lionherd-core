@@ -151,12 +151,17 @@ class Lexer:
         return result
 
     def read_number(self) -> str:
-        """Read numeric literal (integer or float).
+        """Read numeric literal (integer or float, with optional minus sign).
 
         Returns:
-            Number string (digits + optional decimal point)
+            Number string (optional minus + digits + optional decimal point)
         """
         result = ""
+        # Handle optional minus sign
+        if (char := self.current_char()) and char == "-":
+            result += char
+            self.advance()
+        # Read digits and decimal point
         while (char := self.current_char()) and (char.isdigit() or char == "."):
             result += char
             self.advance()
@@ -296,8 +301,9 @@ class Lexer:
                 self.tokens.append(Token(TokenType.ID, identifier, start_line, start_column))
                 continue
 
-            # Numbers
-            if char.isdigit():
+            # Numbers (including negative)
+            next_char = self.peek_char() or ""
+            if char.isdigit() or (char == "-" and next_char.isdigit()):
                 start_line = self.line
                 start_column = self.column
                 number = self.read_number()
