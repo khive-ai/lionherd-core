@@ -411,30 +411,35 @@ def test_benchmark_lndl_fuzzy_with_case_issues(benchmark, lndl_with_case_issues,
 
 
 def test_benchmark_lndl_tokenization(benchmark, perfect_lndl_100b):
-    """Measure tokenization stage overhead (extract lvars, OUT{})."""
-    from lionherd_core.lndl.parser import (
-        extract_lacts_prefixed,
-        extract_lvars_prefixed,
-        extract_out_block,
-        parse_out_block_array,
-    )
+    """Measure tokenization + parsing stage overhead (Lexer + Parser)."""
+    from lionherd_core.lndl.lexer import Lexer
+    from lionherd_core.lndl.parser import Parser
 
-    def tokenize():
-        lvars = extract_lvars_prefixed(perfect_lndl_100b)
-        lacts = extract_lacts_prefixed(perfect_lndl_100b)
-        out_content = extract_out_block(perfect_lndl_100b)
-        out_fields = parse_out_block_array(out_content)
-        return lvars, lacts, out_fields
+    def tokenize_and_parse():
+        # Stage 1: Lexer - tokenization
+        lexer = Lexer(perfect_lndl_100b)
+        tokens = lexer.tokenize()
 
-    benchmark(tokenize)
+        # Stage 2: Parser - AST construction
+        parser = Parser(tokens, source_text=perfect_lndl_100b)
+        program = parser.parse()
+
+        return program.lvars, program.lacts, program.out_block
+
+    benchmark(tokenize_and_parse)
 
 
 def test_benchmark_lndl_fuzzy_correction(benchmark, lndl_with_typos):
     """Measure fuzzy matching overhead (typo correction)."""
-    from lionherd_core.lndl.parser import extract_lvars_prefixed
+    from lionherd_core.lndl.lexer import Lexer
+    from lionherd_core.lndl.parser import Parser
 
     # Pre-extract to isolate fuzzy matching
-    lvars_raw = extract_lvars_prefixed(lndl_with_typos)
+    lexer = Lexer(lndl_with_typos)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, source_text=lndl_with_typos)
+    program = parser.parse()
+    lvars_parsed = program.lvars
 
     # Operable for correction
     operable = Operable([Spec(Report, name="report")])
@@ -447,7 +452,7 @@ def test_benchmark_lndl_fuzzy_correction(benchmark, lndl_with_typos):
         expected_models = list(spec_map.keys())
 
         model_corrections = {}
-        for lvar in lvars_raw.values():
+        for lvar in lvars_parsed:
             corrected = _correct_name(lvar.model, expected_models, 0.90, "model")
             model_corrections[lvar.model] = corrected
 
