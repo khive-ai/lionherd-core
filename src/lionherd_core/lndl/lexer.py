@@ -47,6 +47,7 @@ class TokenType(Enum):
     RBRACKET = auto()  # ]
     LPAREN = auto()  # (
     RPAREN = auto()  # )
+    GT = auto()  # >
 
     # Control
     NEWLINE = auto()
@@ -97,7 +98,7 @@ class Lexer:
         self.text = text
         self.pos = 0
         self.line = 1
-        self.column = 1
+        self.column = 0
         self.tokens: list[Token] = []
 
     def current_char(self) -> str | None:
@@ -128,7 +129,7 @@ class Lexer:
         """Advance to next character, tracking line/column."""
         if self.pos < len(self.text) and self.text[self.pos] == "\n":
             self.line += 1
-            self.column = 1
+            self.column = 0
         else:
             self.column += 1
         self.pos += 1
@@ -331,8 +332,7 @@ class Lexer:
                 self.tokens.append(Token(TokenType.OUT_CLOSE, char, self.line, self.column))
                 in_out_block = False  # Exiting OUT{} block
             elif char == ">":
-                # Closing bracket for tags, skip (we handle complete tags above)
-                pass
+                self.tokens.append(Token(TokenType.GT, char, self.line, self.column))
             else:
                 # Unknown character - skip silently
                 pass
