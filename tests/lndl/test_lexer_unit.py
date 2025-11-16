@@ -65,6 +65,68 @@ class TestStringTokenization:
         str_tokens = [t for t in tokens if t.type == TokenType.STR]
         # Should handle escaped quotes
         assert len(str_tokens) >= 1
+        assert str_tokens[0].value == 'He said "hello"'
+
+    def test_string_with_newline_escape(self):
+        """Test string with \\n escape sequence"""
+        source = r'OUT{msg: "Line1\nLine2"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        assert str_tokens[0].value == "Line1\nLine2"
+
+    def test_string_with_tab_escape(self):
+        """Test string with \\t escape sequence"""
+        source = r'OUT{msg: "Col1\tCol2"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        assert str_tokens[0].value == "Col1\tCol2"
+
+    def test_string_with_carriage_return_escape(self):
+        """Test string with \\r escape sequence"""
+        source = r'OUT{msg: "Text\rOverwrite"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        assert str_tokens[0].value == "Text\rOverwrite"
+
+    def test_string_with_backslash_escape(self):
+        """Test string with \\\\ escape sequence"""
+        source = r'OUT{path: "C:\\Users\\file"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        assert str_tokens[0].value == "C:\\Users\\file"
+
+    def test_string_with_single_quote_escape(self):
+        """Test string with \\' escape sequence"""
+        source = r'OUT{msg: "It\'s working"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        assert str_tokens[0].value == "It's working"
+
+    def test_string_with_unknown_escape(self):
+        """Test string with unknown escape sequence (keeps literal)"""
+        source = r'OUT{msg: "Test\xUnknown"}'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        str_tokens = [t for t in tokens if t.type == TokenType.STR]
+        assert len(str_tokens) == 1
+        # Unknown escape \x should keep literal 'x'
+        assert str_tokens[0].value == "TestxUnknown"
 
     def test_string_with_single_quotes(self):
         """Test that single quotes work same as double quotes in OUT{}"""
@@ -301,3 +363,47 @@ class TestIdentifierTokenization:
         id_tokens = [t for t in tokens if t.type == TokenType.ID]
         assert any("field1" in t.value for t in id_tokens)
         assert any("value2" in t.value for t in id_tokens)
+
+
+class TestPeekCharEdgeCases:
+    """Test peek_char method edge cases."""
+
+    def test_peek_past_end_of_text(self):
+        """Test peek_char returns None when peeking past end"""
+        source = "a"
+        lexer = Lexer(source)
+
+        # Position at 'a' (pos=0)
+        assert lexer.current_char() == "a"
+
+        # Peek one ahead (past end at pos=1)
+        assert lexer.peek_char(1) is None
+
+        # Peek multiple positions ahead (way past end)
+        assert lexer.peek_char(10) is None
+
+
+class TestUnrecognizedTags:
+    """Test handling of unrecognized tags starting with <."""
+
+    def test_unrecognized_tag_skipped(self):
+        """Test that unrecognized tags starting with < are skipped"""
+        source = "<unknown>content</unknown> OUT{a: 1}"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        # Should tokenize the OUT block but skip unknown tags
+        assert any(t.type == TokenType.OUT_OPEN for t in tokens)
+        # Unknown tag content should not create special tokens
+        id_tokens = [t for t in tokens if t.type == TokenType.ID]
+        assert any(t.value == "content" for t in id_tokens)
+
+    def test_html_like_tag_skipped(self):
+        """Test HTML-like tags are skipped"""
+        source = "<div>text</div> OUT{field: value}"
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+
+        # Should still tokenize OUT block correctly
+        assert any(t.type == TokenType.OUT_OPEN for t in tokens)
+        assert any(t.type == TokenType.ID and t.value == "field" for t in tokens)

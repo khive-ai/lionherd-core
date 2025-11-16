@@ -411,20 +411,30 @@ def test_benchmark_lndl_fuzzy_with_case_issues(benchmark, lndl_with_case_issues,
 
 
 def test_benchmark_lndl_tokenization(benchmark, perfect_lndl_100b):
-    """Measure tokenization stage overhead (extract lvars, OUT{})."""
-    from lionherd_core.lndl.parser import (
-        extract_lacts_prefixed,
-        extract_lvars_prefixed,
-        extract_out_block,
-        parse_out_block_array,
-    )
+    """Measure tokenization stage overhead (extract lvars/lacts, tokenize OUT{}).
+
+    Note: New architecture integrates OUT{} tokenization with parsing.
+    This benchmark measures regex extraction + lexer tokenization overhead.
+    """
+    import re
+
+    from lionherd_core.lndl.lexer import Lexer
+    from lionherd_core.lndl.parser import extract_lacts_prefixed, extract_lvars_prefixed
 
     def tokenize():
+        # Extract lvars and lacts (regex-based)
         lvars = extract_lvars_prefixed(perfect_lndl_100b)
         lacts = extract_lacts_prefixed(perfect_lndl_100b)
-        out_content = extract_out_block(perfect_lndl_100b)
-        out_fields = parse_out_block_array(out_content)
-        return lvars, lacts, out_fields
+
+        # Extract OUT{} block content (regex)
+        out_match = re.search(r"OUT\{([^}]+)\}", perfect_lndl_100b, re.DOTALL)
+        out_content = out_match.group(0) if out_match else ""
+
+        # Tokenize OUT{} block (new architecture uses Lexer)
+        lexer = Lexer(out_content)
+        out_tokens = lexer.tokenize()
+
+        return lvars, lacts, out_tokens
 
     benchmark(tokenize)
 
