@@ -855,13 +855,15 @@ class DataFetcher(Event):
             data = await fetch_page(page)
             yield data  # Yield each page
 
-# Submit to executor
-event = DataFetcher()
-await executor.append(event)
-await executor.start()
+# Usage
+async def main():
+    # Submit to executor
+    event = DataFetcher()
+    await executor.append(event)
+    await executor.start()
 
-# Processor consumes entire stream
-# Status only updates after all pages fetched
+    # Processor consumes entire stream
+    # Status only updates after all pages fetched
 ```
 
 **Capacity Consumption**:
@@ -1038,11 +1040,12 @@ processor = await Processor.create(
 )
 
 # Future async initialization (hypothetical)
-@classmethod
-async def create(cls, ...) -> Self:
-    instance = cls(...)
-    await instance._load_rate_limits_from_db()  # Async init
-    return instance
+class Processor:
+    @classmethod
+    async def create(cls, ...) -> Self:
+        instance = cls(...)
+        await instance._load_rate_limits_from_db()  # Async init
+        return instance
 ```
 
 **API Reference**: [Processor.create()](../api/base/processor.md#create)

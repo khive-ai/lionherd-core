@@ -746,28 +746,30 @@ class DataProcessor(Processor):
 class DataExecutor(Executor):
     processor_type = DataProcessor
 
-# 4. Create and start (processor_config required for start())
-executor = DataExecutor(
-    processor_config={
-        "queue_capacity": 100,
-        "capacity_refresh_time": 1.0,
-    }
-)
-await executor.start()
+# 4-7. Usage
+async def main():
+    # 4. Create and start (processor_config required for start())
+    executor = DataExecutor(
+        processor_config={
+            "queue_capacity": 100,
+            "capacity_refresh_time": 1.0,
+        }
+    )
+    await executor.start()
 
-# 5. Add events
-for i in range(10):
-    event = DataProcessingEvent(data={"id": i})
-    await executor.append(event)
+    # 5. Add events
+    for i in range(10):
+        event = DataProcessingEvent(data={"id": i})
+        await executor.append(event)
 
-# 6. Query status
-pending = executor.pending_events
-print(f"Pending: {len(pending)}")
+    # 6. Query status
+    pending = executor.pending_events
+    print(f"Pending: {len(pending)}")
 
-# 7. Wait and check results
-await executor.processor.join()  # Wait for queue to empty
-completed = executor.completed_events
-print(f"Completed: {len(completed)}")
+    # 7. Wait and check results
+    await executor.processor.join()  # Wait for queue to empty
+    completed = executor.completed_events
+    print(f"Completed: {len(completed)}")
 ```
 
 ### Status Queries (All Patterns)
@@ -1042,18 +1044,19 @@ class RateLimitedExecutor(Executor):
     processor_type = RateLimitedProcessor
 
 # Usage
-executor = RateLimitedExecutor(
-    processor_config={
-        "queue_capacity": 10,
-        "capacity_refresh_time": 0.5,
-    }
-)
-await executor.start()
+async def main():
+    executor = RateLimitedExecutor(
+        processor_config={
+            "queue_capacity": 10,
+            "capacity_refresh_time": 0.5,
+        }
+    )
+    await executor.start()
 
-for i in range(50):
-    await executor.append(TaskEvent(task_id=i))
+    for i in range(50):
+        await executor.append(TaskEvent(task_id=i))
 
-# Events processed with rate limiting (max 10 per second)
+    # Events processed with rate limiting (max 10 per second)
 ```
 
 ---

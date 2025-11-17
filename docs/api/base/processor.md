@@ -464,16 +464,18 @@ class MyProcessor(Processor):
 class MyExecutor(Executor):
     processor_type = MyProcessor
 
-executor = MyExecutor(
-    processor_config={
-        "queue_capacity": 50,
-        "capacity_refresh_time": 1.0,
-        "concurrency_limit": 100,
-    }
-)
+# Usage
+async def main():
+    executor = MyExecutor(
+        processor_config={
+            "queue_capacity": 50,
+            "capacity_refresh_time": 1.0,
+            "concurrency_limit": 100,
+        }
+    )
 
-# Start background processing
-await executor.start()
+    # Start background processing
+    await executor.start()
 ```
 
 ---
@@ -776,47 +778,49 @@ class DataProcessor(Processor):
 class DataExecutor(Executor):
     processor_type = DataProcessor
 
-# 4. Create executor with processor config
-executor = DataExecutor(
-    processor_config={
-        "queue_capacity": 50,
-        "capacity_refresh_time": 1.0,
-        "concurrency_limit": 100,
-        "max_per_second": 10,  # Custom param
-    }
-)
+# 4-9. Usage
+async def main():
+    # 4. Create executor with processor config
+    executor = DataExecutor(
+        processor_config={
+            "queue_capacity": 50,
+            "capacity_refresh_time": 1.0,
+            "concurrency_limit": 100,
+            "max_per_second": 10,  # Custom param
+        }
+    )
 
-# 5. Start background processing
-await executor.start()
+    # 5. Start background processing
+    await executor.start()
 
-async with anyio.create_task_group() as tg:
-    # Run processor in background
-    tg.start_soon(executor.processor.execute)
+    async with anyio.create_task_group() as tg:
+        # Run processor in background
+        tg.start_soon(executor.processor.execute)
 
-    # 6. Queue events with different priorities
-    urgent = DataProcessingEvent(request={"data": "urgent"})
-    await executor.append(urgent, priority=0.0)  # Highest priority
+        # 6. Queue events with different priorities
+        urgent = DataProcessingEvent(request={"data": "urgent"})
+        await executor.append(urgent, priority=0.0)  # Highest priority
 
-    normal = DataProcessingEvent(request={"data": "normal"})
-    await executor.append(normal)  # Default priority (creation time)
+        normal = DataProcessingEvent(request={"data": "normal"})
+        await executor.append(normal)  # Default priority (creation time)
 
-    # 7. Wait for completion
-    await anyio.sleep(2.0)
+        # 7. Wait for completion
+        await anyio.sleep(2.0)
 
-    # 8. Check results
-    print(executor.inspect_state())
-    # Output:
-    # Executor State (executor_states):
-    #   pending: 0 events
-    #   processing: 0 events
-    #   completed: 2 events
-    #   failed: 0 events
-    #   cancelled: 0 events
-    #   skipped: 0 events
-    #   aborted: 0 events
+        # 8. Check results
+        print(executor.inspect_state())
+        # Output:
+        # Executor State (executor_states):
+        #   pending: 0 events
+        #   processing: 0 events
+        #   completed: 2 events
+        #   failed: 0 events
+        #   cancelled: 0 events
+        #   skipped: 0 events
+        #   aborted: 0 events
 
-    # 9. Stop processor
-    await executor.stop()
+        # 9. Stop processor
+        await executor.stop()
 ```
 
 ---
@@ -874,24 +878,26 @@ class StreamProcessor(Processor):
 class StreamExecutor(Executor):
     processor_type = StreamProcessor
 
-executor = StreamExecutor(processor_config={
-    "queue_capacity": 10,
-    "capacity_refresh_time": 0.5,
-})
+# Usage
+async def main():
+    executor = StreamExecutor(processor_config={
+        "queue_capacity": 10,
+        "capacity_refresh_time": 0.5,
+    })
 
-await executor.start()
+    await executor.start()
 
-# Queue streaming event
-stream_event = StreamingEvent()
-await executor.append(stream_event)
+    # Queue streaming event
+    stream_event = StreamingEvent()
+    await executor.append(stream_event)
 
-# Processor will consume entire stream automatically
-async with anyio.create_task_group() as tg:
-    tg.start_soon(executor.processor.execute)
-    await anyio.sleep(1.0)
-    await executor.stop()
+    # Processor will consume entire stream automatically
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(executor.processor.execute)
+        await anyio.sleep(1.0)
+        await executor.stop()
 
-print(stream_event.execution.status)  # completed
+    print(stream_event.execution.status)  # completed
 ```
 
 ---
