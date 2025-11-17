@@ -26,3 +26,4 @@ data/
 site/
 
 node_modules/
+*validation_report.txt

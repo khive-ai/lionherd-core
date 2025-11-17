@@ -103,6 +103,19 @@ repos:
         args: [--fix]
         exclude: ^\.github/
 
+  # =============================================================================
+  # Documentation validation (Python code blocks)
+  # =============================================================================
+  - repo: local
+    hooks:
+      - id: validate-docs
+        name: validate documentation code blocks
+        entry: uv run python scripts/validate_docs.py
+        language: system
+        files: ^docs/.*\.md$
+        pass_filenames: false
+        args: [docs/]
+
 # CI optimization: only run on changed files
 ci:
   autofix_commit_msg: |
