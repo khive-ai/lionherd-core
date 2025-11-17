@@ -555,7 +555,7 @@ Node implements six core protocols (three from Element + three additional):
 - `adapt_to_async(obj_key, **kwargs)`: Async external format conversion
 - `adapt_from_async(obj, obj_key, **kwargs)`: Async deserialization
 
-<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
+See [Protocols Guide](../../user_guide/protocols.md) for implementation patterns and protocol design principles.
 
 ## NODE_REGISTRY
 
@@ -956,8 +956,10 @@ Trade-off: More verbose but safer and more maintainable for large codebases.
 - **Related Classes**:
   - [Element](element.md): Base class with identity and serialization
   - [Event](event.md): Element subclass with async execution lifecycle
-  <!-- TODO: Add link to Graph/Pile documentation when available (issue #115) -->
-<!-- TODO: Add links to user guides when available (issue #115) -->
+  - [Graph](graph.md): Directed graph composition with nodes and edges
+  - [Pile](pile.md): Type-safe collections with O(1) UUID lookup
+
+See [User Guides](../../user_guide/) including [API Design](../../user_guide/api_design.md), [Type Safety](../../user_guide/type_safety.md), and [Validation](../../user_guide/validation.md) for practical examples.
 
 ## Examples
 
