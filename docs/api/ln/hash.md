@@ -419,7 +419,7 @@ Default `strict=False` favors performance (deep copy overhead avoided) since mut
 ## See Also
 
 - **Related Utilities**:
-  <!-- TODO: Add link to to_dict() documentation when available (issue #115) -->
+  - [to_dict()](./to_dict.md): Universal dict conversion utility
   - [HashableModel](../types/model.md): Pydantic model with built-in content-based hashing
 - **Related Concepts**:
   - [`Element.__hash__()`](../base/element.md#__hash__): Identity-based hashing (ID-based, not content-based)

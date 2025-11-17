@@ -930,7 +930,8 @@ for i in range(1_000_000):
 - **Related Primitives**:
   - `Condition`: Underlying locking primitive (from `_primitives.py`)
   - `heapq`: Min-heap implementation (Python stdlib)
-<!-- TODO: Add links to user guides when available (issue #115) -->
+
+See [User Guides](../../../user_guide/) for practical patterns and best practices.
 
 ## Examples
 

@@ -450,7 +450,7 @@ HashableModel implements three core protocols:
 
 **Usage**: Safe for use in sets and as dict keys due to frozen configuration.
 
-<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
+See [Protocols Guide](../../user_guide/protocols.md) for design patterns and protocol-based architecture.
 
 ## Usage Patterns
 
@@ -762,7 +762,8 @@ For database persistence, use [Element](../base/element.md) or subclass it.
   - Element: Identity-based hashing alternative for workflow entities
   - Node: Element subclass with relationship edges
   - Event: Element subclass with async execution lifecycle
-<!-- TODO: Add links to user guides when available (issue #115) -->
+
+See [User Guides](../../user_guide/) including [API Design](../../user_guide/api_design.md), [Type Safety](../../user_guide/type_safety.md), and [Validation](../../user_guide/validation.md) for practical examples.
 
 ## Examples
 

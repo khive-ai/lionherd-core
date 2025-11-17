@@ -82,6 +82,18 @@ class Lexer:
     - <lact Model.field alias>call()</lact>
     - OUT{field: [refs], field2: value}
 
+    Thread Safety:
+        Not thread-safe. Create separate instances per thread.
+
+        # ✓ Correct
+        def worker(text):
+            lexer = Lexer(text)
+            return lexer.tokenize()
+
+        # ✗ Wrong (shared lexer across threads)
+        lexer = Lexer(...)  # global
+        thread_pool.map(lambda t: lexer.tokenize(), texts)
+
     Example:
         >>> lexer = Lexer("<lvar Report.title t>AI Safety</lvar>")
         >>> tokens = lexer.tokenize()

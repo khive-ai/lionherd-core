@@ -31,7 +31,7 @@
 - **Parallel execution**: Use `concurrent.futures` or multiprocessing for CPU-bound work
 - **Streaming large datasets**: Use generators or iterators to avoid memory overhead
 
-<!-- TODO: Add link to alcall documentation when available (issue #115) -->
+For async list operations, see [async_call()](./async_call.md) for concurrent execution patterns.
 
 ## Function Signature
 
@@ -434,7 +434,7 @@ See [to_list](to_list.md) for detailed processing semantics.
 
 - **Related Utilities**:
   - [to_list](to_list.md): Core list conversion/processing utility (underlying implementation)
-  <!-- TODO: Add links to alcall and rcall when available (issue #115) -->
+  - [async_call()](./async_call.md): Async/await execution for concurrent operations
 - **Related Patterns**:
   - Built-in `map()`: Simple synchronous mapping without processing
   - List comprehensions: Inline transformations with filtering

@@ -596,12 +596,12 @@ LLM outputs often have **both** formatting issues (malformed JSON, markdown bloc
 - **Related Functions**:
   - [fuzzy_match_keys](fuzzy_match.md): Underlying fuzzy key matching implementation
   - [to_dict](to_dict.md): Universal dict conversion (used internally)
-  <!-- TODO: Add link to extract_json documentation when available (issue #115) -->
+  - [extract_json()](../libs/string_handlers/extract_json.md): Extract JSON from unstructured text
 - **Related Types**:
   - [Spec](../types/spec.md): Pydantic models with built-in fuzzy validation
   - [Operable](../types/operable.md): Structured LLM outputs with validation
   - [FuzzyMatchKeysParams](fuzzy_match.md#class-fuzzymatchkeysparams): Reusable fuzzy match configuration
-  <!-- TODO: Add link to String Similarity documentation when available (issue #115) -->
+  - [String Similarity](../libs/string_handlers/string_similarity.md): Fuzzy string matching algorithms
 
 ## Examples
 
