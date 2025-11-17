@@ -1,36 +1,618 @@
 # LNDL Parser
 
-> Low-level parsing utilities for LNDL (Language InterOperable Network Directive Language) structured outputs
+> Recursive descent parser for LNDL structured outputs with hybrid token/regex approach
 
 ## Overview
 
-The **LNDL parser module** provides extraction and parsing functions for processing LNDL-formatted responses from language models. LNDL enables structured variable declarations (`<lvar>`), action invocations (`<lact>`), and output mapping (`OUT{}`) within free-form text responses.
+The **LNDL parser module** provides parsing for LNDL (Language InterOperable Network Directive Language) structured outputs. Since **PR #194 (2025-11-16)**, the parser uses a **Lexer/Parser/AST architecture** for robust tokenization and structured parsing.
 
-**Key Capabilities:**
+**Current Architecture** (Recommended):
 
-- **Variable Extraction**: Parse `<lvar>` declarations in both legacy and namespace-prefixed formats
-- **Action Extraction**: Parse `<lact>` function call declarations with optional namespace support
-- **Output Block Parsing**: Extract and parse `OUT{}` blocks with balanced brace scanning
-- **Array Syntax**: Parse field mappings with array syntax (`field:[var1, var2]`) and literal values
-- **String-Aware Scanning**: Ignore braces/quotes inside string literals during parsing
-- **Reserved Keyword Warnings**: Detect Python reserved keywords in action names
+- **[`Parser`](#parser-class)** class: Recursive descent parser consuming token streams from [`Lexer`](lexer.md)
+- **Hybrid approach**: Tokens for structure, regex for content preservation (whitespace, quotes)
+- **Returns**: AST ([`Program`](ast.md#program)) with typed nodes ([`Lvar`](ast.md#lvar), [`Lact`](ast.md#lact), [`OutBlock`](ast.md#outblock))
+
+**Legacy API** (Deprecated):
+
+- Regex-based extraction functions ([`extract_lvars()`](#extract_lvars), [`extract_lacts()`](#extract_lacts), etc.)
+- Still functional but **use new Parser class** for new code
+
+**Migration Path**:
+
+```python
+# ❌ Old (regex-based)
+lvars = extract_lvars_prefixed(response)
+lacts = extract_lacts_prefixed(response)
+out_fields = parse_out_block_array(extract_out_block(response))
+
+# ✅ New (Parser class)
+from lionherd_core.lndl.lexer import Lexer
+from lionherd_core.lndl.parser import Parser
+
+lexer = Lexer(response)
+tokens = lexer.tokenize()
+parser = Parser(tokens, source_text=response)
+program = parser.parse()  # Returns AST with lvars, lacts, out_block
+```
 
 **When to Use:**
 
-- Processing LNDL-formatted LLM responses with structured outputs
-- Extracting variable declarations and action invocations from text
-- Parsing output mappings from `OUT{}` blocks
-- Building higher-level LNDL response processors
+- Parsing LNDL responses into typed AST
+- Building LNDL tooling with structured representations
+- Validating LNDL syntax before resolution
+- Custom LNDL transformations and analysis
 
 **When NOT to Use:**
 
-- Simple string extraction (use regex directly)
-- JSON parsing (use `json`/`orjson` libraries)
-- Non-LNDL structured formats (use appropriate parsers)
+- High-level LNDL parsing → Use [`parse_lndl_fuzzy()`](fuzzy.md) or [`parse_lndl()`](resolver.md)
+- Simple regex extraction → Use legacy functions below
+- Non-LNDL formats → Use appropriate parsers
 
 **Architecture Context:**
 
-This module provides **low-level parsing primitives**. Higher-level components (e.g., `ResponseParser`, `OperationResponse`) build on these utilities for complete LNDL response processing with validation and type conversion.
+The Parser is part of the **3-layer LNDL architecture**:
+
+1. **Lexer** ([lexer.md](lexer.md)): Text → Tokens
+2. **Parser** (this module): Tokens → AST
+3. **Resolver** ([resolver.md](resolver.md)): AST → Validated Pydantic models
+
+See [LNDL Architecture Guide](../../tutorials/lndl_architecture.md) for complete workflow.
+
+**Thread Safety:**
+
+The Parser is **not thread-safe**. Create separate instances per thread.
+
+```python
+# ✓ Correct: Separate parser per thread
+def worker(text):
+    lexer = Lexer(text)
+    parser = Parser(lexer.tokenize(), source_text=text)
+    return parser.parse()
+
+# ✗ Wrong: Shared parser across threads
+parser = Parser(...)  # global
+thread_pool.map(lambda t: parser.parse(), texts)
+```
+
+**Reason**: Parser maintains mutable state (`pos`) and references source text that would race under concurrent access.
+
+---
+
+## Parser Class
+
+### Parser
+
+Recursive descent parser for LNDL structured outputs.
+
+The parser uses **recursive descent** to transform token streams from the Lexer into Abstract Syntax Trees containing [`Lvar`](ast.md#lvar), [`Lact`](ast.md#lact), and [`OutBlock`](ast.md#outblock) nodes.
+
+**Supported LNDL Syntax:**
+
+- **Namespaced lvars**: `<lvar Model.field alias>content</lvar>`
+- **Raw lvars**: `<lvar alias>content</lvar>`
+- **Namespaced lacts**: `<lact Model.field alias>func(...)</lact>`
+- **Direct lacts**: `<lact alias>func(...)</lact>`
+- **OUT blocks**: `OUT{field: [refs], field2: value}`
+
+**Constructor:**
+
+```python
+def __init__(self, tokens: list[Token], source_text: str | None = None):
+    """Initialize parser with token stream.
+
+    Args:
+        tokens: Token list from lexer (must include EOF token)
+        source_text: Optional source text for raw content extraction
+    """
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `tokens` | `list[Token]` | ✅ | Token stream from Lexer (must include EOF) |
+| `source_text` | `str \| None` | ✅ (for parsing) | Original LNDL response text for content extraction |
+
+**Attributes:**
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `tokens` | `list[Token]` | Token stream being parsed |
+| `pos` | `int` | Current position in token stream (0-indexed) |
+| `source_text` | `str \| None` | Original text for content extraction |
+
+**Grammar:**
+
+```text
+Program    ::= (Lvar | Lact)* OutBlock?
+Lvar       ::= '<lvar' (ID '.' ID ID? | ID) '>' Content '</lvar>'
+Lact       ::= '<lact' (ID '.' ID ID? | ID) '>' FuncCall '</lact>'
+OutBlock   ::= 'OUT{' OutFields '}'
+OutFields  ::= OutField (',' OutField)*
+OutField   ::= ID ':' OutValue
+OutValue   ::= '[' RefList ']' | Literal
+RefList    ::= ID (',' ID)*
+```
+
+**Key Methods:**
+
+#### `parse()`
+
+Parse token stream into AST.
+
+**Signature:**
+
+```python
+def parse(self) -> Program:
+    """Parse token stream into AST.
+
+    Uses token-based parsing with regex content extraction to preserve whitespace and quotes.
+
+    Returns:
+        Program node containing lvars, lacts, and optional out_block
+
+    Example:
+        >>> parser = Parser(tokens, source_text)
+        >>> program = parser.parse()
+        >>> len(program.lvars)
+        2
+    """
+```
+
+**Returns:**
+
+- [`Program`](ast.md#program): Root AST node containing:
+  - `lvars`: List of [`Lvar`](ast.md#lvar) | [`RLvar`](ast.md#rlvar) instances
+  - `lacts`: List of [`Lact`](ast.md#lact) instances
+  - `out_block`: Optional [`OutBlock`](ast.md#outblock) instance
+
+**Raises:**
+
+- [`ParseError`](#parseerror): Syntax errors, unclosed tags, malformed LNDL
+
+**Behavior:**
+
+1. Tracks aliases to detect duplicates (lvars and lacts share namespace)
+2. Skips narrative text (only parses LNDL tags)
+3. Preserves newlines for error reporting
+4. Extracts content via regex (preserves whitespace/quotes)
+
+**Examples:**
+
+```python
+from lionherd_core.lndl.lexer import Lexer
+from lionherd_core.lndl.parser import Parser
+
+response = """
+<lvar Report.title t>AI Safety Analysis</lvar>
+<lvar Report.score s>0.95</lvar>
+
+OUT{
+  title: [t],
+  score: [s]
+}
+"""
+
+# Parse to AST
+lexer = Lexer(response)
+tokens = lexer.tokenize()
+parser = Parser(tokens, source_text=response)
+program = parser.parse()
+
+# Access AST components
+print(f"Variables: {len(program.lvars)}")       # 2
+print(f"Actions: {len(program.lacts)}")         # 0
+print(f"Output fields: {list(program.out_block.fields.keys())}")
+# ['title', 'score']
+
+# Inspect lvars
+for lvar in program.lvars:
+    print(f"{lvar.model}.{lvar.field} ({lvar.alias}): {lvar.content}")
+# Report.title (t): AI Safety Analysis
+# Report.score (s): 0.95
+```
+
+**See Also:**
+
+- [`parse_lvar()`](#parse_lvar): Parse individual lvar declaration
+- [`parse_lact()`](#parse_lact): Parse individual lact declaration
+- [`parse_out_block()`](#parse_out_block): Parse OUT{} block
+
+---
+
+#### `parse_lvar()`
+
+Parse lvar declaration (namespaced or raw).
+
+**Signature:**
+
+```python
+def parse_lvar(self) -> Lvar | RLvar:
+    """Parse lvar declaration (namespaced or raw).
+
+    Grammar:
+        Lvar  ::= '<lvar' ID '.' ID ID? '>' Content '</lvar>'  # Namespaced
+        RLvar ::= '<lvar' ID '>' Content '</lvar>'              # Raw
+
+    Namespaced pattern (maps to Pydantic model):
+        <lvar Model.field alias>content</lvar>
+        <lvar Model.field>content</lvar>  # Uses field as alias
+
+    Raw pattern (simple string capture):
+        <lvar alias>content</lvar>
+
+    Returns:
+        Lvar node (namespaced) or RLvar node (raw)
+
+    Examples:
+        <lvar Report.title t>AI Safety Analysis</lvar>
+        → Lvar(model="Report", field="title", alias="t", content="AI Safety Analysis")
+
+        <lvar reasoning>The analysis shows...</lvar>
+        → RLvar(alias="reasoning", content="The analysis shows...")
+    """
+```
+
+**Returns:**
+
+- [`Lvar`](ast.md#lvar): If namespaced pattern (`Model.field`)
+- [`RLvar`](ast.md#rlvar): If raw pattern (single identifier)
+
+**Raises:**
+
+- [`ParseError`](#parseerror): Syntax errors, unclosed tags, malformed content
+
+**Behavior:**
+
+1. Parses opening `<lvar` tag
+2. Distinguishes namespaced vs raw via DOT token
+3. Extracts content via regex (preserves whitespace)
+4. Validates closing `</lvar>` tag
+
+**Example:**
+
+```python
+# Namespaced lvar
+lexer = Lexer("<lvar Report.title t>Title</lvar>")
+parser = Parser(lexer.tokenize(), source_text=lexer.text)
+program = parser.parse()
+
+lvar = program.lvars[0]
+assert lvar.model == "Report"
+assert lvar.field == "title"
+assert lvar.alias == "t"
+assert lvar.content == "Title"
+```
+
+---
+
+#### `parse_lact()`
+
+Parse lact (action) declaration.
+
+**Signature:**
+
+```python
+def parse_lact(self) -> Lact:
+    """Parse lact (action) declaration.
+
+    Grammar:
+        Lact ::= '<lact' (ID '.' ID ID? | ID) '>' FuncCall '</lact>'
+
+    Supports:
+        Namespaced: <lact Model.field alias>func(...)</lact>
+        Direct: <lact alias>func(...)</lact>
+
+    Returns:
+        Lact node with model, field, alias, and call string
+
+    Example:
+        <lact Report.summary s>generate_summary(prompt="...")</lact>
+        → Lact(model="Report", field="summary", alias="s", call="generate_summary(...)")
+
+        <lact search>search(query="AI")</lact>
+        → Lact(model=None, field=None, alias="search", call="search(...)")
+    """
+```
+
+**Returns:**
+
+- [`Lact`](ast.md#lact): Action node with model, field, alias, call
+
+**Raises:**
+
+- [`ParseError`](#parseerror): Syntax errors, unclosed tags, invalid function calls
+- `UserWarning`: If alias matches Python reserved keyword (deduplicated)
+
+**Behavior:**
+
+1. Parses opening `<lact` tag
+2. Distinguishes namespaced vs direct via DOT token
+3. Extracts call via regex (preserves exact syntax)
+4. Warns if alias is Python reserved keyword
+5. Validates closing `</lact>` tag
+
+**Example:**
+
+```python
+# Namespaced lact
+lexer = Lexer('<lact Report.summary s>generate_summary(prompt="...")</lact>')
+parser = Parser(lexer.tokenize(), source_text=lexer.text)
+program = parser.parse()
+
+lact = program.lacts[0]
+assert lact.model == "Report"
+assert lact.field == "summary"
+assert lact.alias == "s"
+assert lact.call == 'generate_summary(prompt="...")'
+```
+
+---
+
+#### `parse_out_block()`
+
+Parse OUT{} block.
+
+**Signature:**
+
+```python
+def parse_out_block(self) -> OutBlock:
+    """Parse OUT{} block.
+
+    Grammar:
+        OutBlock  ::= 'OUT{' OutFields '}'
+        OutFields ::= OutField (',' OutField)*
+        OutField  ::= ID ':' OutValue
+        OutValue  ::= '[' RefList ']' | Literal
+        RefList   ::= ID (',' ID)*
+
+    Returns:
+        OutBlock node with fields dict
+
+    Example:
+        OUT{title: [t], summary: [s], confidence: 0.85}
+        → OutBlock(fields={"title": ["t"], "summary": ["s"], "confidence": 0.85})
+    """
+```
+
+**Returns:**
+
+- [`OutBlock`](ast.md#outblock): Output specification with fields dict
+
+**Field Value Types:**
+
+| Type | Example | Description |
+|------|---------|-------------|
+| `list[str]` | `["t", "s"]` | Variable/action references (array or single) |
+| `str` | `"active"` | String literal |
+| `int` | `42` | Integer literal |
+| `float` | `0.85` | Float literal |
+| `bool` | `True` | Boolean literal (`true`/`false`) |
+
+**Raises:**
+
+- [`ParseError`](#parseerror): Syntax errors, malformed literals
+
+**Behavior:**
+
+1. Parses opening `OUT{`
+2. Iterates field assignments (skip unexpected tokens)
+3. Distinguishes array references from literals
+4. Converts numbers to int/float, booleans to bool
+5. Validates closing `}`
+
+**Example:**
+
+```python
+lexer = Lexer("OUT{title: [t], score: 0.95, status: \"complete\"}")
+parser = Parser(lexer.tokenize(), source_text=lexer.text)
+program = parser.parse()
+
+out = program.out_block
+assert out.fields["title"] == ["t"]
+assert out.fields["score"] == 0.95
+assert out.fields["status"] == "complete"
+```
+
+---
+
+### ParseError
+
+Parser error with position information.
+
+**Inheritance:** `Exception`
+
+**Attributes:**
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `message` | `str` | Error description |
+| `token` | `Token` | Token where error occurred |
+
+**Message Format:**
+
+```text
+Parse error at line {line}, column {column}: {message}
+```
+
+**Example:**
+
+```python
+from lionherd_core.lndl.parser import Parser, ParseError
+from lionherd_core.lndl.lexer import Lexer
+
+# Unclosed lvar tag
+malformed = "<lvar Report.title t>Title"  # Missing </lvar>
+
+try:
+    lexer = Lexer(malformed)
+    parser = Parser(lexer.tokenize(), source_text=malformed)
+    program = parser.parse()
+except ParseError as e:
+    print(e)
+    # Parse error at line 1, column ...: Unclosed lvar tag - missing </lvar>
+    print(f"Error at: line {e.token.line}, column {e.token.column}")
+```
+
+**See Also:**
+
+- [`Parser.parse()`](#parse): Raises ParseError on syntax errors
+- [`Token`](lexer.md#token): Token with position information
+
+---
+
+### Parser Helper Methods
+
+#### `current_token()`
+
+Get current token without advancing.
+
+**Signature:**
+
+```python
+def current_token(self) -> Token:
+    """Get current token without advancing.
+
+    Returns:
+        Current token or EOF if past end
+    """
+```
+
+---
+
+#### `peek_token()`
+
+Peek at token ahead without advancing.
+
+**Signature:**
+
+```python
+def peek_token(self, offset: int = 1) -> Token:
+    """Peek at token ahead without advancing.
+
+    Args:
+        offset: Number of tokens to look ahead
+
+    Returns:
+        Token at offset or EOF if out of bounds
+    """
+```
+
+---
+
+#### `advance()`
+
+Advance to next token.
+
+**Signature:**
+
+```python
+def advance(self) -> None:
+    """Advance to next token."""
+```
+
+---
+
+#### `expect()`
+
+Expect specific token type and advance.
+
+**Signature:**
+
+```python
+def expect(self, token_type: TokenType) -> Token:
+    """Expect specific token type and advance.
+
+    Args:
+        token_type: Expected token type
+
+    Returns:
+        Matched token
+
+    Raises:
+        ParseError: If current token doesn't match expected type
+    """
+```
+
+---
+
+#### `match()`
+
+Check if current token matches any of given types.
+
+**Signature:**
+
+```python
+def match(self, *token_types: TokenType) -> bool:
+    """Check if current token matches any of given types.
+
+    Args:
+        *token_types: Token types to match against
+
+    Returns:
+        True if current token matches any type
+    """
+```
+
+---
+
+#### `skip_newlines()`
+
+Skip newline tokens.
+
+**Signature:**
+
+```python
+def skip_newlines(self) -> None:
+    """Skip newline tokens."""
+```
+
+---
+
+## Legacy API (Deprecated)
+
+> **⚠️ DEPRECATED**: This API is deprecated since PR #194 (2025-11-16). Use the new [`Parser`](#parser-class) class for all new code.
+
+**Why Deprecated:**
+
+- **Regex-based parsing**: Limited error reporting (no line/column info)
+- **No AST**: Direct dict/string extraction, not structured
+- **Less robust**: Doesn't handle edge cases as well as token-based parser
+- **Harder to extend**: Regex patterns difficult to maintain
+
+**Status**: Functional but not recommended for new code. Will be maintained for backward compatibility but no new features.
+
+**Migration Guide**:
+
+```python
+# ❌ Old: extract_lvars_prefixed() → dict
+from lionherd_core.lndl.parser import extract_lvars_prefixed
+lvars_dict = extract_lvars_prefixed(response)
+# Returns: dict[str, LvarMetadata]
+
+# ✅ New: Parser → AST
+from lionherd_core.lndl.lexer import Lexer
+from lionherd_core.lndl.parser import Parser
+
+lexer = Lexer(response)
+parser = Parser(lexer.tokenize(), source_text=response)
+program = parser.parse()
+# Returns: Program with lvars, lacts, out_block (typed AST)
+
+# Access lvars
+for lvar in program.lvars:
+    print(f"{lvar.model}.{lvar.field}: {lvar.content}")
+```
+
+**Benefits of Migration:**
+
+- ✅ Structured AST (typed, composable)
+- ✅ Position tracking (line/column error messages)
+- ✅ Better error handling (ParseError with context)
+- ✅ Easier testing (pure data structures)
+- ✅ Extensible (visitor pattern, transformations)
+
+---
 
 ## Module Constants
 
