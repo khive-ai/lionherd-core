@@ -656,7 +656,8 @@ The 10-level maximum recursion depth balances:
 - **Related Modules**:
   - `lionherd_core.libs.string_handlers._fuzzy_json`: Fuzzy JSON parsing
   - `orjson`: High-performance JSON library
-<!-- TODO: Add links to user guides when available (issue #115) -->
+
+See [User Guides](../../user_guide/) including [API Design](../../user_guide/api_design.md), [Type Safety](../../user_guide/type_safety.md), and [Validation](../../user_guide/validation.md) for practical examples.
 
 ## Examples
 

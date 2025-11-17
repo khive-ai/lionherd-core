@@ -929,7 +929,8 @@ Automatic sync/async detection via `is_coro_func()` enables:
 - **Related Classes**:
   - `Params`: Base class for parameter dataclasses
   - `Semaphore`: Concurrency control primitive
-<!-- TODO: Add links to user guides when available (issue #115) -->
+
+See [User Guides](../../user_guide/) including [API Design](../../user_guide/api_design.md), [Type Safety](../../user_guide/type_safety.md), and [Validation](../../user_guide/validation.md) for practical examples.
 
 ---
 

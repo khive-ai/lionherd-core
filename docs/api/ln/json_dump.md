@@ -904,7 +904,7 @@ json_output2 = json_dumpb(data2, sort_keys=True, deterministic_sets=True)
 assert json_output == json_output2  # ✓ Deterministic
 ```
 
-<!-- TODO: Add link to content-based caching tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for content-based caching patterns and examples.
 
 ### Custom Type Handlers
 
@@ -925,7 +925,7 @@ result = json_dumpb(data, default=custom_default)
 # datetime objects converted via custom handler
 ```
 
-<!-- TODO: Add link to advanced type serialization tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for advanced type serialization patterns and custom handlers.
 
 ## Design Rationale
 
@@ -1110,7 +1110,7 @@ logger = setup_json_logging("myapp")
 logger.info("User action")  # Safely logs even with non-serializable objects
 ```
 
-<!-- TODO: Add link to JSON logging integration tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for JSON logging integration patterns.
 
 ### Example 3: Large Dataset Streaming
 
@@ -1134,7 +1134,7 @@ def export_results(output_path: Path):
 export_results(Path("export.ndjson"))
 ```
 
-<!-- TODO: Add link to large-scale data export tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for large-scale data export patterns and streaming examples.
 
 ### Example 4: Deterministic Hashing
 
@@ -1160,7 +1160,7 @@ hash2 = hash_dict(params2)
 assert hash1 == hash2  # ✓ Content-based, order-independent
 ```
 
-<!-- TODO: Add link to content-based caching tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for content-based caching implementation patterns.
 
 ### Example 5: Custom Type Integration
 
@@ -1191,4 +1191,4 @@ json_output = json_dumpb(event, default=custom_default)
 # Handles custom types via additional serializers
 ```
 
-<!-- TODO: Add link to advanced type serialization tutorial when available (issue #115) -->
+See [Tutorials](../../tutorials/) for advanced type serialization with custom handlers.
