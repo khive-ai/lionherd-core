@@ -79,7 +79,7 @@ Examples:
 - Text starts on line after opening quotes
 - Closing quotes on separate line
 - Inline code uses backticks: `` `param_name` ``
-- Cross-references use markdown links: `` [`Element`](../api/base/element.md) ``
+- Cross-references use markdown links: `` [`Element`](api/base/element.md) ``
 - Auto-generated API docs via mkdocstrings support docstring cross-refs
 
 **Type Documentation:**
@@ -305,7 +305,7 @@ This class implements the following protocols
 - **Containable**: Membership testing via `__contains__()` (if applicable)
 - **Allowable**: Allowed values via `allowed()` (if applicable)
 
-<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
+See [Protocols Guide](user_guide/protocols.md) or [Protocols Notebook](../notebooks/references/protocols.ipynb) for implementation patterns.
 ```
 
 ### Async Documentation

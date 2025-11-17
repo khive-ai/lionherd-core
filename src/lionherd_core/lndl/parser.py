@@ -117,6 +117,18 @@ class Parser:
     - Direct lacts: <lact alias>func(...)</lact>
     - OUT blocks: OUT{field: [refs], field2: value}
 
+    Thread Safety:
+        Not thread-safe. Create separate instances per thread.
+
+        # ✓ Correct
+        def worker(text):
+            parser = Parser(Lexer(text).tokenize(), text)
+            return parser.parse()
+
+        # ✗ Wrong (shared parser across threads)
+        parser = Parser(...)  # global
+        thread_pool.map(lambda t: parser.parse(), texts)
+
     Example:
         >>> from lionherd_core.lndl.lexer import Lexer
         >>> lexer = Lexer("<lvar Report.title t>AI Safety</lvar>\\nOUT{title: [t]}")

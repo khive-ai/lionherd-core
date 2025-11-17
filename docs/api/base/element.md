@@ -628,7 +628,7 @@ Register event handlers for observing element state changes.
 
 **Usage**: Safe for use in sets and as dict keys with stable identity.
 
-<!-- TODO: Add link to Protocols Guide when available (issue #115) -->
+See [Protocols Guide](../../user_guide/protocols.md) for implementation patterns.
 
 ## Usage Patterns
 
@@ -868,7 +868,8 @@ restored = [Element.from_dict(data) for data in serialized]
   - [Node](node.md): Element subclass with relationship edges
   - [Event](event.md): Element subclass with async execution lifecycle
   - [HashableModel](../types/model.md): Content-based hashing alternative
-<!-- TODO: Add links to user guides when available (issue #115) -->
+
+See [User Guides](../../user_guide/) including [API Design](../../user_guide/api_design.md), [Type Safety](../../user_guide/type_safety.md), and [Validation](../../user_guide/validation.md) for practical examples.
 
 ## Examples
 
