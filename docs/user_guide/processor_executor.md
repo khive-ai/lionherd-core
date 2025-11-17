@@ -1042,8 +1042,8 @@ processor = await Processor.create(
 # Future async initialization (hypothetical)
 class Processor:
     @classmethod
-    async def create(cls, ...) -> Self:
-        instance = cls(...)
+    async def create(cls, **kwargs) -> Self:
+        instance = cls(**kwargs)
         await instance._load_rate_limits_from_db()  # Async init
         return instance
 ```
