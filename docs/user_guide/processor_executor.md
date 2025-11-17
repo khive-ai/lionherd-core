@@ -266,8 +266,8 @@ await processor.executor._update_progression(event)  # Write
 # Create executor (creates Flow internally)
 executor = MyExecutor(processor_config={"queue_capacity": 100})
 
-# Flow automatically created with 5 progressions (one per EventStatus)
-assert len(executor.states.progressions) == 5
+# Flow automatically created with 7 progressions (one per EventStatus)
+assert len(executor.states.progressions) == 7
 assert executor.states.get_progression("pending").name == "pending"
 
 # Processor shares same pile
@@ -755,7 +755,7 @@ completed = executor.get_events_by_status(EventStatus.COMPLETED)
 | 10,000       | 1,000     | ~5ms           | ~0.5ms          | 10x     |
 | 100,000      | 10,000    | ~50ms          | ~5ms            | 10x     |
 
-**Overhead**: ~8% memory overhead (5 progressions × 2% each)
+**Overhead**: ~11% memory overhead (7 progressions × ~1.6% each)
 
 **Convenience Properties**:
 
@@ -1541,7 +1541,7 @@ Capacity: 20
 
 ### Custom Progressions
 
-Beyond the 5 default EventStatus progressions, you can add custom progressions for business logic:
+Beyond the 7 default EventStatus progressions, you can add custom progressions for business logic:
 
 ```python
 # Add custom progression after executor creation

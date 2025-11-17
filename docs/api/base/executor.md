@@ -56,9 +56,9 @@ EventStatus.ABORTED     → Progression(name="aborted")
 - **Type safety**: EventStatus enum prevents invalid status strings
 - **Explainability**: `inspect_state()` shows all status counts at a glance
 - **Audit trail**: Flow serialization captures full state history
-- **Memory overhead**: ~8% (7 progressions × small metadata)
+- **Memory overhead**: ~11% (7 progressions × small metadata)
 
-**Trade-off**: Accepted 8% memory overhead for O(1) performance and explainability.
+**Trade-off**: Accepted ~11% memory overhead for O(1) performance and explainability.
 
 ### Integration with Processor
 
@@ -686,7 +686,7 @@ completed = [e for e in pile if e.execution.status == EventStatus.COMPLETED]
 completed = executor.get_events_by_status(EventStatus.COMPLETED)
 ```
 
-**Trade-off**: 8% memory overhead (7 progressions) for O(1) queries.
+**Trade-off**: ~11% memory overhead (7 progressions) for O(1) queries.
 
 ### Explainability
 
