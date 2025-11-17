@@ -1033,11 +1033,13 @@ processor = Processor(
 )
 
 # Async factory (for consistent API)
-processor = await Processor.create(
-    queue_capacity=100,
-    capacity_refresh_time=1.0,
-    pile=pile,
-)
+async def setup():
+    processor = await Processor.create(
+        queue_capacity=100,
+        capacity_refresh_time=1.0,
+        pile=pile,
+    )
+    return processor
 
 # Future async initialization (hypothetical)
 class Processor:
