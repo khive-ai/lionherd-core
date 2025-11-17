@@ -30,7 +30,7 @@
 - Static type annotations without runtime metadata (use typing module)
 - Framework-specific features requiring deep integration (use framework's field system)
 
-See interactive notebooks in [References](../../notebooks/references/) and [Tutorials](../../notebooks/tutorials/) directories for hands-on examples.
+See interactive notebooks in [References](../../../notebooks/references/) and [Tutorials](../../../notebooks/tutorials/) directories for hands-on examples.
 
 ## Class Hierarchy
 
