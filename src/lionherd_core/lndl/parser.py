@@ -131,9 +131,10 @@ class Parser:
 
     Example:
         >>> from lionherd_core.lndl.lexer import Lexer
-        >>> lexer = Lexer("<lvar Report.title t>AI Safety</lvar>\\nOUT{title: [t]}")
+        >>> text = "<lvar Report.title t>AI Safety</lvar>\\nOUT{title: [t]}"
+        >>> lexer = Lexer(text)
         >>> tokens = lexer.tokenize()
-        >>> parser = Parser(tokens)
+        >>> parser = Parser(tokens, source_text=text)
         >>> program = parser.parse()
         >>> len(program.lvars)
         1
