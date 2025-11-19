@@ -520,7 +520,7 @@ for stage in ["backlog", "in_progress", "review", "done"]:
 
 # Add task to backlog
 task = Task(description="Implement feature X")
-flow.add_item(task, progression_ids="backlog")
+flow.add_item(task, progressions="backlog")
 
 # Transition: backlog → in_progress
 backlog = flow.get_progression("backlog")
@@ -540,7 +540,7 @@ tasks_in_review = [
 ```python
 # Item in multiple stages simultaneously
 task = Task(description="Update docs")
-flow.add_item(task, progression_ids=["development", "documentation", "translation"])
+flow.add_item(task, progressions=["development", "documentation", "translation"])
 
 # Check membership
 dev = flow.get_progression("development")
@@ -641,7 +641,7 @@ pending.append(random_uuid)  # ❌ UUID not in flow.items
 ```python
 # ✓ CORRECT: Add to pile, then progression
 task = Task(description="New task")
-flow.add_item(task, progression_ids="pending")
+flow.add_item(task, progressions="pending")
 ```
 
 ---
@@ -672,7 +672,7 @@ tasks = [
 ]
 
 for task in tasks:
-    workflow.add_item(task, progression_ids="todo")
+    workflow.add_item(task, progressions="todo")
 
 # Start work on high-priority task
 todo = workflow.get_progression("todo")
@@ -709,7 +709,7 @@ services = [
 
 # Start all in dev
 for svc in services:
-    pipeline.add_item(svc, progression_ids="dev")
+    pipeline.add_item(svc, progressions="dev")
 
 # Promote critical services to staging
 dev = pipeline.get_progression("dev")
@@ -744,7 +744,7 @@ for track in ["backend", "frontend", "docs", "tests"]:
 feature = Feature(name="User Authentication")
 flow.add_item(
     feature,
-    progression_ids=["backend", "frontend", "docs"]  # M:N
+    progressions=["backend", "frontend", "docs"]  # M:N
 )
 
 # Check where feature is active
@@ -765,7 +765,7 @@ flow.add_progression(Progression(name="pending"))
 flow.add_progression(Progression(name="active"))
 
 task = Task(description="Setup CI/CD")
-flow.add_item(task, progression_ids="pending")
+flow.add_item(task, progressions="pending")
 
 # Serialize
 data = flow.to_dict(mode="json")
@@ -798,7 +798,7 @@ print(f"Task preserved: {restored.items[task.id].description}")
 **Common Patterns**:
 
 - `flow.get_progression("stage")` - Named stage access
-- `flow.add_item(item, progression_ids="stage")` - Add to pile and stage
+- `flow.add_item(item, progressions="stage")` - Add to pile and stage
 - `stage.remove(id); next_stage.append(id)` - State transitions
 - `for prog in flow.progressions` - Workflow introspection
 

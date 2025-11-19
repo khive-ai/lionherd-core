@@ -1,233 +1,189 @@
-# CLAUDE.md - Claude Code Guidance
-
-This file provides specific guidance for Claude Code (claude.ai/code) when working with this repository.
+# CLAUDE.md - Navigation Guide
 
 **Repository**: <https://github.com/khive-ai/lionherd-core>
 **Copyright**: © 2025 HaiyangLi (Ocean) - Apache 2.0 License
 
 ---
 
-## Quick Commands Reference
+## Quick Commands
 
-```bash
-# Setup
-uv sync --all-extras
-uv run pre-commit install
+| Task | Command |
+|------|---------|
+| Install | `uv sync --all-extras` |
+| Test | `uv run pytest --cov=lionherd_core --cov-report=term-missing` |
+| Format | `uv run ruff format .` |
+| Lint | `uv run ruff check .` |
+| Type Check | `uv run mypy src/` |
+| Pre-commit | `uv run pre-commit install` |
 
-# Testing & Quality
-uv run pytest --cov=lionherd_core --cov-report=term-missing  # Coverage ≥80%
-uv run ruff format .   # Format (line length: 100)
-uv run ruff check .    # Lint (must pass)
-uv run mypy src/       # Type check (all public functions)
-```
+**CI Requirements**: Tests ✓ | Coverage ≥80% | mypy ✓ | ruff ✓ | Notebooks ✓ (if modified)
 
 ---
 
-## Architecture Philosophy
+## Directory Map
 
-**Core Principle**: Protocol-based composition over inheritance (Rust traits, Go interfaces).
+| Path | Contents |
+|------|----------|
+| `src/lionherd_core/base/` | Element, Node, Pile, Graph, Flow, Progression |
+| `src/lionherd_core/protocols.py` | Observable, Serializable, Adaptable |
+| `src/lionherd_core/types/` | Spec, Operable (Pydantic integration) |
+| `src/lionherd_core/lndl/` | Fuzzy LLM output parser (lexer/parser/AST) |
+| `tests/` | Unit tests (≥80% coverage) |
+| `notebooks/tutorials/` | Executable examples |
 
-### Protocol Pattern
+---
+
+## Resource Guide
+
+| I want to... | Go here |
+|--------------|---------|
+| Understand architecture | README.md (Philosophy section) |
+| See examples | `notebooks/tutorials/*.ipynb` |
+| Contribute | CONTRIBUTING.md |
+| Check API evolution | CHANGELOG.md |
+| Quick reference | AGENTS.md |
+| Test a pattern | `tests/` (mirror structure) |
+
+---
+
+## Key Patterns
+
+### Protocol-Based Composition (NOT inheritance)
 
 ```python
-from uuid import uuid4
 from lionherd_core.protocols import Observable, Serializable, implements
 
-# ❌ WRONG: Inheritance creates tight coupling
+# ❌ WRONG: Inheritance
 class Agent(Observable, Serializable): pass
 
-# ✅ CORRECT: Structural typing, explicit capabilities
+# ✅ CORRECT: Structural typing
 @implements(Observable, Serializable)
 class Agent:
-    def __init__(self):
-        self.id = uuid4()                # Observable requirement
-    def to_dict(self, **kwargs):         # Serializable requirement
-        return {"id": str(self.id)}
+    def __init__(self): self.id = uuid4()
+    def to_dict(self): return {"id": str(self.id)}
 ```
 
-**Design Intent**: `@implements()` enforces that the class defines protocol methods in its body, not via inheritance.
-
----
-
-## Three-Layer Architecture
-
-```text
-1. Protocols: Observable, Serializable, Adaptable (structural typing)
-2. Base: Element, Node, Pile[T], Graph, Flow, Progression (core data structures)
-3. Types: Spec, Operable, LNDL Parser (Pydantic integration + LLM output parsing)
-```
-
----
-
-## LNDL Parser
-
-**Purpose**: Fuzzy parser for LLM output with high tolerance for errors.
-
-**Trade-off**: +~50-90μs overhead, <5% failure rate (vs 40-60% with strict JSON)
-
-**Workflow**:
-
-```python
-# Define Pydantic model
-Spec(MyModel, name="result") → Operable([specs]) → parse_lndl_fuzzy(llm_response, operable)
-```
-
-**Pipeline**: parser.py (tokenize) → resolver.py (map fields) → fuzzy.py (handle variations)
-
----
-
-## Key Data Structures
-
-### Node - Polymorphic Content Container
+### Node Adapters (Isolated Per Subclass)
 
 ```python
 from lionherd_core import Node
-
-# Node has toml/yaml adapters by default
-node = Node(content={"key": "value"})  # Content must be dict/Serializable/BaseModel
-toml_str = node.adapt_to("toml")  # Works out of the box
-yaml_str = node.adapt_to("yaml")  # Works out of the box
-
-# Subclasses have isolated registries - must register explicitly
 from pydapter.adapters import TomlAdapter
 
+# Node has toml/yaml adapters by default
+node = Node(content={"key": "value"})
+toml_str = node.adapt_to("toml")  # Works
+
+# Subclasses have isolated registries
 class CustomNode(Node):
     custom_field: str = "data"
 
-CustomNode.register_adapter(TomlAdapter)  # Required for subclasses
+CustomNode.register_adapter(TomlAdapter)  # Required
 custom = CustomNode(content={"x": 1})
 custom.adapt_to("toml")  # Now works
 ```
 
-### Pile[T] - Type-Safe Collections
-
-- O(1) lookup: `pile[uuid]`
-- Predicate queries, thread-safe
-- Generic type support
-
-### Graph - Directed with Conditional Edges
+### Pile[T] Access Patterns
 
 ```python
-# ❌ WRONG: Removed in v1.0.0-alpha4
+pile = Pile(items=[el1, el2], item_type=Element)
+
+pile[uuid]           # O(1) UUID lookup
+pile[0]              # Index access
+pile[1:3]            # Slice access
+pile[lambda x: ...]  # Predicate filter
+```
+
+### Graph Direct Access
+
+```python
+# ❌ WRONG (removed in alpha4)
 node = graph.get_node(uuid)
 
-# ✅ CORRECT: Direct Pile access
+# ✅ CORRECT
 node = graph.nodes[uuid]
-
-# Async operations
 path = await graph.find_path(start, end)
 ```
 
-### Flow - Composition Pattern
+### Flow Composition
 
 ```python
-# ❌ WRONG: Removed in v1.0.0-alpha4
+# ❌ WRONG (removed in alpha4)
 flow.pile.add(item)
 
-# ✅ CORRECT: Explicit composition API
-flow.items.add(item)  # or flow.add_item(item)
+# ✅ CORRECT
+flow.items.add(item)
+flow.add_item(item, progressions=["branch1"])
 ```
 
----
+### LNDL Parser Workflow
 
-## Breaking Changes (v1.0.0-alpha4)
+```python
+from lionherd_core.types import Spec, Operable
+from lionherd_core.lndl import parse_lndl_fuzzy
 
-1. **Exceptions**: `ValueError` → `NotFoundError`/`ExistsError` (from `lionherd_core.errors`)
-2. **Graph access**: `graph.get_node()` removed → `graph.nodes[uuid]`
-3. **Flow composition**: `flow.pile` removed → `flow.items` or `flow.add_item()`
+# Define Pydantic model
+spec = Spec(MyModel, name="result")
+operable = Operable([spec])
+
+# Parse fuzzy LLM output (+50-90μs overhead, <5% failure vs 40-60% with strict JSON)
+result = parse_lndl_fuzzy(llm_response, operable)
+```
 
 ---
 
 ## Common Pitfalls
 
-### 1. Don't inherit from protocols
-
-```python
-# ❌ WRONG                          # ✅ CORRECT
-class MyClass(Observable): pass    @implements(Observable)
-                                   class MyClass:
-                                       def __init__(self): self.id = uuid4()
-```
-
-### 2. Don't use `@implements()` for inherited methods
-
-```python
-class Parent:
-    def to_dict(self): ...
-
-# ❌ WRONG                          # ✅ CORRECT
-@implements(Serializable)          @implements(Serializable)
-class Child(Parent): pass          class Child(Parent):
-                                       def to_dict(self): return super().to_dict()
-```
-
-### 3. Node.content type constraint
-
-```python
-# ❌ WRONG: String not allowed
-Node(content="x")
-
-# ✅ CORRECT: Dict, Serializable, or BaseModel
-Node(content={"key": "value"})
-```
-
-### 4. Remember async
-
-```python
-# ❌ WRONG
-path = graph.find_path(start, end)
-
-# ✅ CORRECT
-path = await graph.find_path(start, end)
-```
+| Issue | Solution |
+|-------|----------|
+| Inheriting from protocols | Use `@implements()` for structural typing |
+| Node.content = string | Requires dict/Serializable/BaseModel |
+| Missing await on graph ops | Always `await graph.find_path()` |
+| Using `@implements()` on inherited methods | Only apply to methods defined in class body |
+| Adapter inheritance | Subclasses don't inherit adapters - register explicitly |
 
 ---
 
-## Adapter Pattern Details
+## Breaking Changes
 
-**Supported**: Node, Pile, Graph
-**NOT Supported**: Element, Flow, Progression, Edge
+### v1.0.0-alpha6 (Latest)
 
-**Isolation**: Each subclass has isolated adapter registry (no inheritance from parent).
+| Change | Before | After |
+|--------|--------|-------|
+| LNDL architecture | Regex-based parser | Lexer → Parser → AST |
+| Error handling | String exceptions | Typed exceptions (ParseError, ValidationError) |
+| Performance | ~100-200μs | ~50-90μs (lexer optimization) |
 
-**Rationale**: Prevents adapter pollution, explicit over implicit (Rust-like).
+### v1.0.0-alpha5
 
----
+| Change | Before | After |
+|--------|--------|-------|
+| Spec/Operable | Complex internal refs | Pydantic-based validation |
+| Type resolution | Runtime inspection | Static type mapping |
 
-## CI/CD Expectations
+### v1.0.0-alpha4
 
-PRs must pass:
+| Change | Before | After |
+|--------|--------|-------|
+| Exceptions | `ValueError` | `NotFoundError`/`ExistsError` |
+| Graph access | `graph.get_node(uuid)` | `graph.nodes[uuid]` |
+| Flow composition | `flow.pile` | `flow.items` |
 
-- ✅ Tests (pytest)
-- ✅ Coverage ≥80%
-- ✅ Type checking (mypy)
-- ✅ Linting (ruff check)
-- ✅ Formatting (ruff format)
-- ✅ Notebooks (if modified)
-- ✅ Links (if docs modified)
-
-**Workflows**: `.github/workflows/validate-notebooks.yml`, `validate-links.yml`
-
----
-
-## Contributing Guidelines
-
-1. Check existing patterns (multi-alpha evolution)
-2. Read related tests (behavior + edge cases)
-3. Maintain type safety (runtime validation is core)
-4. Preserve protocol semantics (`@implements()` strict)
-5. Minimal dependencies (pydapter + anyio only)
-6. Document breaking changes (CHANGELOG.md)
-
-**Commit Format**: `type(scope): subject` where type ∈ {feat, fix, docs, test, refactor, perf, chore}
+See CHANGELOG.md for complete history.
 
 ---
 
-## Additional Resources
+## Contributing
 
-- **README.md**: Use cases, examples, installation
-- **CONTRIBUTING.md**: Full contribution workflow
-- **AGENTS.md**: Quick reference for AI agents
-- **CHANGELOG.md**: API evolution
-- **notebooks/tutorials/**: Executable examples
-- **docs/**: MkDocs documentation
+**Commit Format**: `type(scope): subject`
+
+| Type | Use Case |
+|------|----------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation |
+| `test` | Tests |
+| `refactor` | Code restructure |
+| `perf` | Performance |
+| `chore` | Maintenance |
+
+**Full details**: CONTRIBUTING.md
