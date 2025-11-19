@@ -72,7 +72,7 @@ class Agent:
 Spec(MyModel, name="result") → Operable([specs]) → parse_lndl_fuzzy(llm_response, operable)
 ```
 
-**Pipeline**: parser.py (tokenize) → resolver.py (map fields) → fuzzy.py (handle variations)
+**Pipeline**: lexer.py (tokenize) → parser.py (parse to AST) → resolver.py (map fields) → fuzzy.py (handle variations)
 
 ---
 
@@ -135,6 +135,58 @@ flow.items.add(item)  # or flow.add_item(item)
 1. **Exceptions**: `ValueError` → `NotFoundError`/`ExistsError` (from `lionherd_core.errors`)
 2. **Graph access**: `graph.get_node()` removed → `graph.nodes[uuid]`
 3. **Flow composition**: `flow.pile` removed → `flow.items` or `flow.add_item()`
+
+---
+
+## Breaking Changes (v1.0.0-alpha5)
+
+Released 2025-11-12. See [migration guide](docs/migration/v1.0.0-alpha5.md) for detailed upgrade path.
+
+**Pile API** (5 changes):
+
+1. `item_type`/`strict_type` now frozen - set at init only
+2. `include()`/`exclude()` return state (True = in pile) not action
+3. `items` property → `items()` method returning iterator
+4. Async methods removed (`add_async`, `remove_async`, `get_async`)
+5. `to_list()` removed - use `list(pile)`
+
+**Flow API** (4 changes):
+
+1. Constructor redesigned - accepts `progressions` parameter
+2. Referential integrity validation at construction
+3. `add_item()` parameter: `progression_ids` → `progressions`
+4. `remove_item()` always removes from all progressions
+
+**Progression API** (3 changes):
+
+1. Custom `__init__` removed - use `@field_validator`
+2. `IndexError` → `NotFoundError` for consistency
+3. Added `__bool__()` for empty checks
+
+**Protocol System** (2 changes):
+
+1. Split: `Adaptable` (read-only) vs `AdapterRegisterable` (mutable)
+2. `@implements()` strict enforcement - methods must be in class body
+
+**Migration**: See [docs/migration/v1.0.0-alpha5.md](docs/migration/v1.0.0-alpha5.md)
+
+---
+
+## Breaking Changes (v1.0.0-alpha6)
+
+Released 2025-11-16. **No breaking changes** - all additions are backward compatible.
+
+**Added**:
+
+- **Processor/Executor**: Background event processing with priority queues (#185)
+- **LNDL Refactor**: New Lexer/Parser/AST architecture, fully backward compatible (#194)
+- **Benchmarking**: CI regression detection, component-organized suites (#174, #182, #183)
+
+**Changed**:
+
+- LNDL internal architecture (Lexer/Parser/AST) - external API unchanged
+
+All alpha5 code continues to work without modification.
 
 ---
 

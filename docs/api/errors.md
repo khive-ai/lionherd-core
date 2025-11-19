@@ -770,7 +770,7 @@ def batch_add_items(flow, items, progression_id):
                 )
 
             # Add item
-            flow.add_item(item, progression_ids=[progression_id])
+            flow.add_item(item, progressions=[progression_id])
 
         except (ExistsError, NotFoundError) as e:
             # Collect error, continue processing
