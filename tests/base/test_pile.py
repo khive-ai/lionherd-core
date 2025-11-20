@@ -1,127 +1,27 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Pile: Thread-safe typed collection with rich query interface.
-
-Design Philosophy
------------------
-Pile is lionherd's foundational data structure for managing Element collections with:
-
-1. **Thread Safety**: RLock-based synchronization for safe concurrent access
-   - All public methods protected by @synchronized/@async_synchronized
-   - Recursive locking allows nested pile operations
-   - CPython GIL makes dict reads thread-safe (readers get consistent snapshots)
-   - O(1) add/remove with zero-copy reads (MappingProxyType views)
-
-2. **Type Validation**: Flexible constraints with Union support
-   - strict_type=False: Duck typing, allows subclasses (default)
-   - strict_type=True: Exact type match only (no inheritance)
-   - Union types: Multi-type collections (Pile[Node | Event])
-   - Set-based type algebra for O(1) validation checks
-
-3. **Progression Integration**: Ordered collections with rich query interface
-   - Internal Progression tracks insertion order (or custom order)
-   - Type-dispatched __getitem__: pile[uuid], pile[int], pile[slice], pile[func], pile[prog]
-   - Filter operations return NEW Pile instances (immutable semantics)
-   - Progression order preserved through serialization/deserialization
-
-Type Algebra
-------------
-Let I = item_type (set of types), x = item to validate:
-
-    strict=False (permissive):
-        valid(x) ⟺ ∃t ∈ I: isinstance(x, t)  [allows subclasses]
-
-    strict=True (exact match):
-        valid(x) ⟺ type(x) ∈ I  [no inheritance]
-
-    Union[A, B]:
-        normalized to I = {A, B}  [set-based O(1) checking]
-
-Set Operations
---------------
-Pile provides mathematical set semantics:
-
-    P U {x}  ≡  pile.include(x)   [idempotent add]
-    P \\ {x}  ≡  pile.exclude(x)   [idempotent remove]
-    |P|      ≡  len(pile)          [cardinality]
-    x ∈ P    ≡  x in pile          [membership]
-
-Algorithmic Complexity
-----------------------
-Internal storage: dict[UUID, Element] + Progression (list[UUID])
-
-    Operation           Time        Space       Notes
-    ---------           ----        -----       -----
-    add(item)           O(1)        O(1)        Dict insert + progression append
-    remove(item)        O(n)        O(1)        Dict pop + progression.remove (linear scan)
-    get(uuid)           O(1)        O(1)        Direct dict access
-    __getitem__[int]    O(1)        O(1)        Index progression, dict lookup
-    __getitem__[slice]  O(k)        O(k)        k = slice width
-    __getitem__[prog]   O(m)        O(m)        m = progression length (creates new Pile)
-    __getitem__[func]   O(n)        O(n)        Full scan + filter (creates new Pile)
-    filter_by_type()    O(n)        O(n)        isinstance check for all items
-    __contains__        O(1)        O(1)        Dict membership (UUID-based)
-    __iter__            O(n)        O(1)        Yields in progression order
-    to_dict()           O(n)        O(n)        Serializes all items in progression order
-    from_dict()         O(n)        O(n)        Validates + adds all items
-
-Concurrency Invariants
-----------------------
-Threading guarantees:
-
-    □(op ∈ {add, remove, get, update} ⇒ @synchronized)        [all ops atomic]
-    □(readers see consistent snapshot via MappingProxyType)    [no torn reads]
-    □(RLock allows recursion: pile.add → pile._validate_type) [reentrant]
-    □(CPython dict reads thread-safe without lock)             [GIL guarantee]
-
-Race condition safety:
-
-    // Concurrent adds (unique IDs)
-    Thread1: pile.add(x)  }  Both succeed if x.id ≠ y.id
-    Thread2: pile.add(y)  }  ValueError if x.id = y.id (checked under lock)
-
-    // Concurrent read-modify-write
-    Thread1: x = pile.get(id); pile.update(modify(x))  }  Atomic: lock held during get+update
-    Thread2: y = pile.get(id); pile.update(modify(y))  }  Serialized by RLock
-
-    // Concurrent filter operations (immutable semantics)
-    Thread1: filtered1 = pile[lambda x: x.value > 5]  }  Both create NEW Piles
-    Thread2: filtered2 = pile[lambda x: x.value < 3]  }  Original pile unchanged
-
-Test Organization
------------------
-This test suite verifies:
-
-1. Initialization: Type validation, progression order, edge cases
-2. Basic ops: add, remove, get, update, clear
-3. Set ops: include, exclude (idempotency)
-4. Query ops: __getitem__ dispatch, filter_by_type, slicing
-5. Async ops: async context manager, concurrent operations
-6. Thread safety: ThreadPoolExecutor stress tests
-7. Type validation: strict/permissive modes, Union types
-8. Serialization: to_dict/from_dict round-trips, progression preservation
-9. Collection protocols: __contains__, __len__, __iter__, keys, values
-10. Edge cases: empty piles, repr, progression integrity
-
-Edge Cases Tested
------------------
-Type Constraints:
-    - Permissive mode: Rejects unrelated types (not just any object)
-    - Adapter registries: Isolated per subclass (no pollution)
-
-Serialization:
-    - Union type normalization: Union[A, B] → {A, B}
-    - Set type serialization: set → list → set round-trip
-    - Runtime types: Type objects in from_dict (not just strings)
-    - Invalid metadata: Validation continues gracefully
-    - Mode-specific metadata: db mode with custom meta_key
-
-Validation:
-    - Invalid lion_class: Skip in validation, error in deserialization
-    - All invalid classes: Validation completes gracefully
-    - Strict mode positive case: Valid exact type match
-"""
+# ==================== DESIGN NOTES ====================
+# Pile Architecture:
+# - dict[UUID, T] + Progression for O(1) lookups, ordered iteration
+# - RLock for thread-safety (recursive for nested ops)
+# - MappingProxyType prevents torn reads (GIL + immutable views)
+#
+# Type Validation:
+# - strict=False: isinstance check (allows subclasses)
+# - strict=True: exact type match (type(x) in item_type)
+# - Union[A, B] → {A, B} set-based O(1) validation
+#
+# Concurrency Invariants:
+# - All ops atomic via @synchronized
+# - Readers see consistent snapshots (MappingProxyType)
+# - RLock allows recursion (pile.add → pile._validate_type)
+#
+# Complexity:
+# - add/get/contains: O(1)
+# - remove: O(n) (progression.remove linear scan)
+# - filter: O(n), creates new Pile (immutable semantics)
+# ======================================================
 
 import concurrent.futures
 import threading

@@ -23,12 +23,7 @@ __all__ = ("DEFAULT_ELEMENT_SERIALIZER", "LN_ELEMENT_FIELDS", "Element")
 
 @implements(Observable, Serializable, Deserializable, Hashable)
 class Element(BaseModel):
-    """Base element with UUID identity, timestamps, polymorphic serialization.
-
-    Attributes:
-        id: UUID identifier (frozen, auto-generated)
-        created_at: UTC datetime (frozen, auto-generated)
-        metadata: Arbitrary metadata dict
+    """Base element with UUID identity and polymorphic serialization.
 
     Serialization injects lion_class for polymorphic deserialization.
     """
@@ -75,21 +70,10 @@ class Element(BaseModel):
 
     @classmethod
     def class_name(cls, full: bool = False) -> str:
-        """Returns this class's name, stripping generic type parameters.
-
-        For generic classes (e.g., Flow[Item, Prog]), returns the origin class name
-        without type parameters (e.g., Flow).
+        """Get class name without generic type parameters.
 
         Args:
-            full: If True, returns fully qualified name (module.Class); otherwise class name only
-
-        Returns:
-            Class name string without generic parameters
-
-        Note:
-            For Pydantic generic models, runtime classes have type parameters in __name__.
-            We strip these using string parsing since typing.get_origin() doesn't work
-            on Pydantic runtime instances.
+            full: If True, returns module.Class; otherwise Class only
         """
         # For Pydantic generic models, __name__ and __qualname__ include type params at runtime
         # e.g., "Flow[Item, Prog]" instead of "Flow"

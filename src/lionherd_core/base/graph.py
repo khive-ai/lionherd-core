@@ -61,15 +61,7 @@ class EdgeCondition:
 
 
 class Edge(Element):
-    """Directed edge with labels, conditions, properties.
-
-    Attributes:
-        head: Source node UUID
-        tail: Target node UUID
-        label: Edge labels (list of strings)
-        condition: Runtime traversal predicate (not serialized)
-        properties: Custom edge attributes
-    """
+    """Directed edge with labels, conditions, and properties."""
 
     head: UUID = Field(description="Source node ID")
     tail: UUID = Field(description="Target node ID")
@@ -105,29 +97,10 @@ class Edge(Element):
     AsyncAdapterRegisterable,
 )
 class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
-    """Directed graph with Pile-backed storage, O(1) operations, graph algorithms.
+    """Directed graph with Pile-backed storage and O(1) operations.
 
-    Adjacency lists (_out_edges, _in_edges) provide O(1) node/edge queries.
-    Supports cycle detection, topological sort, pathfinding.
-
-    Adapter Registration (Rust-like isolated pattern):
-        Each Graph subclass has its own independent adapter registry. No auto-registration.
-        Must explicitly register adapters on each class that needs them:
-
-        ```python
-        from pydapter.adapters import TomlAdapter
-
-
-        class CustomGraph(Graph):
-            pass
-
-
-        # Must register explicitly (no inheritance from parent)
-        CustomGraph.register_adapter(TomlAdapter)
-        custom_graph.adapt_to("toml")  # Now works
-        ```
-
-        This prevents adapter pollution and ensures explicit control per class.
+    Adjacency lists provide O(1) node/edge queries. Supports cycle detection,
+    topological sort, pathfinding. Each subclass has isolated adapter registry.
     """
 
     nodes: Pile[Node] = Field(

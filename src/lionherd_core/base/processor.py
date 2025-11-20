@@ -91,6 +91,7 @@ class Processor:
         self.max_denial_tracking = max_denial_tracking
         self.pile = pile  # Reference to executor's event storage
         self.executor = executor  # For progression updates
+        self.concurrency_limit = concurrency_limit
 
         # Priority queue: items are (priority, event_uuid) tuples
         # Lower priority values are processed first
@@ -103,7 +104,7 @@ class Processor:
         self._denial_counts: dict[UUID, int] = {}  # Track permission denials
 
         # Concurrency limit with safe default
-        self._concurrency_sem = concurrency.Semaphore(concurrency_limit)
+        self._concurrency_sem = concurrency.Semaphore(self.concurrency_limit)
 
     @property
     def available_capacity(self) -> int:

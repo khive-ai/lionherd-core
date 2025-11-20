@@ -1,46 +1,25 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Element base class test suite: identity, polymorphic serialization, validation, security.
-
-Design Philosophy:
-    Element is the foundational abstraction for all lionherd entities. Its design enforces
-    three critical architectural principles:
-
-    1. Immutable Identity: UUID + timestamp frozen at creation (entity lifecycle tracking)
-    2. Polymorphic Serialization: lion_class metadata enables type-safe deserialization
-    3. Security-First: Validation prevents arbitrary code execution via malicious metadata
-
-Test Architecture:
-    Tests organized by concern domains:
-    - Instantiation: Auto-generation, defaults, custom values, validation
-    - Serialization: python/json modes, lion_class injection, field exclusion
-    - Deserialization: Type coercion, roundtrips, polymorphic routing
-    - Validation: Frozen fields, timezone/UUID flexibility, metadata mutability
-    - Subclassing: Inheritance, automatic registration, type preservation
-    - Polymorphism: lion_class routing, security checks, recursion prevention
-    - Security: Arbitrary code execution prevention, equality/hashing semantics
-
-Mathematical Properties Verified:
-    - Identity: ∀e: Element, e.id ∈ UUID ∧ e.created_at ∈ DateTime(UTC)
-    - Immutability: ∀e: Element, ¬(e.id := new_id) ∧ ¬(e.created_at := new_ts)
-    - Roundtrip Fidelity: ∀e, from_dict(to_dict(e)) ≡ e (by ID equality)
-    - Polymorphic Correctness: ∀S <: Element, isinstance(from_dict(S().to_dict()), S)
-    - Hash Stability: ∀e, hash(e) = hash(e.id) (constant over element lifetime)
-
-Why These Tests Matter:
-    Element is inherited by Node, Event, Flow, Message - all core abstractions. Bugs here
-    cascade to the entire system. These tests protect against:
-    - Identity corruption (broken UUID/timestamp generation)
-    - Serialization loss (missing lion_class breaks polymorphism)
-    - Security vulnerabilities (arbitrary code exec via malicious lion_class)
-    - Hash instability (breaks sets/dicts if fields used instead of ID)
-    - Type confusion (deserialization returns wrong subclass)
-
-Test Data Strategy:
-    Module-level test subclasses (PersonElement, DocumentElement, etc.) enable dynamic
-    import via load_type_from_string() for polymorphic deserialization testing.
-"""
+# ==================== DESIGN NOTES ====================
+# Element: Identity, polymorphic serialization, validation, security
+#
+# Design Philosophy:
+# 1. Immutable Identity: UUID + timestamp frozen at creation
+# 2. Polymorphic Serialization: lion_class metadata enables type-safe deserialization
+# 3. Security-First: Validation prevents arbitrary code execution
+#
+# Mathematical Properties:
+# - Identity: ∀e: Element, e.id ∈ UUID ∧ e.created_at ∈ DateTime(UTC)
+# - Immutability: ∀e: Element, ¬(e.id := new_id) ∧ ¬(e.created_at := new_ts)
+# - Roundtrip: ∀e, from_dict(to_dict(e)) ≡ e (by ID equality)
+# - Polymorphism: ∀S <: Element, isinstance(from_dict(S().to_dict()), S)
+# - Hash Stability: ∀e, hash(e) = hash(e.id)
+#
+# Test Organization:
+# - Instantiation, Serialization/Deserialization, Validation
+# - Subclassing, Polymorphism, Security
+# ======================================================
 
 import datetime as dt
 from uuid import UUID, uuid4
