@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping, MutableSequence, MutableSet, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import (
     Enum as _Enum,
     StrEnum,
@@ -97,10 +97,25 @@ class Params:
 
     @classmethod
     def allowed(cls) -> set[str]:
-        """Return the keys of the parameters."""
+        """Return the keys of the parameters (excludes ClassVar)."""
         if cls._allowed_keys:
             return cls._allowed_keys
-        cls._allowed_keys = {i for i in cls.__dataclass_fields__ if not i.startswith("_")}
+
+        from typing import get_origin, get_type_hints
+
+        # Get type hints to check for ClassVar
+        try:
+            hints = get_type_hints(cls)
+        except Exception:
+            # Fallback if get_type_hints fails
+            hints = {}
+
+        # Filter out ClassVars and private fields
+        cls._allowed_keys = {
+            field.name
+            for field in fields(cls)
+            if not field.name.startswith("_") and get_origin(hints.get(field.name)) is not ClassVar
+        }
         return cls._allowed_keys
 
     def _validate(self) -> None:
@@ -202,10 +217,25 @@ class DataClass:
 
     @classmethod
     def allowed(cls) -> set[str]:
-        """Return the keys of the parameters."""
+        """Return the keys of the parameters (excludes ClassVar)."""
         if cls._allowed_keys:
             return cls._allowed_keys
-        cls._allowed_keys = {i for i in cls.__dataclass_fields__ if not i.startswith("_")}
+
+        from typing import get_origin, get_type_hints
+
+        # Get type hints to check for ClassVar
+        try:
+            hints = get_type_hints(cls)
+        except Exception:
+            # Fallback if get_type_hints fails
+            hints = {}
+
+        # Filter out ClassVars and private fields
+        cls._allowed_keys = {
+            field.name
+            for field in fields(cls)
+            if not field.name.startswith("_") and get_origin(hints.get(field.name)) is not ClassVar
+        }
         return cls._allowed_keys
 
     def _validate(self) -> None:

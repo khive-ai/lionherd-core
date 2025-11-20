@@ -24,17 +24,7 @@ __all__ = (
 
 
 class EventStatus(Enum):
-    """Event execution status states.
-
-    Values:
-        PENDING: Not yet started
-        PROCESSING: Currently executing
-        COMPLETED: Finished successfully
-        FAILED: Execution failed with error
-        CANCELLED: Interrupted by timeout or cancellation
-        SKIPPED: Bypassed due to condition
-        ABORTED: Pre-validation rejected, never started
-    """
+    """Event execution status states (PENDING → PROCESSING → COMPLETED/FAILED/CANCELLED)."""
 
     PENDING = "pending"
     PROCESSING = "processing"
@@ -48,15 +38,7 @@ class EventStatus(Enum):
 @implements(Serializable)
 @dataclass(slots=True)
 class Execution:
-    """Execution state (status, duration, response, error, retryable).
-
-    Attributes:
-        status: Current execution status
-        duration: Elapsed time in seconds (Unset until complete)
-        response: Result (Unset if unavailable, None if legitimate null)
-        error: Exception if failed (Unset/None/BaseException)
-        retryable: Whether retry is safe (Unset/bool)
-    """
+    """Execution state with status, duration, response, error, and retryable flag."""
 
     status: EventStatus = EventStatus.PENDING
     duration: MaybeUnset[float] = Unset
@@ -106,19 +88,12 @@ class Execution:
         depth: int = 0,
         _seen: set[int] | None = None,
     ) -> dict[str, Any]:
-        """Recursively serialize ExceptionGroup with depth limit and cycle detection.
+        """Recursively serialize ExceptionGroup with depth limit (100) and cycle detection.
 
         Args:
             eg: ExceptionGroup to serialize
             depth: Current recursion depth (internal)
             _seen: Set of seen exception IDs for cycle detection (internal)
-
-        Returns:
-            Serialized exception group dict
-
-        Note:
-            Maximum depth is 100 to prevent stack overflow.
-            Circular references are detected and handled gracefully.
         """
         from lionherd_core.errors import LionherdError
 

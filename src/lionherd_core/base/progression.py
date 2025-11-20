@@ -18,12 +18,7 @@ __all__ = ("Progression",)
 
 @implements(Containable)
 class Progression(Element):
-    """Ordered sequence of UUIDs with Element identity.
-
-    Attributes:
-        name: Optional progression name
-        order: Ordered sequence of UUIDs (allows duplicates)
-    """
+    """Ordered sequence of UUIDs with Element identity (allows duplicates)."""
 
     name: str | None = Field(
         default=None,

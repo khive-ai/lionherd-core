@@ -1,189 +1,22 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Graph: directed graphs with nodes, edges, validation, traversal, async operations.
-
-Graph Theory Foundations
-========================
-
-Graph Structure
----------------
-A graph G = (V, E) consists of:
-- V: Set of vertices (nodes)
-- E ⊆ V x V: Set of edges (directed relationships)
-- For directed graph: edge (u, v) ∈ E implies u → v (u is head, v is tail)
-
-Graph Properties
-----------------
-- **DAG** (Directed Acyclic Graph): Directed graph with no cycles
-  - Enables topological ordering: linear sequence where ∀(u,v) ∈ E, u precedes v
-  - Use cases: workflow dependencies, task scheduling, build systems
-
-- **Cyclic Graph**: Contains at least one cycle (path from node back to itself)
-  - Simplest cycle: self-loop (u, u)
-  - Prevents topological sorting (no valid linear order)
-
-- **Disconnected Graph**: Multiple connected components with no paths between them
-  - Each component can be analyzed independently
-  - Algorithms must handle all components (not just reachable nodes)
-
-Adjacency Representation
--------------------------
-This implementation uses adjacency lists for O(1) lookups:
-- **out_edges**: {node_id → set[edge_id]} - successors (nodes this node points to)
-- **in_edges**: {node_id → set[edge_id]} - predecessors (nodes pointing to this node)
-
-Trade-offs:
-- Space: O(V + E) - stores each edge once, each node twice
-- Time: O(1) for neighbor lookup, O(deg(v)) for traversal from node v
-- Alternative: Adjacency matrix O(V²) space, O(1) edge lookup, dense graphs only
-
-Graph Algorithms Tested
-========================
-
-1. Cycle Detection (DFS-based)
-------------------------------
-Uses depth-first search with node coloring:
-- **White**: Unvisited node
-- **Gray**: Node in current recursion stack (active path)
-- **Black**: Fully processed node
-
-Algorithm:
-    def is_cyclic(node):
-        color[node] = GRAY
-        for neighbor in successors(node):
-            if color[neighbor] == GRAY:
-                return True  # Back edge → cycle found
-            if color[neighbor] == WHITE and is_cyclic(neighbor):
-                return True
-        color[node] = BLACK
-        return False
-
-Complexity: O(V + E)
-- Visit each node once: O(V)
-- Examine each edge once: O(E)
-
-Edge Cases:
-- Self-loop: (v, v) detected when v is gray
-- Disconnected components: Must check all nodes as starting points
-
-2. Topological Sort (Kahn's Algorithm)
----------------------------------------
-Produces linear ordering where ∀(u,v) ∈ E, u precedes v.
-Only valid for DAGs (acyclic graphs).
-
-Algorithm:
-    1. Compute in-degree for all nodes: in_degree[v] = |{u : (u,v) ∈ E}|
-    2. Initialize queue Q with all nodes where in_degree[v] = 0
-    3. While Q not empty:
-         a. Dequeue node u
-         b. Add u to topological order
-         c. For each successor v of u:
-              i. Decrement in_degree[v]
-              ii. If in_degree[v] == 0, enqueue v
-    4. If topological order has |V| nodes, success; else cycle exists
-
-Complexity: O(V + E)
-- Initialize in-degrees: O(V + E) (scan all edges)
-- Process each node once: O(V)
-- Process each edge once: O(E)
-- Space: O(V) for queue and in-degree map
-
-Correctness:
-- Nodes added to order only when all predecessors processed
-- If cycle exists, some node always has in_degree > 0 (no progress)
-
-Alternative: DFS-based topological sort (reverse postorder)
-- Same O(V + E) complexity
-- Kahn's algorithm more intuitive for dependency resolution
-
-3. Path Finding (BFS-based)
-----------------------------
-Finds shortest path between two nodes (minimum edge count).
-
-Algorithm:
-    1. Initialize queue Q with start node
-    2. Track visited nodes and parent pointers
-    3. While Q not empty:
-         a. Dequeue node u
-         b. If u == target, reconstruct path from parents
-         c. For each successor v of u:
-              i. If v not visited:
-                   - Mark v as visited
-                   - Set parent[v] = u
-                   - Enqueue v
-    4. If target not reached, return None (no path)
-
-Complexity: O(V + E)
-- BFS visits each node at most once: O(V)
-- Examines each edge at most once: O(E)
-- Space: O(V) for visited set and queue
-
-Properties:
-- **Shortest path**: BFS explores nodes in order of distance from start
-- **Completeness**: Finds path if one exists
-- **Optimality**: Path has minimum edge count (unweighted graph)
-
-With EdgeConditions (conditional traversal):
-- Check condition before following edge
-- Path may not exist even if structural path exists (conditions block)
-- Complexity unchanged (condition check is O(1) async call)
-
-Graph Invariants Maintained
-============================
-1. **Consistency**: All edges reference nodes that exist in graph
-   - Enforced by add_edge() validation (fails if head or tail missing)
-
-2. **Adjacency Sync**: Adjacency lists always match edges
-   - add_edge() updates out_edges[head] and in_edges[tail]
-   - remove_edge() cleans up adjacency entries
-   - remove_node() cascades to all connected edges
-
-3. **No Dangling References**: Edge removal never orphans nodes
-   - Edges depend on nodes, not vice versa
-   - remove_edge() does not remove nodes
-
-4. **Serialization Lossless**: Graph survives to_dict/from_dict roundtrip
-   - Private adjacency lists rebuilt from edges on deserialization
-   - Enables graph persistence and transmission
-
-Test Coverage
-=============
-- **Container protocols**: __len__, __contains__, __repr__
-- **Node operations**: add, remove, get, adjacency updates
-- **Edge operations**: add, remove, get, validation, adjacency updates
-- **Adjacency queries**: predecessors, successors, heads, tails, node edges
-- **Algorithms**: is_acyclic, topological_sort, find_path
-- **Edge conditions**: traversal gates, async evaluation
-- **Serialization**: to_dict, from_dict, adjacency rebuilding
-- **Edge cases**: empty graphs, single nodes, disconnected components, self-loops, multiple edges
-
-Complexity Summary
-==================
-Operation              | Time       | Space  | Notes
------------------------|------------|--------|----------------------------------
-add_node()             | O(1)       | O(1)   | Initialize adjacency sets
-remove_node()          | O(deg(v))  | O(1)   | Remove all connected edges
-get_node()             | O(1)       | O(1)   | Pile lookup
-add_edge()             | O(1)       | O(1)   | Update adjacency sets
-remove_edge()          | O(1)       | O(1)   | Set removal
-get_edge()             | O(1)       | O(1)   | Pile lookup
-get_predecessors()     | O(deg(v))  | O(deg) | Lookup in_edges, fetch nodes
-get_successors()       | O(deg(v))  | O(deg) | Lookup out_edges, fetch nodes
-get_heads()            | O(V)       | O(V)   | Scan all nodes for in_degree=0
-get_tails()            | O(V)       | O(V)   | Scan all nodes for out_degree=0
-is_acyclic()           | O(V + E)   | O(V)   | DFS with recursion stack
-topological_sort()     | O(V + E)   | O(V)   | Kahn's algorithm
-find_path()            | O(V + E)   | O(V)   | BFS with visited tracking
-
-Where deg(v) = in_degree(v) + out_degree(v) is the degree of node v.
-
-References
-==========
-- Cormen, T.H., et al. "Introduction to Algorithms" (CLRS) - Graph algorithms
-- Kahn, A.B. (1962). "Topological sorting of large networks"
-- Tarjan, R. (1972). "Depth-first search and linear graph algorithms"
-"""
+# ==================== DESIGN NOTES ====================
+# Graph: Directed graphs with Pile-backed storage, adjacency lists
+#
+# Structure: G = (V, E) where V = nodes, E = edges (directed)
+# Adjacency: out_edges/in_edges dicts for O(1) neighbor lookup
+# Space: O(V + E), Time: O(1) neighbor, O(deg(v)) traversal
+#
+# Algorithms:
+# - Cycle Detection: DFS with coloring (O(V + E))
+# - Topological Sort: Kahn's algorithm (O(V + E), DAG only)
+# - Pathfinding: BFS (O(V + E))
+#
+# Test Coverage:
+# - Node/edge CRUD, validation, traversal, serialization
+# - Graph algorithms (cycle/DAG/topo/path), async ops
+# ======================================================
 
 from __future__ import annotations
 

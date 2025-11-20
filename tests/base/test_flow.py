@@ -1,101 +1,25 @@
 # Copyright (c) 2025, HaiyangLi <quantocean.li at gmail dot com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Flow as workflow state machine with dual-pile architecture.
-
-Architecture - Dual-Pile Design:
-    Flow combines two specialized data structures:
-    1. Progressions container (Pile[Progression]): Ordered workflow stages
-    2. Items pile (Pile[Element]): Shared item storage
-
-    This separation enables:
-    - M:N relationships (items can exist in multiple progressions)
-    - Independent lifecycle management (items persist across stage transitions)
-    - Named state access (flow.get_progression("pending") → Progression)
-    - Flexible ordering (same items, different orders per progression)
-
-Workflow State Machine Pattern:
-    ```python
-    # 1. Create flow with shared item storage
-    flow = Flow[WorkItem, WorkProgression](name="deployment")
-
-    # 2. Define workflow stages as named progressions
-    flow.add(Progression(name="pending"))
-    flow.add(Progression(name="active"))
-    flow.add(Progression(name="completed"))
-
-    # 3. Add items to shared pile
-    task = WorkItem(name="deploy_api")
-    flow.add_item(task, progressions="pending")
-
-    # 4. State transitions: move between progressions
-    flow.get_progression("pending").remove(task.id)
-    flow.get_progression("active").append(task.id)
-
-    # 5. Query current state
-    active_items = [flow.items[id] for id in flow.get_progression("active").order]
-    ```
-
-Named Access Semantics:
-    - flow.get_progression("stage_name") → Progression (O(1) lookup via name index)
-    - flow[uuid] → Progression (O(1) lookup via items dict)
-    - flow[progression] → Pile[Element] (filtered items from progression.order)
-    - Enables ergonomic workflow queries: flow.get_progression("failed").order
-
-Exception Aggregation for Batch Workflows:
-    Flow operations collect errors into ExceptionGroup for batch reporting:
-
-    ```python
-    errors = []
-    for item in items:
-        try:
-            flow.add_item(item, progressions="stage1")
-        except ValueError as e:
-            errors.append(e)
-
-    if errors:
-        raise ExceptionGroup("Batch validation errors", errors)
-    ```
-
-    Used for:
-    - Bulk item insertion (collect all validation failures)
-    - Multi-progression updates (aggregate inconsistencies)
-    - Workflow integrity checks (report all constraint violations)
-
-Async Workflow Execution:
-    Flow supports async context manager for thread-safe operations:
-
-    ```python
-    async def process_batch(items):
-        async with flow.items:
-            for item in items:
-                flow.add_item(item)  # Optionally: flow.add_item(item, progressions="stage1")
-    ```
-
-Design Rationale:
-    1. **Dual-pile over single container**:
-       - Progressions and items have different lifecycle semantics
-       - Progressions define structure (workflow stages)
-       - Items contain data (work units)
-       - Separation enables independent evolution
-
-    2. **UUID references over object references**:
-       - Progressions store item.id, not item itself
-       - Enables serialization (UUIDs are JSON-safe)
-       - Allows lazy loading (fetch items on demand)
-       - Supports distributed workflows (items in separate storage)
-
-    3. **Named progressions over indexed access**:
-       - flow.get_progression("pending") more readable than flow.progressions[0]
-       - Enforces unique names (prevents accidental overwrites)
-       - Enables workflow introspection (what stages exist?)
-       - Natural mapping to domain concepts (stages, phases, states)
-
-See Also:
-    - Progression: Ordered container for workflow stages
-    - Pile: Generic container with async support
-    - Element: Base class for workflow items
-"""
+# ==================== DESIGN NOTES ====================
+# Flow: Workflow state machine with dual-pile architecture
+#
+# Architecture:
+# - Pile[Progression]: Ordered workflow stages (named)
+# - Pile[Element]: Shared item storage (M:N relationships)
+# - Separation enables independent lifecycle management
+#
+# Access Patterns:
+# - flow.get_progression("stage") → Progression (O(1) name lookup)
+# - flow[uuid] → Element (O(1) item lookup)
+# - flow[progression] → Pile[Element] (filtered by progression.order)
+#
+# Features:
+# - Named stages with O(1) lookup
+# - Items can exist in multiple progressions
+# - ExceptionGroup for batch error aggregation
+# - Async context manager for thread-safety
+# ======================================================
 
 from __future__ import annotations
 
