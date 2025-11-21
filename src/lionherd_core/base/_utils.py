@@ -4,13 +4,16 @@
 import contextlib
 import datetime as dt
 import types
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from functools import wraps
-from typing import Any, Union, get_args, get_origin
+from typing import Any, ParamSpec, TypeVar, Union, get_args, get_origin
 from uuid import UUID
 
 from ..protocols import Observable, Serializable
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 __all__ = (
     "async_synchronized",
@@ -24,42 +27,50 @@ __all__ = (
 )
 
 
-def synchronized(func: Callable) -> Callable:
+def synchronized(func: Callable[P, R]) -> Callable[P, R]:
     """Decorator for thread-safe method execution.
 
     Executes method within self._lock context. The class must have a _lock
     attribute (typically threading.RLock()).
 
+    Preserves the exact signature and return type of the decorated method.
+
     Example:
         @synchronized
-        def append(self, item):
+        def append(self, item: T) -> None:
             self.items.append(item)
     """
 
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        with self._lock:
-            return func(self, *args, **kwargs)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        # Extract self from args (first argument for instance methods)
+        self = args[0]
+        with self._lock:  # type: ignore[attr-defined]
+            return func(*args, **kwargs)
 
     return wrapper
 
 
-def async_synchronized(func: Callable) -> Callable:
+def async_synchronized(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
     """Decorator for async-safe method execution.
 
     Executes async method within self._async_lock context. The class must have a
     _async_lock attribute (typically asyncio.Lock()).
 
+    Preserves the exact signature and return type of the decorated async method.
+
     Example:
         @async_synchronized
-        async def append_async(self, item):
+        async def append_async(self, item: T) -> None:
             self.items.append(item)
     """
 
     @wraps(func)
-    async def wrapper(self, *args, **kwargs):
-        async with self._async_lock:
-            return await func(self, *args, **kwargs)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        # Extract self from args (first argument for instance methods)
+        self = args[0]
+        async with self._async_lock:  # type: ignore[attr-defined]
+            return await func(*args, **kwargs)
 
     return wrapper
 
