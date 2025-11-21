@@ -6,6 +6,7 @@ omit =
     */__pycache__/*
     */site-packages/*
     .venv/*
+    src/lionherd_core/testing.py
 
 [report]
 precision = 2
