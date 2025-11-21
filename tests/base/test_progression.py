@@ -66,6 +66,7 @@ from lionherd_core.base import Element, Progression
 from lionherd_core.errors import NotFoundError
 from lionherd_core.libs.concurrency import create_task_group, gather
 from lionherd_core.ln import to_dict, to_list
+from lionherd_core.testing import TestElement, create_test_elements, create_test_progression
 
 
 class TestProgressionInstantiation:
@@ -126,10 +127,10 @@ class TestProgressionInstantiation:
 
     def test_with_elements(self):
         """Can create progression with Elements (converts to UUIDs)."""
-        elem1, elem2 = Element(), Element()
-        prog = Progression(order=[elem1, elem2])
+        elements = create_test_elements(count=2)
+        prog = Progression(order=elements)
         assert len(prog) == 2
-        assert prog.order == [elem1.id, elem2.id]
+        assert prog.order == [elements[0].id, elements[1].id]
 
     def test_with_name(self):
         """Can create named progression."""
@@ -251,16 +252,15 @@ class TestProgressionValidation:
         Complexity:
             O(n) validation with UUID extraction per item
         """
-        elem1 = Element()
-        elem2 = Element()
+        elements = create_test_elements(count=2)
 
         # Use __init__ with Element objects - should extract .id via to_uuid()
-        prog = Progression(order=[elem1, elem2])
+        prog = Progression(order=elements)
 
         # Should have 2 items: the element IDs
         assert len(prog) == 2
-        assert elem1.id in prog.order
-        assert elem2.id in prog.order
+        assert elements[0].id in prog.order
+        assert elements[1].id in prog.order
 
     def test_progression_with_empty_and_none_order(self):
         """
@@ -356,9 +356,9 @@ class TestProgressionCoreOperations:
     def test_append_element(self):
         """append should accept Elements."""
         prog = Progression()
-        elem = Element()
-        prog.append(elem)
-        assert prog.order[-1] == elem.id
+        elements = create_test_elements(count=1)
+        prog.append(elements[0])
+        assert prog.order[-1] == elements[0].id
 
     def test_insert(self):
         """insert should add item at specific position."""
@@ -369,10 +369,10 @@ class TestProgressionCoreOperations:
 
     def test_insert_element(self):
         """insert should accept Elements."""
-        elem1, elem2 = Element(), Element()
-        prog = Progression(order=[elem1])
-        prog.insert(0, elem2)
-        assert prog.order[0] == elem2.id
+        elements = create_test_elements(count=2)
+        prog = Progression(order=[elements[0]])
+        prog.insert(0, elements[1])
+        assert prog.order[0] == elements[1].id
 
     def test_remove(self):
         """remove should delete first occurrence."""
@@ -525,9 +525,9 @@ class TestProgressionQueryOperations:
 
     def test_contains_element(self):
         """__contains__ should accept Elements."""
-        elem = Element()
-        prog = Progression(order=[elem])
-        assert elem in prog
+        elements = create_test_elements(count=1)
+        prog = Progression(order=[elements[0]])
+        assert elements[0] in prog
 
     def test_contains_absent(self):
         """__contains__ should return False for absent items."""
@@ -576,10 +576,10 @@ class TestProgressionQueryOperations:
 
     def test_setitem_element(self):
         """__setitem__ should accept Elements."""
-        elem = Element()
+        elements = create_test_elements(count=1)
         prog = Progression(order=[uuid4()])
-        prog[0] = elem
-        assert prog.order[0] == elem.id
+        prog[0] = elements[0]
+        assert prog.order[0] == elements[0].id
 
     def test_setitem_slice(self):
         """__setitem__ with slice should replace multiple items."""
@@ -602,9 +602,9 @@ class TestProgressionQueryOperations:
 
     def test_index_element(self):
         """index should accept Elements."""
-        elem1, elem2 = Element(), Element()
-        prog = Progression(order=[elem1, elem2])
-        assert prog.index(elem2) == 1
+        elements = create_test_elements(count=2)
+        prog = Progression(order=elements)
+        assert prog.index(elements[1]) == 1
 
     def test_reversed(self):
         """__reversed__ should iterate in reverse order."""
@@ -814,11 +814,11 @@ class TestProgressionSetLikeOperations:
 
     def test_include_element(self):
         """include should accept Elements."""
-        elem = Element()
+        elements = create_test_elements(count=1)
         prog = Progression()
-        result = prog.include(elem)
+        result = prog.include(elements[0])
         assert result is True
-        assert elem.id in prog.order
+        assert elements[0].id in prog.order
 
     def test_exclude_present_item(self):
         """exclude should remove item if present."""
@@ -837,11 +837,11 @@ class TestProgressionSetLikeOperations:
 
     def test_exclude_element(self):
         """exclude should accept Elements."""
-        elem = Element()
-        prog = Progression(order=[elem])
-        result = prog.exclude(elem)
+        elements = create_test_elements(count=1)
+        prog = Progression(order=[elements[0]])
+        result = prog.exclude(elements[0])
         assert result is True
-        assert elem.id not in prog.order
+        assert elements[0].id not in prog.order
 
 
 class TestProgressionErrorHandling:
@@ -1155,8 +1155,8 @@ class TestProgressionSerialization:
 
     def test_serialization_with_elements(self):
         """Serialization should work with Elements in order."""
-        elem1, elem2 = Element(), Element()
-        prog = Progression(order=[elem1, elem2])
+        elements = create_test_elements(count=2)
+        prog = Progression(order=elements)
 
         # Serialize
         data = prog.to_dict(mode="json")
@@ -1165,7 +1165,7 @@ class TestProgressionSerialization:
 
         # Deserialize
         restored = Progression.from_dict(data)
-        assert restored.order == [elem1.id, elem2.id]
+        assert restored.order == [elements[0].id, elements[1].id]
 
 
 class TestProgressionEdgeCases:

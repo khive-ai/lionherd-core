@@ -50,6 +50,7 @@ import pytest
 from pydantic import ValidationError
 
 from lionherd_core.base import Element
+from lionherd_core.testing import TestElement
 
 # Module-level test Element subclasses for polymorphic deserialization tests
 # (must be module-level so they can be dynamically imported via load_type_from_string)
@@ -67,30 +68,6 @@ class DocumentElement(Element):
 
     title: str
     content: str
-
-
-class CustomElement(Element):
-    """Test subclass with simple value."""
-
-    value: str
-
-
-class TaggedElement(Element):
-    """Test subclass with tag field."""
-
-    tag: str
-
-
-class SimpleElement(Element):
-    """Test subclass that uses inherited from_dict."""
-
-    value: str
-
-
-class SpecificElement(Element):
-    """Test subclass for no-lion_class test."""
-
-    field: str
 
 
 class TestElementInstantiation:
@@ -992,16 +969,16 @@ class TestElementPolymorphicDeserialization:
 
     def test_polymorphic_with_full_qualified_name(self):
         """Should work with both short and fully qualified class names."""
-        obj = CustomElement(value="test")
+        obj = TestElement(value=42, name="test")
         data = obj.to_dict(mode="python")
 
         # Should contain fully qualified name
         assert "." in data["metadata"]["lion_class"]
-        assert data["metadata"]["lion_class"].endswith("CustomElement")
+        assert data["metadata"]["lion_class"].endswith("TestElement")
 
         # Should deserialize correctly
         restored = Element.from_dict(data)
-        assert isinstance(restored, CustomElement)
+        assert isinstance(restored, TestElement)
 
     def test_polymorphic_unknown_class_error(self):
         """Should raise error for unknown lion_class."""
@@ -1031,11 +1008,13 @@ class TestElementPolymorphicDeserialization:
 
     def test_polymorphic_preserves_metadata(self):
         """Should preserve custom metadata during polymorphic deserialization."""
-        elem = TaggedElement(tag="important", metadata={"priority": "high", "owner": "alice"})
+        elem = TestElement(
+            value=42, name="important", metadata={"priority": "high", "owner": "alice"}
+        )
         data = elem.to_dict(mode="python")
 
         restored = Element.from_dict(data)
-        assert isinstance(restored, TaggedElement)
+        assert isinstance(restored, TestElement)
         assert restored.metadata["priority"] == "high"
         assert restored.metadata["owner"] == "alice"
         # lion_class should be removed from metadata after deserialization
@@ -1044,10 +1023,10 @@ class TestElementPolymorphicDeserialization:
     def test_polymorphic_recursion_prevention(self):
         """Should prevent infinite recursion when subclass inherits from_dict.
 
-        Problem: SimpleElement doesn't override from_dict, so it inherits Element.from_dict.
-        Without recursion detection: Element.from_dict sees lion_class="...SimpleElement",
-        loads SimpleElement, calls SimpleElement.from_dict, which is Element.from_dict,
-        which loads SimpleElement again → infinite loop.
+        Problem: TestElement doesn't override from_dict, so it inherits Element.from_dict.
+        Without recursion detection: Element.from_dict sees lion_class="...TestElement",
+        loads TestElement, calls TestElement.from_dict, which is Element.from_dict,
+        which loads TestElement again → infinite loop.
 
         Solution: Compare target_cls.from_dict.__func__ vs cls.from_dict.__func__. If
         same implementation, use model_validate() directly (skip from_dict recursion).
@@ -1055,22 +1034,23 @@ class TestElementPolymorphicDeserialization:
         Edge case: Subclasses that override from_dict won't trigger this (different __func__).
         Only affects subclasses that inherit from_dict without changes.
         """
-        obj = SimpleElement(value="test")
+        obj = TestElement(value=42, name="test")
         data = obj.to_dict(mode="python")
 
         # Should use model_validate instead of recursing
         restored = Element.from_dict(data)
-        assert isinstance(restored, SimpleElement)
-        assert restored.value == "test"
+        assert isinstance(restored, TestElement)
+        assert restored.value == 42
 
     def test_polymorphic_no_lion_class_uses_target_class(self):
         """Without lion_class, should use the calling class."""
-        data = {"field": "value"}  # No lion_class in metadata
+        data = {"value": 42, "name": "test"}  # No lion_class in metadata
 
-        # Calling SpecificElement.from_dict should create SpecificElement
-        restored = SpecificElement.from_dict(data)
-        assert isinstance(restored, SpecificElement)
-        assert restored.field == "value"
+        # Calling TestElement.from_dict should create TestElement
+        restored = TestElement.from_dict(data)
+        assert isinstance(restored, TestElement)
+        assert restored.value == 42
+        assert restored.name == "test"
 
 
 class TestElementSecurity:

@@ -112,12 +112,17 @@ from uuid import UUID
 import pytest
 from pydantic import BaseModel
 
-from lionherd_core.base.element import Element
 from lionherd_core.base.node import NODE_REGISTRY, Node
+from lionherd_core.testing import TestElement
 
 # ============================================================================
 # Test Node Subclasses
 # ============================================================================
+# Note: PersonNode, DocumentNode, NestedNode validate Node-specific design patterns:
+# - Auto-registration in NODE_REGISTRY via __pydantic_init_subclass__
+# - Polymorphic deserialization via lion_class routing
+# - Subclass-specific field validation and serialization
+# These cannot be replaced with mock_node() as they test Node subclass behavior.
 
 
 class PersonNode(Node):
@@ -138,13 +143,6 @@ class NestedNode(Node):
     """Node with nested Element in content."""
 
     label: str = "nested"
-
-
-# Module-level Element subclass (not Node) for testing Element.from_dict fallback
-class CustomElementForTest(Element):
-    """Element subclass for testing non-Node Element deserialization."""
-
-    custom_field: str = "test"
 
 
 # ============================================================================
@@ -1663,24 +1661,25 @@ def test_node_content_element_not_in_registry():
     Expected:
         Content deserialized as custom Element via Element.from_dict() fallback
     """
-    # Use module-level Element subclass (NOT Node, so not in NODE_REGISTRY)
-    custom = CustomElementForTest(custom_field="value")
+    # Use TestElement (NOT Node, so not in NODE_REGISTRY)
+    custom = TestElement(value=42, name="test_element")
     custom_dict = custom.to_dict()
 
     # Verify lion_class present but NOT in NODE_REGISTRY
     lion_class = custom_dict.get("metadata", {}).get("lion_class")
     assert lion_class is not None
-    assert "CustomElementForTest" in lion_class
-    # CustomElementForTest is Element, not Node, so not auto-registered in NODE_REGISTRY
+    assert "TestElement" in lion_class
+    # TestElement is Element, not Node, so not auto-registered in NODE_REGISTRY
     assert lion_class not in NODE_REGISTRY
-    assert "CustomElementForTest" not in NODE_REGISTRY
+    assert "TestElement" not in NODE_REGISTRY
 
     # Use as Node content - should trigger line 113 (Element.from_dict fallback)
     node = Node(content=custom_dict)
 
-    # Verify content deserialized as CustomElementForTest (via Element.from_dict)
-    assert isinstance(node.content, CustomElementForTest)
-    assert node.content.custom_field == "value"
+    # Verify content deserialized as TestElement (via Element.from_dict)
+    assert isinstance(node.content, TestElement)
+    assert node.content.value == 42
+    assert node.content.name == "test_element"
 
 
 def test_node_embedding_invalid_json_string():

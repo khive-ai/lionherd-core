@@ -193,6 +193,13 @@ import pytest
 
 from lionherd_core.base import Edge, EdgeCondition, Graph, Node
 from lionherd_core.errors import ExistsError, NotFoundError
+from lionherd_core.testing import (
+    create_cyclic_graph,
+    create_dag_graph,
+    create_empty_graph,
+    create_simple_graph,
+    mock_node,
+)
 
 # ============================================================================
 # Test EdgeCondition Subclasses
@@ -230,87 +237,51 @@ class ThresholdCondition(EdgeCondition):
 @pytest.fixture
 def empty_graph():
     """Empty graph for testing."""
-    return Graph()
+    return create_empty_graph()
 
 
 @pytest.fixture
 def simple_graph():
-    """Simple graph with 3 nodes in a chain: A -> B -> C."""
-    graph = Graph()
+    """Simple graph with 3 nodes in a chain: A -> B -> C.
 
-    # Create nodes
-    n1 = Node(content={"value": "A"})
-    n2 = Node(content={"value": "B"})
-    n3 = Node(content={"value": "C"})
-
-    graph.add_node(n1)
-    graph.add_node(n2)
-    graph.add_node(n3)
-
-    # Create edges
-    e1 = Edge(head=n1.id, tail=n2.id, label=["step1"])
-    e2 = Edge(head=n2.id, tail=n3.id, label=["step2"])
-
-    graph.add_edge(e1)
-    graph.add_edge(e2)
-
-    return graph, (n1, n2, n3), (e1, e2)
+    Returns:
+        Tuple of (graph, nodes_list, edges_tuple) for compatibility with existing tests.
+    """
+    # Use factory for structure, but add specific labels for serialization tests
+    graph, nodes = create_simple_graph()
+    # Add labels to edges (required by test_roundtrip_preserves_edge_labels)
+    edges_list = list(graph.edges)
+    edges_list[0].label = ["step1"]
+    edges_list[1].label = ["step2"]
+    return graph, tuple(nodes), tuple(edges_list)
 
 
 @pytest.fixture
 def cyclic_graph():
-    """Graph with a cycle: A -> B -> C -> A."""
-    graph = Graph()
+    """Graph with a cycle: A -> B -> C -> A.
 
-    # Create nodes
-    n1 = Node(content={"value": "A"})
-    n2 = Node(content={"value": "B"})
-    n3 = Node(content={"value": "C"})
-
-    graph.add_node(n1)
-    graph.add_node(n2)
-    graph.add_node(n3)
-
-    # Create cycle
-    e1 = Edge(head=n1.id, tail=n2.id)
-    e2 = Edge(head=n2.id, tail=n3.id)
-    e3 = Edge(head=n3.id, tail=n1.id)
-
-    graph.add_edge(e1)
-    graph.add_edge(e2)
-    graph.add_edge(e3)
-
-    return graph, (n1, n2, n3), (e1, e2, e3)
+    Returns:
+        Tuple of (graph, nodes_list, edges_tuple) for compatibility with existing tests.
+    """
+    graph, nodes = create_cyclic_graph()
+    # Extract edges for compatibility (cyclic_graph has 3 edges in order)
+    edge_list = list(graph.edges)
+    edges = tuple(edge_list)
+    return graph, tuple(nodes), edges
 
 
 @pytest.fixture
 def dag_graph():
-    """Diamond-shaped DAG: A -> B, A -> C, B -> D, C -> D."""
-    graph = Graph()
+    """Diamond-shaped DAG: A -> B, A -> C, B -> D, C -> D.
 
-    # Create nodes
-    n1 = Node(content={"value": "A"})
-    n2 = Node(content={"value": "B"})
-    n3 = Node(content={"value": "C"})
-    n4 = Node(content={"value": "D"})
-
-    graph.add_node(n1)
-    graph.add_node(n2)
-    graph.add_node(n3)
-    graph.add_node(n4)
-
-    # Create edges (diamond)
-    e1 = Edge(head=n1.id, tail=n2.id)
-    e2 = Edge(head=n1.id, tail=n3.id)
-    e3 = Edge(head=n2.id, tail=n4.id)
-    e4 = Edge(head=n3.id, tail=n4.id)
-
-    graph.add_edge(e1)
-    graph.add_edge(e2)
-    graph.add_edge(e3)
-    graph.add_edge(e4)
-
-    return graph, (n1, n2, n3, n4), (e1, e2, e3, e4)
+    Returns:
+        Tuple of (graph, nodes_list, edges_tuple) for compatibility with existing tests.
+    """
+    graph, nodes = create_dag_graph()
+    # Extract edges for compatibility (dag_graph has 4 edges in order)
+    edge_list = list(graph.edges)
+    edges = tuple(edge_list)
+    return graph, tuple(nodes), edges
 
 
 # ============================================================================
@@ -378,7 +349,7 @@ class TestGraphBasics:
         """Test __contains__ returns False for non-members."""
         graph, _, _ = simple_graph
 
-        new_node = Node(content={"value": "X"})
+        new_node = mock_node(value="X")
         new_edge = Edge(head=new_node.id, tail=new_node.id)
 
         assert new_node not in graph
@@ -416,7 +387,7 @@ class TestGraphBasics:
         nodes_pile = Pile(item_type=Node)
         edges_pile = Pile(item_type=Edge)
 
-        n1 = Node(content={"value": "A"})
+        n1 = mock_node(value="A")
         nodes_pile.add(n1)
 
         # Pass Pile directly to Graph initialization
@@ -461,7 +432,7 @@ class TestNodeOperations:
 
     def test_add_node_basic(self, empty_graph):
         """Test adding a node to empty graph."""
-        node = Node(content={"value": "test"})
+        node = mock_node(value="test")
         empty_graph.add_node(node)
 
         assert len(empty_graph) == 1
@@ -470,7 +441,7 @@ class TestNodeOperations:
 
     def test_add_node_updates_adjacency(self, empty_graph):
         """Test adding node initializes adjacency lists."""
-        node = Node(content={"value": "test"})
+        node = mock_node(value="test")
         empty_graph.add_node(node)
 
         # Should have empty adjacency sets
@@ -530,7 +501,7 @@ class TestNodeOperations:
 
     def test_remove_node_not_found_raises(self, empty_graph):
         """Test removing non-existent node raises NotFoundError."""
-        fake_node = Node(content={"value": "fake"})
+        fake_node = mock_node(value="fake")
 
         with pytest.raises(NotFoundError, match="not found"):
             empty_graph.remove_node(fake_node)
@@ -595,8 +566,8 @@ class TestEdgeOperations:
 
     def test_add_edge_missing_head_raises(self, empty_graph):
         """Test adding edge with missing head node raises NotFoundError."""
-        n1 = Node(content={"value": "A"})
-        n2 = Node(content={"value": "B"})
+        n1 = mock_node(value="A")
+        n2 = mock_node(value="B")
         empty_graph.add_node(n1)
 
         # n2 not in graph
@@ -607,8 +578,8 @@ class TestEdgeOperations:
 
     def test_add_edge_missing_tail_raises(self, empty_graph):
         """Test adding edge with missing tail node raises NotFoundError."""
-        n1 = Node(content={"value": "A"})
-        n2 = Node(content={"value": "B"})
+        n1 = mock_node(value="A")
+        n2 = mock_node(value="B")
         empty_graph.add_node(n1)
 
         # n2 not in graph
@@ -738,9 +709,7 @@ class TestPileKeyErrorHandling:
 
     def test_add_node_raises_existserror(self, empty_graph):
         """Verify add_node raises ExistsError when node already exists."""
-        from lionherd_core.base import Node
-
-        node = Node(content={"value": "test"})
+        node = mock_node(value="test")
         empty_graph.add_node(node)
 
         # Adding again should raise ExistsError
@@ -749,10 +718,8 @@ class TestPileKeyErrorHandling:
 
     def test_add_edge_raises_existserror(self, empty_graph):
         """Verify add_edge raises ExistsError when edge already exists."""
-        from lionherd_core.base import Edge, Node
-
-        node1 = Node(content={"value": "A"})
-        node2 = Node(content={"value": "B"})
+        node1 = mock_node(value="A")
+        node2 = mock_node(value="B")
         empty_graph.add_node(node1)
         empty_graph.add_node(node2)
 
