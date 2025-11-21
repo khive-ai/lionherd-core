@@ -38,10 +38,7 @@ __all__ = ("Edge", "EdgeCondition", "Graph")
 
 
 class EdgeCondition:
-    """Runtime predicate for edge traversal (not serialized).
-
-    Override apply() for custom async logic. Callable via __call__() for sync contexts.
-    """
+    """Runtime predicate for edge traversal. Callable via __call__() for sync contexts."""
 
     def __init__(self, **kwargs: Any):
         """Initialize condition. Subclasses can store state as needed."""
@@ -109,25 +106,6 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
 
     Adjacency lists (_out_edges, _in_edges) provide O(1) node/edge queries.
     Supports cycle detection, topological sort, pathfinding.
-
-    Adapter Registration (Rust-like isolated pattern):
-        Each Graph subclass has its own independent adapter registry. No auto-registration.
-        Must explicitly register adapters on each class that needs them:
-
-        ```python
-        from pydapter.adapters import TomlAdapter
-
-
-        class CustomGraph(Graph):
-            pass
-
-
-        # Must register explicitly (no inheritance from parent)
-        CustomGraph.register_adapter(TomlAdapter)
-        custom_graph.adapt_to("toml")  # Now works
-        ```
-
-        This prevents adapter pollution and ensures explicit control per class.
     """
 
     nodes: Pile[Node] = Field(
@@ -172,17 +150,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
                 self._in_edges[edge.tail].add(edge_id)
 
     def _check_node_exists(self, node_id: UUID) -> Node:
-        """Verify node exists, re-raising NotFoundError with graph context.
-
-        Args:
-            node_id: Node UUID to check
-
-        Returns:
-            Node if found
-
-        Raises:
-            NotFoundError: With graph context and preserved metadata
-        """
+        """Verify node exists, re-raising NotFoundError with graph context."""
         try:
             return self.nodes[node_id]
         except NotFoundError as e:
@@ -194,17 +162,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             )
 
     def _check_edge_exists(self, edge_id: UUID) -> Edge:
-        """Verify edge exists, re-raising NotFoundError with graph context.
-
-        Args:
-            edge_id: Edge UUID to check
-
-        Returns:
-            Edge if found
-
-        Raises:
-            NotFoundError: With graph context and preserved metadata
-        """
+        """Verify edge exists, re-raising NotFoundError with graph context."""
         try:
             return self.edges[edge_id]
         except NotFoundError as e:
@@ -576,9 +534,6 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             obj_key: Adapter key (e.g., "neo4j")
             many: Whether to adapt multiple Graph instances
             **kwargs: Passed to adapter
-
-        Returns:
-            Adapted object (format depends on adapter)
         """
         kwargs.setdefault("adapt_meth", "to_dict")
         kwargs.setdefault("adapt_kw", {"mode": "db"})
@@ -593,9 +548,6 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             obj_key: Adapter key (e.g., "neo4j")
             many: Whether to deserialize multiple Graph instances
             **kwargs: Passed to adapter
-
-        Returns:
-            Graph instance
         """
         kwargs.setdefault("adapt_meth", "from_dict")
         return super().adapt_from(obj, obj_key=obj_key, many=many, **kwargs)
@@ -607,9 +559,6 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             obj_key: Adapter key
             many: Whether to adapt multiple Graph instances
             **kwargs: Passed to adapter
-
-        Returns:
-            Adapted object
         """
         kwargs.setdefault("adapt_meth", "to_dict")
         kwargs.setdefault("adapt_kw", {"mode": "db"})
@@ -626,9 +575,6 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
             obj_key: Adapter key
             many: Whether to deserialize multiple Graph instances
             **kwargs: Passed to adapter
-
-        Returns:
-            Graph instance
         """
         kwargs.setdefault("adapt_meth", "from_dict")
         return await super().adapt_from_async(obj, obj_key=obj_key, many=many, **kwargs)

@@ -112,13 +112,6 @@ class Execution:
             eg: ExceptionGroup to serialize
             depth: Current recursion depth (internal)
             _seen: Set of seen exception IDs for cycle detection (internal)
-
-        Returns:
-            Serialized exception group dict
-
-        Note:
-            Maximum depth is 100 to prevent stack overflow.
-            Circular references are detected and handled gracefully.
         """
         from lionherd_core.errors import LionherdError
 

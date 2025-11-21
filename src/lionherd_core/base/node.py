@@ -236,22 +236,8 @@ class Node(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         Args:
             data: Dictionary to deserialize
             meta_key: Custom metadata field name (default: "metadata" or "node_metadata")
-            content_deserializer: Optional callable to deserialize content field.
-                Applied to content field before model_validate. Enables round-trip
-                serialization with custom transformations (compression, encryption, etc.).
+            content_deserializer: Optional callable to transform content field before validation
             **kwargs: Additional arguments passed to model_validate()
-
-        Returns:
-            Deserialized Node instance
-
-        Examples:
-            # Round-trip with compression
-            compressed_data = node.to_dict(content_serializer=compress)
-            restored = Node.from_dict(compressed_data, content_deserializer=decompress)
-
-            # Round-trip with encryption
-            encrypted_data = node.to_dict(content_serializer=encrypt)
-            restored = Node.from_dict(encrypted_data, content_deserializer=decrypt)
         """
         # Make a copy to avoid mutating input
         data = data.copy()

@@ -59,25 +59,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         items: Initial items
         item_type: Type(s) for validation (single/set/list/Union)
         strict_type: Enforce exact type match (no subclasses)
-
-    Adapter Registration (Rust-like isolated pattern):
-        Each Pile subclass has its own independent adapter registry. No auto-registration.
-        Must explicitly register adapters on each class that needs them:
-
-        ```python
-        from pydapter.adapters import TomlAdapter
-
-
-        class CustomPile(Pile):
-            pass
-
-
-        # Must register explicitly (no inheritance from parent)
-        CustomPile.register_adapter(TomlAdapter)
-        custom_pile.adapt_to("toml")  # Now works
-        ```
-
-        This prevents adapter pollution and ensures explicit control per class.
     """
 
     # Private internal state - excluded from serialization

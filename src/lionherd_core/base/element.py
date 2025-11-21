@@ -75,24 +75,11 @@ class Element(BaseModel):
 
     @classmethod
     def class_name(cls, full: bool = False) -> str:
-        """Returns this class's name, stripping generic type parameters.
-
-        For generic classes (e.g., Flow[Item, Prog]), returns the origin class name
-        without type parameters (e.g., Flow).
+        """Get class name without generic type parameters.
 
         Args:
-            full: If True, returns fully qualified name (module.Class); otherwise class name only
-
-        Returns:
-            Class name string without generic parameters
-
-        Note:
-            For Pydantic generic models, runtime classes have type parameters in __name__.
-            We strip these using string parsing since typing.get_origin() doesn't work
-            on Pydantic runtime instances.
+            full: If True, returns module.Class; otherwise Class only
         """
-        # For Pydantic generic models, __name__ and __qualname__ include type params at runtime
-        # e.g., "Flow[Item, Prog]" instead of "Flow"
         name = cls.__qualname__ if full else cls.__name__
 
         # Strip generic type parameters (Flow[E, P] -> Flow)
@@ -163,7 +150,6 @@ class Element(BaseModel):
                 if mode == "db" and isinstance(data["created_at"], str):
                     data["created_at"] = self.created_at
 
-        # Rename metadata key if specified (works with any mode)
         if meta_key and "metadata" in data:
             data[meta_key] = data.pop("metadata")
 
@@ -294,7 +280,7 @@ DEFAULT_ELEMENT_SERIALIZER = None
 
 
 def _get_default_serializer():
-    """Get or create default orjson serializer (lazy init to avoid circular imports)."""
+    """Get or create default orjson serializer"""
     global DEFAULT_ELEMENT_SERIALIZER
 
     if DEFAULT_ELEMENT_SERIALIZER is None:
