@@ -186,10 +186,10 @@ async def test_event_lifecycle_success():
     assert event.execution.error is Unset
 
     # Invoke
-    result = await event.invoke()
+    await event.invoke()
 
     # Final state
-    assert result == 42
+    assert event.response == 42
     assert event.status == EventStatus.COMPLETED
     assert event.execution.response == 42
     assert event.execution.duration is not None
@@ -221,11 +221,10 @@ async def test_event_lifecycle_failure():
 
     assert event.status == EventStatus.PENDING
 
-    # Invoke catches exception, returns None, sets status to FAILED
-    result = await event.invoke()
+    # Invoke catches exception, sets status to FAILED
+    await event.invoke()
 
     # Check failure state
-    assert result is None
     assert event.status == EventStatus.FAILED
     assert isinstance(event.execution.error, ValueError)
     assert str(event.execution.error) == "Custom error"
@@ -331,11 +330,10 @@ async def test_execution_tracks_response():
     test_response = {"key": "value", "number": 123}
     event = SimpleEvent(return_value=test_response)
 
-    result = await event.invoke()
+    await event.invoke()
 
-    assert result == test_response
+    assert event.response == test_response
     assert event.execution.response == test_response
-    assert event.response == test_response  # Property accessor
 
 
 @pytest.mark.asyncio
@@ -344,9 +342,8 @@ async def test_execution_tracks_error_message():
     error_msg = "Detailed error information"
     event = FailingEvent(error_message=error_msg)
 
-    result = await event.invoke()
+    await event.invoke()
 
-    assert result is None
     assert event.status == EventStatus.FAILED
     assert isinstance(event.execution.error, ValueError)
     assert str(event.execution.error) == error_msg
@@ -372,10 +369,9 @@ async def test_execution_duration_set_on_failure():
     """Test that duration is set even when event fails."""
     event = FailingEvent()
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Duration should be set despite failure
-    assert result is None
     assert event.status == EventStatus.FAILED
     assert event.execution.duration is not None
     assert event.execution.duration >= 0
@@ -484,9 +480,8 @@ async def test_execution_serialization_with_error():
     """Test Execution.to_dict() includes error message when failed."""
     event = FailingEvent(error_message="Serialization test error")
 
-    result = await event.invoke()
+    await event.invoke()
 
-    assert result is None
     assert event.status == EventStatus.FAILED
 
     serialized = event.execution.to_dict()
@@ -547,9 +542,8 @@ async def test_event_captures_exception_in_execution_state():
 
     event = CustomFailingEvent()
 
-    result = await event.invoke()
+    await event.invoke()
 
-    assert result is None
     assert event.status == EventStatus.FAILED
     assert isinstance(event.execution.error, CustomError)
     assert str(event.execution.error) == "Custom error"
@@ -560,9 +554,8 @@ async def test_event_captures_exception_in_execution_state():
 async def test_event_handles_none_response():
     """Test Event correctly handles None as a valid response."""
     event = SimpleEvent(return_value=None)
-    result = await event.invoke()
+    await event.invoke()
 
-    assert result is None
     assert event.response is None
     assert event.status == EventStatus.COMPLETED
 
@@ -630,8 +623,8 @@ async def test_as_fresh_event_preserves_config():
     assert fresh.return_value == 42
 
     # Fresh event is functional
-    result = await fresh.invoke()
-    assert result == 42
+    await fresh.invoke()
+    assert fresh.response == 42
     assert fresh.status == EventStatus.COMPLETED
 
 
@@ -777,8 +770,7 @@ async def test_execution_response_unset_vs_none():
 
     # Test 3: None - success with legitimate null value
     none_event = ReturnsNoneEvent()
-    result = await none_event.invoke()
-    assert result is None
+    await none_event.invoke()
     assert none_event.execution.response is None
     assert none_event.status == EventStatus.COMPLETED
 
@@ -856,8 +848,7 @@ async def test_execution_serialization_preserves_sentinel_semantics():
 
     # Case 3: None state (legitimate success with null)
     none_success = ReturnsNoneEvent()
-    result = await none_success.invoke()
-    assert result is None
+    await none_success.invoke()
     assert none_success.execution.response is None
     none_serialized = none_success.execution.to_dict()
     assert none_serialized["response"] is None
@@ -911,10 +902,9 @@ async def test_event_captures_exception_group():
     """Test Event correctly captures and stores ExceptionGroup."""
     event = MultiErrorEvent()
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Check failure state
-    assert result is None
     assert event.status == EventStatus.FAILED
     assert isinstance(event.execution.error, ExceptionGroup)
 
@@ -1555,22 +1545,20 @@ async def test_event_idempotency_returns_cached_result():
     event = CountingEvent()
 
     # First invocation - should execute _invoke()
-    result1 = await event.invoke()
-    assert result1 == "result_1"
+    await event.invoke()
+    assert event.response == "result_1"
     assert invocation_count == 1
     assert event.status == EventStatus.COMPLETED
-    assert event.response == "result_1"
 
-    # Second invocation - should return cached result WITHOUT executing _invoke()
-    result2 = await event.invoke()
-    assert result2 == "result_1"  # Same result as first call
+    # Second invocation - should be no-op (idempotent)
+    await event.invoke()
+    assert event.response == "result_1"  # Same result as first call
     assert invocation_count == 1  # Counter NOT incremented (idempotent)
     assert event.status == EventStatus.COMPLETED
-    assert event.response == "result_1"
 
-    # Third invocation - still cached
-    result3 = await event.invoke()
-    assert result3 == "result_1"
+    # Third invocation - still idempotent
+    await event.invoke()
+    assert event.response == "result_1"
     assert invocation_count == 1  # Still only executed once
     assert event.status == EventStatus.COMPLETED
 
@@ -1591,16 +1579,14 @@ async def test_event_idempotency_works_for_failed_events():
     event = FailingCountingEvent()
 
     # First invocation - should execute _invoke() and fail
-    result1 = await event.invoke()
-    assert result1 is None  # Failed events return None
+    await event.invoke()
     assert invocation_count == 1
     assert event.status == EventStatus.FAILED
     assert "error_1" in str(event.execution.error)
     assert event.execution.response is Unset  # Failed events have Unset response
 
-    # Second invocation - should return cached result (Unset) WITHOUT executing
-    result2 = await event.invoke()
-    assert result2 is Unset  # Idempotency returns cached response (Unset for failures)
+    # Second invocation - should be no-op (idempotent)
+    await event.invoke()
     assert invocation_count == 1  # Counter NOT incremented (idempotent)
     assert event.status == EventStatus.FAILED
     assert "error_1" in str(event.execution.error)  # Same error
@@ -1624,12 +1610,11 @@ async def test_event_timeout_none_default():
     assert event.timeout is None
 
     # Execute normally
-    result = await event.invoke()
+    await event.invoke()
 
     # Success as usual
-    assert result == 42
-    assert event.status == EventStatus.COMPLETED
     assert event.response == 42
+    assert event.status == EventStatus.COMPLETED
 
 
 @pytest.mark.asyncio
@@ -1641,12 +1626,11 @@ async def test_event_timeout_completes_in_time():
     assert event.timeout == 1.0
 
     # Execute - should complete successfully
-    result = await event.invoke()
+    await event.invoke()
 
     # Success path
-    assert result == "completed"
-    assert event.status == EventStatus.COMPLETED
     assert event.response == "completed"
+    assert event.status == EventStatus.COMPLETED
     assert event.execution.error is None
     assert event.execution.duration < 1.0
 
@@ -1671,10 +1655,9 @@ async def test_event_timeout_exceeded():
     assert event.timeout == 0.1
 
     # Execute - should timeout
-    result = await event.invoke()
+    await event.invoke()
 
     # Timeout handling
-    assert result is None  # Returns None on timeout
     assert event.status == EventStatus.CANCELLED
     assert event.execution.response is Unset  # No response due to timeout
     assert isinstance(event.execution.error, LionherdTimeoutError)
@@ -1690,14 +1673,13 @@ async def test_event_timeout_different_event_types():
 
     # Test with SimpleEvent
     simple = SimpleEvent(return_value="fast", timeout=1.0)
-    result = await simple.invoke()
-    assert result == "fast"
+    await simple.invoke()
+    assert simple.response == "fast"
     assert simple.status == EventStatus.COMPLETED
 
     # Test with SlowEvent that times out
     slow = SlowEvent(delay=5.0, timeout=0.05)
-    result = await slow.invoke()
-    assert result is None
+    await slow.invoke()
     assert slow.status == EventStatus.CANCELLED
     assert isinstance(slow.execution.error, LionherdTimeoutError)
 
@@ -1709,10 +1691,9 @@ async def test_event_timeout_error_conversion():
 
     event = SlowEvent(delay=10.0, timeout=0.05)
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Error should be LionherdTimeoutError, not builtin TimeoutError
-    assert result is None
     assert isinstance(event.execution.error, LionherdTimeoutError)
     assert not isinstance(event.execution.error, TimeoutError.__bases__)  # Not builtin
     assert event.execution.error.retryable is True  # LionherdTimeoutError has retryable
@@ -1727,11 +1708,10 @@ async def test_event_timeout_status_transitions():
     assert event.status == EventStatus.PENDING
 
     # Execute (will timeout)
-    result = await event.invoke()
+    await event.invoke()
 
     # Final state after timeout
     assert event.status == EventStatus.CANCELLED
-    assert result is None
 
 
 @pytest.mark.asyncio
@@ -1863,10 +1843,9 @@ async def test_event_timeout_with_exception_before_timeout():
     # Exception occurs immediately, timeout is 5 seconds
     event = FailingEvent(error_message="boom", timeout=5.0)
 
-    result = await event.invoke()
+    await event.invoke()
 
     # Exception handling should work normally
-    assert result is None
     assert event.status == EventStatus.FAILED  # FAILED, not CANCELLED
     assert isinstance(event.execution.error, ValueError)
     assert "boom" in str(event.execution.error)
