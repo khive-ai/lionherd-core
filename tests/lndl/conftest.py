@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from lionherd_core.lndl import Lexer, Parser
 from lionherd_core.lndl.ast import Lvar
 from lionherd_core.lndl.types import LvarMetadata, RLvarMetadata
+from lionherd_core.testing import get_sample_lndl_text, get_sample_pydantic_models
 from lionherd_core.types import Operable, Spec
 
 # ============================================================================
@@ -26,38 +27,19 @@ from lionherd_core.types import Operable, Spec
 @pytest.fixture
 def report_model():
     """Simple report model for basic testing."""
-
-    class Report(BaseModel):
-        title: str
-        content: str
-        score: float = 0.0
-
-    return Report
+    return get_sample_pydantic_models()["Report"]
 
 
 @pytest.fixture
 def analysis_model():
     """Analysis model with multiple field types."""
-
-    class Analysis(BaseModel):
-        summary: str
-        findings: list[str]
-        confidence: float
-        metadata: dict[str, str] | None = None
-
-    return Analysis
+    return get_sample_pydantic_models()["Analysis"]
 
 
 @pytest.fixture
 def search_result_model():
     """Search result model for action testing."""
-
-    class SearchResult(BaseModel):
-        query: str
-        results: list[str]
-        count: int
-
-    return SearchResult
+    return get_sample_pydantic_models()["SearchResult"]
 
 
 # ============================================================================
@@ -68,70 +50,43 @@ def search_result_model():
 @pytest.fixture
 def simple_lndl_text():
     """Simple LNDL with one lvar and OUT block."""
-    return """\
-<lvar Report.title t>AI Safety Analysis</lvar>
-
-OUT{title: [t]}
-"""
+    return get_sample_lndl_text("simple")
 
 
 @pytest.fixture
 def multi_lvar_lndl_text():
     """LNDL with multiple lvars and OUT block."""
-    return """\
-<lvar Report.title t>AI Safety</lvar>
-<lvar Report.content c>Analysis of AI safety measures.</lvar>
-<lvar Report.score s>0.95</lvar>
-
-OUT{title: [t], content: [c], score: [s]}
-"""
+    return get_sample_lndl_text("multi")
 
 
 @pytest.fixture
 def lact_lndl_text():
     """LNDL with action call."""
-    return """\
-<lact SearchResult.results r>search(query="AI safety")</lact>
-
-OUT{results: [r]}
-"""
+    return get_sample_lndl_text("lact")
 
 
 @pytest.fixture
 def raw_lvar_lndl_text():
     """LNDL with raw lvar (no namespace)."""
-    return """\
-<lvar reasoning>This is intermediate reasoning text.</lvar>
-
-OUT{reasoning: [reasoning]}
-"""
+    return get_sample_lndl_text("raw")
 
 
 @pytest.fixture
 def mixed_lndl_text():
     """LNDL with mixed lvars, rlvars, lacts, and literals."""
-    return """\
-<lvar Report.title t>Title</lvar>
-<lvar reasoning>Reasoning text here</lvar>
-<lact Analysis.summary s>summarize(text="...")</lact>
-
-OUT{title: [t], reasoning: [reasoning], summary: [s], confidence: 0.85}
-"""
+    return get_sample_lndl_text("mixed")
 
 
 @pytest.fixture
 def invalid_lndl_text():
     """LNDL with syntax errors."""
-    return """\
-<lvar Report.title>Missing closing tag
-OUT{title: [t]
-"""
+    return get_sample_lndl_text("invalid")
 
 
 @pytest.fixture
 def empty_lndl_text():
     """Empty LNDL response."""
-    return ""
+    return get_sample_lndl_text("empty")
 
 
 @pytest.fixture

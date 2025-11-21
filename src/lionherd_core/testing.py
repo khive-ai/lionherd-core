@@ -29,28 +29,38 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from .base import Edge, Element, Flow, Graph, Node, Pile, Progression
+from .base import Edge, Element, Event, Flow, Graph, Node, Pile, Processor, Progression
 
 if TYPE_CHECKING:
     pass
 
 __all__ = (
+    "FailingTestEvent",
+    "SimpleTestEvent",
+    "SlowTestEvent",
+    "StreamingTestEvent",
+    "TestProcessor",
     "create_cyclic_graph",
     "create_dag_graph",
     "create_empty_graph",
     "create_simple_graph",
+    "create_spec",
     "create_test_elements",
     "create_test_flow",
     "create_test_pile",
     "create_test_progression",
     "create_typed_pile",
     "element_strategy",
+    "get_sample_hashable_models",
     "get_sample_lndl_text",
+    "get_sample_params_classes",
     "get_sample_pydantic_models",
+    "get_sample_validators",
     "mock_element",
     "mock_node",
     "node_strategy",
     "progression_strategy",
+    "validate_and_dump_pydantic",
 )
 
 
@@ -155,6 +165,112 @@ def create_test_nodes(count: int = 5) -> list[Node]:
         >>> assert nodes[0].content == {"value": "node_0"}
     """
     return [Node(content={"value": f"node_{i}"}) for i in range(count)]
+
+
+# =============================================================================
+# Event and Processor Classes
+# =============================================================================
+
+
+class SimpleTestEvent(Event):
+    """Simple Event that returns a configurable value.
+
+    Example:
+        >>> event = SimpleTestEvent(return_value=42)
+        >>> result = await event.invoke()
+        >>> assert result == 42
+    """
+
+    return_value: Any = None
+    streaming: bool = False
+
+    async def _invoke(self) -> Any:
+        """Return the configured value."""
+        return self.return_value
+
+
+class FailingTestEvent(Event):
+    """Event that raises a configurable exception.
+
+    Example:
+        >>> event = FailingTestEvent(error_message="Test error")
+        >>> await event.invoke()  # Raises ValueError
+    """
+
+    error_message: str = "Test error"
+    error_type: type[Exception] = ValueError
+    streaming: bool = False
+
+    async def _invoke(self) -> Any:
+        """Raise configured error."""
+        raise self.error_type(self.error_message)
+
+
+class SlowTestEvent(Event):
+    """Event that takes time to complete.
+
+    Example:
+        >>> event = SlowTestEvent(delay=0.1, return_value="done")
+        >>> result = await event.invoke()
+        >>> assert result == "done"
+    """
+
+    delay: float = 0.1
+    return_value: Any = "completed"
+    streaming: bool = False
+
+    async def _invoke(self) -> Any:
+        """Wait then return value."""
+        import anyio
+
+        await anyio.sleep(self.delay)
+        return self.return_value
+
+
+class StreamingTestEvent(Event):
+    """Event that yields values via async generator.
+
+    Example:
+        >>> event = StreamingTestEvent(stream_count=3)
+        >>> async for value in event.stream():
+        ...     print(value)
+        0
+        1
+        2
+    """
+
+    stream_count: int = 3
+    streaming: bool = True
+
+    async def _invoke(self) -> Any:
+        """Not used for streaming events."""
+        raise NotImplementedError("Use stream() instead")
+
+    async def stream(self):
+        """Yield values asynchronously."""
+        import anyio
+
+        from .base.event import EventStatus
+
+        for i in range(self.stream_count):
+            await anyio.sleep(0.01)
+            yield i
+        # Mark as completed after streaming
+        self.execution.status = EventStatus.COMPLETED
+        self.execution.response = f"streamed {self.stream_count} items"
+
+
+class TestProcessor(Processor):
+    """Basic Processor for SimpleTestEvent.
+
+    Example:
+        >>> pile = Pile[Event]()
+        >>> processor = TestProcessor(pile=pile)
+        >>> event = SimpleTestEvent(return_value=42)
+        >>> await processor.process(event)
+    """
+
+    event_type = SimpleTestEvent
 
 
 # =============================================================================
@@ -385,6 +501,264 @@ def create_test_progression(
         items = create_test_elements(count=5)
 
     return Progression(order=[item.id for item in items], name=name)
+
+
+# =============================================================================
+# Spec Factories
+# =============================================================================
+
+
+def create_spec(
+    base_type: type,
+    name: str,
+    *,
+    default: Any = None,
+    nullable: bool = False,
+    listable: bool = False,
+    validator: Any = None,
+    description: str | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Factory for Spec creation in tests.
+
+    More flexible than test-local helpers - supports all metadata keys.
+
+    Args:
+        base_type: The base type for the Spec (e.g., str, int)
+        name: Name of the Spec
+        default: Default value (if None provided, no default set unless specified)
+        nullable: Whether the field can be None
+        listable: Whether the field is a list
+        validator: Optional validator function
+        description: Optional description
+        **kwargs: Additional Spec metadata
+
+    Returns:
+        Spec instance
+
+    Example:
+        >>> spec = create_spec(str, name="username", nullable=True)
+        >>> spec = create_spec(int, name="age", validator=lambda x: x >= 0)
+    """
+    from lionherd_core.types import Spec
+
+    spec_kwargs: dict[str, Any] = {"name": name}
+
+    # Only add default if explicitly provided and not None
+    # This allows distinguishing between "no default" and "default=None"
+    if default is not None:
+        spec_kwargs["default"] = default
+
+    if nullable:
+        spec_kwargs["nullable"] = nullable
+
+    if listable:
+        spec_kwargs["listable"] = listable
+
+    if validator is not None:
+        spec_kwargs["validator"] = validator
+
+    if description is not None:
+        spec_kwargs["description"] = description
+
+    # Add any extra kwargs
+    spec_kwargs.update(kwargs)
+
+    return Spec(base_type, **spec_kwargs)
+
+
+# =============================================================================
+# Type System Test Fixtures
+# =============================================================================
+
+
+def get_sample_validators() -> dict[str, Any]:
+    """Returns dict of common validator functions for testing.
+
+    Keys:
+        - 'nonneg': Non-negative integer validator
+        - 'string_length': String length > 0 validator
+        - 'email_format': Simple email format validator
+        - 'range_validator': Integer range validator (0-100)
+
+    Usage:
+        validators = get_sample_validators()
+        spec = create_spec(int, name="age", validator=validators['nonneg'])
+
+    Example:
+        >>> validators = get_sample_validators()
+        >>> nonneg = validators["nonneg"]
+        >>> nonneg(5)  # Returns 5
+        >>> nonneg(-1)  # Raises ValueError
+    """
+
+    def nonneg(v: int) -> int:
+        if v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
+    def string_length(v: str) -> str:
+        if len(v) == 0:
+            raise ValueError("string cannot be empty")
+        return v
+
+    def email_format(v: str) -> str:
+        if "@" not in v:
+            raise ValueError("invalid email format")
+        return v
+
+    def range_validator(v: int) -> int:
+        if not 0 <= v <= 100:
+            raise ValueError("value must be between 0 and 100")
+        return v
+
+    return {
+        "nonneg": nonneg,
+        "string_length": string_length,
+        "email_format": email_format,
+        "range_validator": range_validator,
+    }
+
+
+def get_sample_params_classes() -> dict[str, type]:
+    """Returns dict of Params/DataClass test fixtures.
+
+    Keys:
+        - 'basic_params': MyParams (3 fields, all Unset)
+        - 'params_none_sentinel': MyParamsNoneSentinel (none_as_sentinel=True)
+        - 'params_strict': MyParamsStrict (strict=True)
+        - 'basic_dataclass': MyDataClass
+        - 'dataclass_strict': MyDataClassStrict
+        - 'dataclass_prefill': MyDataClassPrefillUnset
+
+    Usage:
+        classes = get_sample_params_classes()
+        MyParams = classes['basic_params']
+        params = MyParams(field1="value")
+
+    Example:
+        >>> classes = get_sample_params_classes()
+        >>> MyParams = classes["basic_params"]
+        >>> params = MyParams(field1="test")
+        >>> assert params.field1 == "test"
+    """
+    from dataclasses import dataclass
+    from typing import ClassVar
+
+    from lionherd_core.types import DataClass, ModelConfig, Params, Unset
+
+    @dataclass(slots=True, frozen=True, init=False)
+    class MyParams(Params):
+        field1: str = Unset
+        field2: int = Unset
+        field3: bool = Unset
+
+    @dataclass(slots=True, frozen=True, init=False)
+    class MyParamsNoneSentinel(Params):
+        _config: ClassVar[ModelConfig] = ModelConfig(none_as_sentinel=True)
+        field1: str = Unset
+
+    @dataclass(slots=True, frozen=True, init=False)
+    class MyParamsStrict(Params):
+        _config: ClassVar[ModelConfig] = ModelConfig(strict=True)
+        field1: str = Unset
+        field2: int = Unset
+
+    @dataclass(slots=True)
+    class MyDataClass(DataClass):
+        field1: str = Unset
+        field2: int = Unset
+
+    @dataclass(slots=True)
+    class MyDataClassStrict(DataClass):
+        _config: ClassVar[ModelConfig] = ModelConfig(strict=True)
+        field1: str = Unset
+        field2: int = Unset
+
+    @dataclass(slots=True)
+    class MyDataClassPrefillUnset(DataClass):
+        _config: ClassVar[ModelConfig] = ModelConfig(prefill_unset=True)
+        field1: str = Unset
+        field2: int = Unset
+
+    return {
+        "basic_params": MyParams,
+        "params_none_sentinel": MyParamsNoneSentinel,
+        "params_strict": MyParamsStrict,
+        "basic_dataclass": MyDataClass,
+        "dataclass_strict": MyDataClassStrict,
+        "dataclass_prefill": MyDataClassPrefillUnset,
+    }
+
+
+def get_sample_hashable_models() -> dict[str, type]:
+    """Returns dict of HashableModel test fixtures.
+
+    Keys:
+        - 'simple': SimpleConfig (name, value)
+        - 'nested': NestedConfig (config: SimpleConfig)
+        - 'optional': ConfigWithOptional (required + optional)
+
+    Usage:
+        models = get_sample_hashable_models()
+        SimpleConfig = models['simple']
+        config = SimpleConfig(name="test", value=42)
+
+    Example:
+        >>> models = get_sample_hashable_models()
+        >>> SimpleConfig = models["simple"]
+        >>> config = SimpleConfig(name="test", value=42)
+        >>> assert config.name == "test"
+    """
+    from lionherd_core.types import HashableModel
+
+    class SimpleConfig(HashableModel):
+        name: str
+        value: int
+
+    class NestedConfig(HashableModel):
+        config: SimpleConfig
+        enabled: bool = True
+
+    class ConfigWithOptional(HashableModel):
+        required: str
+        optional: str | None = None
+
+    return {
+        "simple": SimpleConfig,
+        "nested": NestedConfig,
+        "optional": ConfigWithOptional,
+    }
+
+
+def validate_and_dump_pydantic(
+    model_cls: type,
+    data: dict,
+) -> dict:
+    """Helper to validate data and dump back to dict.
+
+    Args:
+        model_cls: Pydantic model class
+        data: Data to validate
+
+    Returns:
+        Validated and dumped dict
+
+    Example:
+        >>> from pydantic import BaseModel
+        >>> class User(BaseModel):
+        ...     name: str
+        ...     age: int
+        >>> result = validate_and_dump_pydantic(User, {"name": "alice", "age": 30})
+        >>> assert result == {"name": "alice", "age": 30}
+    """
+    try:
+        from lionherd_core.types.spec_adapters.pydantic_field import PydanticSpecAdapter
+    except ImportError as e:
+        raise ImportError("PydanticSpecAdapter not available") from e
+
+    inst = PydanticSpecAdapter.validate_model(model_cls, data)
+    return PydanticSpecAdapter.dump_model(inst)
 
 
 # =============================================================================

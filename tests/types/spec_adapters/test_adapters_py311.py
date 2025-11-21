@@ -223,36 +223,10 @@ import pytest
 # Skip pydantic-specific tests if pydantic isn't installed
 pytest.importorskip("pydantic")
 
+from lionherd_core.testing import create_spec, get_sample_validators
 from lionherd_core.types import Operable, Spec
 from lionherd_core.types.spec_adapters._protocol import SpecAdapter
 from lionherd_core.types.spec_adapters.pydantic_field import PydanticSpecAdapter
-
-# -- Helpers -----------------------------------------------------------------
-
-
-def _spec_str(name: str, default: str | None = None, nullable: bool = False) -> Spec:
-    """Create a string Spec."""
-    kw = {"name": name}
-    if default is not None:
-        kw["default"] = default
-    if nullable:
-        kw["nullable"] = True
-    return Spec(str, **kw)
-
-
-def _spec_int(
-    name: str, default: int | None = None, nullable: bool = False, validator=None
-) -> Spec:
-    """Create an int Spec."""
-    kw = {"name": name}
-    if default is not None:
-        kw["default"] = default
-    if nullable:
-        kw["nullable"] = True
-    if validator is not None:
-        kw["validator"] = validator
-    return Spec(int, **kw)
-
 
 # -- SpecAdapter.parse_json ---------------------------------------------------
 
@@ -317,8 +291,8 @@ def test_parse_json_preserves_multi_item_list(monkeypatch):
 def test_pydantic_create_validate_dump_update():
     """Test end-to-end Pydantic pipeline: create → validate → dump → update."""
     # Build an Operable with two fields
-    name_spec = _spec_str("name", default="n/a")
-    age_spec = _spec_int("age", default=18)
+    name_spec = create_spec(str, name="name", default="n/a")
+    age_spec = create_spec(int, name="age", default=18)
     op = Operable((name_spec, age_spec), name="User")
 
     # Create model
@@ -336,7 +310,7 @@ def test_pydantic_create_validate_dump_update():
 
 def test_pydantic_nullable_default_none():
     """Test nullable field with default=None."""
-    nullable_score = _spec_int("score", default=None, nullable=True)
+    nullable_score = create_spec(int, name="score", default=None, nullable=True)
     op = Operable((nullable_score,), name="Scored")
 
     Model = PydanticSpecAdapter.create_model(op, model_name="ScoredModel")
@@ -410,13 +384,8 @@ def test_pydantic_field_validator_executes():
     - Inheritance overhead: Negligible (Python MRO lookup ~10ns)
     - Validation: Same as hand-written Pydantic model
     """
-
-    def nonneg(v: int) -> int:
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return v
-
-    s = _spec_int("age", validator=nonneg)
+    validators = get_sample_validators()
+    s = create_spec(int, name="age", validator=validators["nonneg"])
     op = Operable((s,), name="WithValidator")
     Model = PydanticSpecAdapter.create_model(op, model_name="WithValidatorModel")
 
@@ -447,7 +416,7 @@ def test_validate_response_pipeline(monkeypatch):
         lambda data, fields, handle_unmatched="ignore": data,
     )
 
-    op = Operable((_spec_str("name"), _spec_int("age")), name="User")
+    op = Operable((create_spec(str, name="name"), create_spec(int, name="age")), name="User")
     Model = PydanticSpecAdapter.create_model(op, model_name="UserModel2")
 
     inst = PydanticSpecAdapter.validate_response('{"name":"bob","age":33}', Model, strict=True)
@@ -527,7 +496,7 @@ def test_validate_response_returns_none_on_error_when_not_strict(monkeypatch):
     def _raise_value_error():
         raise ValueError("parse error")
 
-    op = Operable((_spec_str("name"),), name="Simple")
+    op = Operable((create_spec(str, name="name"),), name="Simple")
     Model = PydanticSpecAdapter.create_model(op, model_name="SimpleModel")
 
     # strict=False: should return None on error
@@ -547,7 +516,7 @@ def test_validate_response_raises_on_error_when_strict(monkeypatch):
         lambda text, fuzzy_parse=True: _raise_value_error(),
     )
 
-    op = Operable((_spec_str("name"),), name="Simple")
+    op = Operable((create_spec(str, name="name"),), name="Simple")
     Model = PydanticSpecAdapter.create_model(op, model_name="SimpleModel")
 
     # strict=True: should raise on error
@@ -563,7 +532,7 @@ def test_fuzzy_match_fields_filters_sentinel_values():
     from lionherd_core.types import Unset
 
     # Create model with two fields
-    op = Operable((_spec_str("name"), _spec_int("age")), name="Person")
+    op = Operable((create_spec(str, name="name"), create_spec(int, name="age")), name="Person")
     Model = PydanticSpecAdapter.create_model(op, model_name="PersonModel")
 
     # Data with sentinel value
@@ -647,7 +616,7 @@ def test_fuzzy_match_fields_strict_mode():
     **Performance**: O(data_keys x model_fields) for matching, then O(1) for error raise
     """
     # Create model
-    op = Operable((_spec_str("name"),), name="Simple")
+    op = Operable((create_spec(str, name="name"),), name="Simple")
     Model = PydanticSpecAdapter.create_model(op, model_name="SimpleModel2")
 
     # Data with unmatched key
@@ -678,7 +647,7 @@ def test_generic_type_annotations_preserved():
 
 def test_create_model_returns_correct_type():
     """Test that create_model returns the correct model class type."""
-    op = Operable((_spec_str("name"),), name="Test")
+    op = Operable((create_spec(str, name="name"),), name="Test")
     Model = PydanticSpecAdapter.create_model(op, model_name="TestModel")
 
     # Should return a type (class)
@@ -692,7 +661,7 @@ def test_create_model_returns_correct_type():
 
 def test_validate_model_returns_instance():
     """Test that validate_model returns an instance of the model."""
-    op = Operable((_spec_str("name"),), name="Test")
+    op = Operable((create_spec(str, name="name"),), name="Test")
     Model = PydanticSpecAdapter.create_model(op, model_name="TestModel2")
 
     inst = PydanticSpecAdapter.validate_model(Model, {"name": "test"})
@@ -706,7 +675,7 @@ def test_validate_model_returns_instance():
 
 def test_dump_model_returns_dict():
     """Test that dump_model returns a dictionary."""
-    op = Operable((_spec_str("name"), _spec_int("age")), name="Test")
+    op = Operable((create_spec(str, name="name"), create_spec(int, name="age")), name="Test")
     Model = PydanticSpecAdapter.create_model(op, model_name="TestModel3")
 
     inst = PydanticSpecAdapter.validate_model(Model, {"name": "alice", "age": 30})

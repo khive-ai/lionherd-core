@@ -49,68 +49,14 @@ from lionherd_core.libs import concurrency
 # ============================================================================
 # Test Event Subclasses (Concrete implementations for testing)
 # ============================================================================
-
-
-class SimpleEvent(Event):
-    """Simple event that completes successfully."""
-
-    return_value: Any = "success"
-    streaming: bool = False
-
-    async def _invoke(self) -> Any:
-        """Return configured value."""
-        # Event.invoke() handles status transitions
-        return self.return_value
-
-
-class FailingEvent(Event):
-    """Event that always fails."""
-
-    error_message: str = "Test error"
-    streaming: bool = False
-
-    async def _invoke(self) -> Any:
-        """Raise configured error."""
-        raise ValueError(self.error_message)
-
-
-class SlowEvent(Event):
-    """Event that takes time to complete."""
-
-    delay: float = 0.05
-    return_value: Any = "completed"
-    streaming: bool = False
-
-    async def _invoke(self) -> Any:
-        """Wait then return value."""
-        await concurrency.sleep(self.delay)
-        return self.return_value
-
-
-class StreamingEvent(Event):
-    """Event that yields values via async generator."""
-
-    stream_count: int = 3
-    streaming: bool = True
-
-    async def _invoke(self) -> Any:
-        """Not used for streaming events."""
-        raise NotImplementedError("Use stream() instead")
-
-    async def stream(self):
-        """Yield values asynchronously."""
-        for i in range(self.stream_count):
-            await concurrency.sleep(0.01)
-            yield i
-        # Mark as completed after streaming
-        self.execution.status = EventStatus.COMPLETED
-        self.execution.response = f"streamed {self.stream_count} items"
-
-
-class SimpleProcessor(Processor):
-    """Concrete Processor for SimpleEvent."""
-
-    event_type = SimpleEvent
+# Import reusable Event classes from testing module
+from lionherd_core.testing import (
+    FailingTestEvent as FailingEvent,
+    SimpleTestEvent as SimpleEvent,
+    SlowTestEvent as SlowEvent,
+    StreamingTestEvent as StreamingEvent,
+    TestProcessor as SimpleProcessor,
+)
 
 
 class FailingProcessor(Processor):

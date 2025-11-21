@@ -125,40 +125,12 @@ from lionherd_core.libs.concurrency import create_task_group, fail_after
 # ============================================================================
 # Test Event Subclasses (Concrete implementations for testing)
 # ============================================================================
-
-
-class SimpleEvent(Event):
-    """Simple Event that returns a value."""
-
-    return_value: Any = None
-
-    async def _invoke(self) -> Any:
-        """Return the configured value."""
-        return self.return_value
-
-
-class FailingEvent(Event):
-    """Event that always raises an exception."""
-
-    error_message: str = "Test error"
-
-    async def _invoke(self) -> Any:
-        """Raise configured error."""
-        raise ValueError(self.error_message)
-
-
-class SlowEvent(Event):
-    """Event that takes time to complete."""
-
-    delay: float = 0.1
-    return_value: Any = "completed"
-
-    async def _invoke(self) -> Any:
-        """Wait then return value."""
-        import anyio
-
-        await anyio.sleep(self.delay)
-        return self.return_value
+# Import reusable Event classes from testing module
+from lionherd_core.testing import (
+    FailingTestEvent as FailingEvent,
+    SimpleTestEvent as SimpleEvent,
+    SlowTestEvent as SlowEvent,
+)
 
 
 class ComplexResponseEvent(Event):
@@ -1663,8 +1635,6 @@ async def test_event_timeout_none_default():
 @pytest.mark.asyncio
 async def test_event_timeout_completes_in_time():
     """Test Event with timeout set and operation completes within timeout."""
-    from lionherd_core.types._sentinel import Unset
-
     # Fast operation with generous timeout
     event = SlowEvent(delay=0.05, return_value="completed", timeout=1.0)
 
@@ -1779,8 +1749,6 @@ async def test_event_timeout_retryable_flag():
 @pytest.mark.asyncio
 async def test_event_timeout_serialization():
     """Test Event with timeout serializes correctly."""
-    from lionherd_core.errors import TimeoutError as LionherdTimeoutError
-
     event = SlowEvent(delay=5.0, timeout=0.05)
     await event.invoke()
 

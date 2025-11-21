@@ -24,59 +24,7 @@ from lionherd_core.base._utils import (
 )
 from lionherd_core.ln import json_dict
 from lionherd_core.protocols import Observable, ObservableProto
-
-# ============================================================================
-# Test Fixtures
-# ============================================================================
-
-
-@pytest.fixture
-def valid_uuid_str() -> str:
-    """Valid UUID string (lowercase with hyphens)."""
-    return "550e8400-e29b-41d4-a716-446655440000"
-
-
-@pytest.fixture
-def valid_uuid_obj() -> UUID:
-    """Valid UUID object."""
-    return uuid4()
-
-
-@pytest.fixture
-def observable_mock(valid_uuid_obj: UUID):
-    """Mock object implementing Observable protocol."""
-
-    class MockObservable:
-        @property
-        def id(self) -> UUID:
-            return valid_uuid_obj
-
-    return MockObservable()
-
-
-@pytest.fixture
-def aware_datetime() -> dt.datetime:
-    """Timezone-aware datetime (UTC)."""
-    return dt.datetime(2025, 10, 31, 12, 30, 45, tzinfo=dt.UTC)
-
-
-@pytest.fixture
-def naive_datetime() -> dt.datetime:
-    """Timezone-naive datetime."""
-    return dt.datetime(2025, 10, 31, 12, 30, 45)
-
-
-@pytest.fixture
-def iso_string_with_tz() -> str:
-    """ISO 8601 string with timezone."""
-    return "2025-10-31T12:30:45+00:00"
-
-
-@pytest.fixture
-def iso_string_without_tz() -> str:
-    """ISO 8601 string without timezone."""
-    return "2025-10-31T12:30:45"
-
+from lionherd_core.testing import mock_element
 
 # ============================================================================
 # Tests: synchronized() and async_synchronized() decorators
@@ -517,15 +465,17 @@ class TestGetElementSerializerConfig:
 class TestToUuid:
     """Test suite for to_uuid() function."""
 
-    def test_to_uuid_when_uuid_instance_then_returns_same(self, valid_uuid_obj: UUID):
+    def test_to_uuid_when_uuid_instance_then_returns_same(self):
         """Test to_uuid() returns same UUID instance when given UUID object."""
+        valid_uuid_obj = uuid4()
         result = to_uuid(valid_uuid_obj)
 
         assert result == valid_uuid_obj
         assert isinstance(result, UUID)
 
-    def test_to_uuid_when_valid_string_lowercase_then_returns_uuid(self, valid_uuid_str: str):
+    def test_to_uuid_when_valid_string_lowercase_then_returns_uuid(self):
         """Test to_uuid() parses lowercase UUID string correctly."""
+        valid_uuid_str = "550e8400-e29b-41d4-a716-446655440000"
         result = to_uuid(valid_uuid_str)
 
         assert isinstance(result, UUID)
@@ -547,13 +497,12 @@ class TestToUuid:
         assert isinstance(result, UUID)
         assert str(result) == "550e8400-e29b-41d4-a716-446655440000"
 
-    def test_to_uuid_when_observable_with_id_then_returns_id(
-        self, observable_mock, valid_uuid_obj: UUID
-    ):
+    def test_to_uuid_when_observable_with_id_then_returns_id(self):
         """Test to_uuid() extracts .id property from Observable objects."""
-        result = to_uuid(observable_mock)
+        elem = mock_element()
+        result = to_uuid(elem)
 
-        assert result == valid_uuid_obj
+        assert result == elem.id
         assert isinstance(result, UUID)
 
     def test_to_uuid_when_invalid_string_then_raises_valueerror(self):
@@ -606,18 +555,18 @@ class TestToUuid:
 class TestCoerceCreatedAt:
     """Test suite for coerce_created_at() function."""
 
-    def test_coerce_created_at_when_aware_datetime_then_passthrough(
-        self, aware_datetime: dt.datetime
-    ):
+    def test_coerce_created_at_when_aware_datetime_then_passthrough(self):
         """Test coerce_created_at() returns aware datetime unchanged."""
+        aware_datetime = dt.datetime(2025, 10, 31, 12, 30, 45, tzinfo=dt.UTC)
         result = coerce_created_at(aware_datetime)
 
         assert result == aware_datetime
         assert result.tzinfo is not None
         assert result.tzinfo == dt.UTC
 
-    def test_coerce_created_at_when_naive_datetime_then_adds_utc(self, naive_datetime: dt.datetime):
+    def test_coerce_created_at_when_naive_datetime_then_adds_utc(self):
         """Test coerce_created_at() adds UTC timezone to naive datetime."""
+        naive_datetime = dt.datetime(2025, 10, 31, 12, 30, 45)
         result = coerce_created_at(naive_datetime)
 
         assert result.tzinfo is not None
@@ -625,17 +574,17 @@ class TestCoerceCreatedAt:
         # Same wall time, just with UTC attached
         assert result.replace(tzinfo=None) == naive_datetime
 
-    def test_coerce_created_at_when_iso_string_with_tz_then_parses(self, iso_string_with_tz: str):
+    def test_coerce_created_at_when_iso_string_with_tz_then_parses(self):
         """Test coerce_created_at() parses ISO 8601 string with timezone."""
+        iso_string_with_tz = "2025-10-31T12:30:45+00:00"
         result = coerce_created_at(iso_string_with_tz)
 
         assert isinstance(result, dt.datetime)
         assert result.tzinfo is not None
 
-    def test_coerce_created_at_when_iso_string_without_tz_then_parses(
-        self, iso_string_without_tz: str
-    ):
+    def test_coerce_created_at_when_iso_string_without_tz_then_parses(self):
         """Test coerce_created_at() parses ISO 8601 string without timezone."""
+        iso_string_without_tz = "2025-10-31T12:30:45"
         result = coerce_created_at(iso_string_without_tz)
 
         assert isinstance(result, dt.datetime)
@@ -1048,8 +997,9 @@ class TestUtilsIntegration:
         result = to_uuid(event)
         assert result == event.id
 
-    def test_coerce_created_at_with_get_json_serializable(self, aware_datetime: dt.datetime):
+    def test_coerce_created_at_with_get_json_serializable(self):
         """Test datetime coercion followed by JSON serialization."""
+        aware_datetime = dt.datetime(2025, 10, 31, 12, 30, 45, tzinfo=dt.UTC)
         # Coerce to datetime
         dt_result = coerce_created_at(aware_datetime)
 
