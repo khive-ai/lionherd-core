@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-alpha7](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha7) - 2025-11-21
+
+### Added
+
+- **Testing utilities** (`lionherd_core.testing`): Factories, fixtures, and Hypothesis strategies for downstream projects
+- **Pile multi-access**: `pile[[0, 2, 3]]` (indices) and `pile[(uuid1, uuid2)]` (UUIDs) return `Pile[T]`
+- **Integration docs**: `docs/integration/lionherd_patterns.md` with 6 production patterns
+
+### Changed
+
+- **BREAKING**: `pile[1:3]` returns `Pile[T]` instead of `list[T]`. Migration: `list(pile[1:3])`
+- **Spec/Operable.allowed()**: Uses `dataclasses.fields()` instead of `__dataclass_fields__` (excludes `ClassVar`)
+- **Decorator signatures**: `synchronized`/`async_synchronized` preserve exact signatures via `ParamSpec`/`TypeVar`
+- Streamlined docstrings across base modules
+
 ## [1.0.0-alpha6](https://github.com/khive-ai/lionherd-core/releases/tag/v1.0.0-alpha6) - 2025-11-16
 
 ### Added
