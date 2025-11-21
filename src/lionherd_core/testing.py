@@ -72,6 +72,8 @@ __all__ = (
 class TestElement(Element):
     """Simple Element subclass for testing."""
 
+    __test__ = False  # Tell pytest not to collect this as a test class
+
     value: int = 0
     name: str = "test"
 
