@@ -122,7 +122,7 @@ class Flow(Element, Generic[E, P]):
                     pile.add(item)
             return pile
         # Let Pydantic handle other cases (default_factory)
-        return handler(v)
+        return handler(v)  # pragma: no cover (Pydantic internal fallback)
 
     @model_validator(mode="after")
     def _validate_referential_integrity(self) -> Flow:

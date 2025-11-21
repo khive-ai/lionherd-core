@@ -68,7 +68,9 @@ class Element(BaseModel):
 
             val = to_dict(val, recursive=True, suppress=True)
 
-        if not isinstance(val, dict):
+        if not isinstance(
+            val, dict
+        ):  # pragma: no cover (to_dict with suppress=True always returns dict)
             raise ValueError("Invalid metadata: must be a dictionary")
 
         return val
@@ -198,15 +200,6 @@ class Element(BaseModel):
                 raise ValueError(
                     f"'{lion_class}' is not an Element subclass. "
                     f"Cannot deserialize into {cls.__name__}"
-                )
-
-            # Polymorphic deserialization requires from_dict
-            if not hasattr(target_cls, "from_dict") or not callable(
-                getattr(target_cls, "from_dict", None)
-            ):
-                raise ValueError(
-                    f"'{lion_class}' does not implement from_dict(). "
-                    f"Cannot perform polymorphic deserialization"
                 )
 
             # Prevent infinite recursion: check if target has different from_dict implementation

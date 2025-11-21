@@ -53,8 +53,8 @@ async def gather(*aws: Awaitable[T], return_exceptions: bool = False) -> list[T 
             rest = non_cancel_subgroup(eg)
             if rest is not None:
                 raise rest
-            # All were cancellations -> propagate cancellation group
-            raise
+            # All were cancellations -> propagate cancellation group (defensive)
+            raise  # pragma: no cover (all-cancellation ExceptionGroup - see test_patterns.py note)
 
     return results  # type: ignore
 
@@ -121,8 +121,8 @@ async def bounded_map(
             rest = non_cancel_subgroup(eg)
             if rest is not None:
                 raise rest
-            # All were cancellations -> propagate cancellation group
-            raise
+            # All were cancellations -> propagate cancellation group (defensive)
+            raise  # pragma: no cover (all-cancellation ExceptionGroup - see test_patterns.py note)
 
     return out  # type: ignore
 
@@ -155,7 +155,7 @@ class CompletionStream:
                 try:
                     assert self._send is not None
                     await self._send.send((i, res))  # type: ignore[arg-type]
-                except anyio.ClosedResourceError:
+                except anyio.ClosedResourceError:  # pragma: no cover (race condition)
                     # Stream was closed (e.g., early break from iteration)
                     # Swallow the error gracefully
                     pass
@@ -192,7 +192,7 @@ class CompletionStream:
             result = await self._recv.receive()
             self._completed_count += 1
             return result
-        except anyio.EndOfStream:
+        except anyio.EndOfStream:  # pragma: no cover (line 189 triggers first in normal operation)
             raise StopAsyncIteration
 
 
@@ -225,14 +225,14 @@ async def retry(
             # Cap by ambient deadline if one exists
             if deadline is not None:
                 remaining = deadline - current_time()
-                if remaining <= 0:
+                if remaining <= 0:  # pragma: no cover (deadline race)
                     # Out of time; surface the last error
                     raise
                 # Use move_on_at to avoid TOCTOU race between deadline check and sleep
                 with move_on_at(deadline):
                     await anyio.sleep(delay)
                 # If we were cancelled by deadline, re-raise the original exception
-                if current_time() >= deadline:
+                if current_time() >= deadline:  # pragma: no cover (deadline race)
                     raise
             else:
                 await anyio.sleep(delay)

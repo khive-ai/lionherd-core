@@ -1584,6 +1584,46 @@ class TestSerialization:
         assert "metadata" not in data
         assert "nodes" in data  # nodes/edges manually added, not excluded
 
+    def test_construct_graph_with_dict_nodes_edges(self):
+        """Test Graph construction with nodes/edges as dicts (deserialization path).
+
+        Pattern:
+            The field_validator `_deserialize_nodes_edges` handles dict input
+            by converting to Pile via Pile.from_dict(). This covers the
+            deserialization path when Graph is constructed from JSON/dict data.
+
+        Edge Case:
+            Passing dict directly to nodes/edges fields (not via from_dict())
+            should trigger the validator's dict handling branch.
+        """
+        from lionherd_core import Node, Pile
+        from lionherd_core.base.graph import Edge
+
+        # Create nodes and edges as dict representation (simulating JSON data)
+        n1 = Node(content={"value": "A"})
+        n2 = Node(content={"value": "B"})
+        edge = Edge(head=n1.id, tail=n2.id, label=["test"])
+
+        # Get their serialized dict form
+        nodes_pile = Pile(items=[n1, n2])
+        edges_pile = Pile(items=[edge])
+        nodes_dict = nodes_pile.to_dict()
+        edges_dict = edges_pile.to_dict()
+
+        # Construct Graph with dicts directly (triggers validator line 129-130)
+        graph = Graph(nodes=nodes_dict, edges=edges_dict)
+
+        # Verify construction worked
+        assert len(graph.nodes) == 2
+        assert len(graph.edges) == 1
+        assert n1.id in graph.nodes
+        assert n2.id in graph.nodes
+        assert edge.id in graph.edges
+
+        # Verify adjacency was rebuilt
+        assert n1.id in graph._out_edges
+        assert edge.id in graph._out_edges[n1.id]
+
 
 # ============================================================================
 # EdgeCondition Tests

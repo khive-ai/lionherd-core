@@ -1852,3 +1852,37 @@ async def test_event_timeout_with_exception_before_timeout():
     assert event.execution.retryable is True  # Unknown exceptions are retryable
     assert event.execution.duration is not None
     assert event.execution.duration < 1.0  # Completed quickly (before timeout)
+
+
+def test_execution_serialize_exception_group_circular_reference():
+    """Test circular reference detection in ExceptionGroup serialization.
+
+    Coverage Target: event.py line 134 (circular reference branch).
+
+    Edge Case:
+    ----------
+    When the same ExceptionGroup object appears in the recursion stack
+    (circular reference), the serializer should detect it via _seen set
+    and return a safe placeholder instead of infinite recursion.
+
+    Implementation Note:
+    --------------------
+    We can't create actual circular ExceptionGroups (Python forbids it),
+    but we can test the detection mechanism by calling _serialize_exception_group
+    directly with a pre-populated _seen set containing the ExceptionGroup's id.
+    """
+    execution = Execution()
+
+    # Create a simple ExceptionGroup
+    eg = ExceptionGroup("test group", [ValueError("inner error")])
+
+    # Simulate circular reference by pre-adding the group's id to _seen
+    seen_set = {id(eg)}
+
+    # Call serializer with pre-populated seen set (simulates cycle detection)
+    result = execution._serialize_exception_group(eg, depth=0, _seen=seen_set)
+
+    # Should return circular reference placeholder
+    assert result["error"] == "ExceptionGroup"
+    assert result["message"] == "Circular reference detected"
+    assert "exceptions" not in result  # No nested exceptions in placeholder

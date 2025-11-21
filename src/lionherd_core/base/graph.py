@@ -129,7 +129,7 @@ class Graph(Element, PydapterAdaptable, PydapterAsyncAdaptable):
         if isinstance(v, dict):
             return Pile.from_dict(v)
         # Let Pydantic handle other cases (like default_factory)
-        return handler(v)
+        return handler(v)  # pragma: no cover (Pydantic internal fallback)
 
     @model_validator(mode="after")
     def _rebuild_adjacency_after_init(self) -> Graph:
