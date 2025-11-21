@@ -772,8 +772,22 @@ def test_getitem_list_mixed_types_raises(simple_items):
     """Test __getitem__ with mixed int/UUID raises TypeError."""
     pile = Pile(items=simple_items)
 
+    # Int first, UUID later (line 501)
     with pytest.raises(TypeError, match="Cannot mix int and UUID"):
         _ = pile[[0, simple_items[1].id]]
+
+    # UUID first, int later (line 507)
+    with pytest.raises(TypeError, match="Cannot mix int and UUID"):
+        _ = pile[[simple_items[0].id, 1]]
+
+
+def test_getitem_list_invalid_type_raises(simple_items):
+    """Test __getitem__ with invalid type in list raises TypeError."""
+    pile = Pile(items=simple_items)
+
+    # Float is neither int nor UUID (line 513)
+    with pytest.raises(TypeError, match="list/tuple must contain only int or UUID"):
+        _ = pile[[1.5, 2.5]]
 
 
 def test_getitem_by_progression(simple_items):

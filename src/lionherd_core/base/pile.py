@@ -181,8 +181,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         # Store progression metadata in pile's metadata
         if self._progression.name and actual_meta_key in data:
-            if data[actual_meta_key] is None:
-                data[actual_meta_key] = {}
             data[actual_meta_key]["progression_name"] = self._progression.name
 
         # Serialize items in progression order (progression order is implicit)
