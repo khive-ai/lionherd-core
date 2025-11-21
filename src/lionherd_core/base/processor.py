@@ -91,6 +91,7 @@ class Processor:
         self.max_denial_tracking = max_denial_tracking
         self.pile = pile  # Reference to executor's event storage
         self.executor = executor  # For progression updates
+        self.concurrency_limit = concurrency_limit
 
         # Priority queue: items are (priority, event_uuid) tuples
         # Lower priority values are processed first
