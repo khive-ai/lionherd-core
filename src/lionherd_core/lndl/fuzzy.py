@@ -275,8 +275,13 @@ def parse_lndl_fuzzy(
             if spec.name:
                 field_based_specs[spec.name] = spec
             # Also register Operable.name as virtual model for namespaced syntax fallback
+            # Register both base name and {name}Response variant (common LLM pattern)
             if operable.name and operable.name not in spec_map:
                 spec_map[operable.name] = (spec, False)
+                # LLMs often use {Name}Response when given a response model schema
+                response_name = f"{operable.name}Response"
+                if response_name not in spec_map:
+                    spec_map[response_name] = (spec, False)
 
     # expected_models = model names that can appear in <lvar Model.field> syntax
     expected_models = set(spec_map.keys())

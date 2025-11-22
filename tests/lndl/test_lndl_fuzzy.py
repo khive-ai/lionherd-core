@@ -1138,3 +1138,64 @@ class TestCapabilitiesFiltering:
         assert result.rating == 5
         # 'comment' not in capabilities, should not be present
         assert "comment" not in result.fields
+
+
+class TestResponseModelAlias:
+    """Test {Name}Response alias for LLM compatibility."""
+
+    def test_response_suffix_alias_accepted(self):
+        """Test that {Name}Response is accepted as alias for {Name} operable."""
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+
+        # Simulate field-based specs from create_operative_from_model
+        # When Operative creates response model, it names it "{name}Response"
+        operable = Operable(
+            [
+                Spec(str, name="summary"),
+                Spec(int, name="count"),
+            ],
+            name="CodeReview",  # Base name
+        )
+
+        # LLM uses CodeReviewResponse (common pattern when seeing response schema)
+        lndl_text = """\
+        <lvar CodeReviewResponse.summary s>Good code</lvar>
+        <lvar CodeReviewResponse.count c>5</lvar>
+
+        OUT{summary: [s], count: [c]}
+        """
+
+        # Should succeed because CodeReviewResponse maps to CodeReview operable
+        result = parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
+
+        assert "summary" in result.fields
+        assert result.summary == "Good code"
+        assert "count" in result.fields
+        assert result.count == 5
+
+    def test_base_name_still_works(self):
+        """Test that base name (without Response suffix) still works."""
+        from lionherd_core.lndl.fuzzy import parse_lndl_fuzzy
+
+        operable = Operable(
+            [
+                Spec(str, name="summary"),
+                Spec(int, name="count"),
+            ],
+            name="CodeReview",
+        )
+
+        # LLM uses the base name directly
+        lndl_text = """\
+        <lvar CodeReview.summary s>Good code</lvar>
+        <lvar CodeReview.count c>5</lvar>
+
+        OUT{summary: [s], count: [c]}
+        """
+
+        result = parse_lndl_fuzzy(lndl_text, operable, threshold=0.85)
+
+        assert "summary" in result.fields
+        assert result.summary == "Good code"
+        assert "count" in result.fields
+        assert result.count == 5
