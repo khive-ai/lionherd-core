@@ -200,7 +200,7 @@ async def test_concurrent_invoke_executes_once(execution_tracker):
     assert event.execution_count == 0
 
     # Launch 10 concurrent invoke() calls
-    results = await asyncio.gather(*[event.invoke() for _ in range(10)])
+    await asyncio.gather(*[event.invoke() for _ in range(10)])
 
     # CRITICAL: _invoke() should execute exactly once
     assert event.execution_count == 1, (
@@ -208,32 +208,31 @@ async def test_concurrent_invoke_executes_once(execution_tracker):
         f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
     )
 
-    # All calls should return the same result
-    assert all(r == results[0] for r in results), f"Results differ: {results}"
-
-    # Event should be COMPLETED
+    # Event should be COMPLETED with result
     assert event.status == EventStatus.COMPLETED
+    assert event.response is not None
 
 
 @pytest.mark.asyncio
 async def test_invoke_returns_cached_result_after_completion(execution_tracker):
-    """After first execution completes, subsequent invoke() should return cached result."""
+    """After first execution completes, subsequent invoke() is idempotent."""
     event = CountingEvent(tracker=execution_tracker)
 
     # First execution
-    result1 = await event.invoke()
+    await event.invoke()
     assert event.execution_count == 1
     assert event.status == EventStatus.COMPLETED
+    first_response = event.response
 
     # Second invoke() should NOT re-execute
-    result2 = await event.invoke()
+    await event.invoke()
     assert event.execution_count == 1  # Still 1, not 2
-    assert result2 == result1  # Same result returned
+    assert event.response == first_response  # Same result
 
     # Third invoke() - verify idempotency
-    result3 = await event.invoke()
+    await event.invoke()
     assert event.execution_count == 1
-    assert result3 == result1
+    assert event.response == first_response
 
 
 @pytest.mark.asyncio
@@ -242,15 +241,16 @@ async def test_racing_invoke_calls_high_concurrency(execution_tracker):
     event = CountingEvent(tracker=execution_tracker)
 
     # Launch 100 concurrent calls
-    results = await asyncio.gather(*[event.invoke() for _ in range(100)])
+    await asyncio.gather(*[event.invoke() for _ in range(100)])
 
     # Only one execution
     assert event.execution_count == 1, (
         f"Race condition under high concurrency: {event.execution_count} executions"
     )
 
-    # All return same result
-    assert len(set(results)) == 1, f"Got different results: {set(results)}"
+    # Result should be available
+    assert event.status == EventStatus.COMPLETED
+    assert event.response is not None
 
 
 @pytest.mark.asyncio
@@ -293,7 +293,7 @@ async def test_concurrent_invoke_with_timeout_race(execution_tracker):
     assert event.execution_count == 0
 
     # Launch 10 concurrent calls
-    results = await asyncio.gather(*[event.invoke() for _ in range(10)])
+    await asyncio.gather(*[event.invoke() for _ in range(10)])
 
     # CRITICAL: Only one execution (that times out)
     assert event.execution_count == 1, (
@@ -301,12 +301,9 @@ async def test_concurrent_invoke_with_timeout_race(execution_tracker):
         f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
     )
 
-    # All callers should get None or Unset (timeout results in no meaningful response)
-    # First caller may get None (cached response), waiters get Unset
-    assert all(r is None or r is Unset for r in results), f"Expected None or Unset, got: {results}"
-
-    # Event should be CANCELLED (timeout)
+    # Event should be CANCELLED (timeout) with Unset response
     assert event.status == EventStatus.CANCELLED
+    assert event.execution.response is Unset
 
 
 @pytest.mark.asyncio
@@ -325,7 +322,7 @@ async def test_concurrent_invoke_with_exception_race(execution_tracker):
     assert event.execution_count == 0
 
     # Launch 10 concurrent calls
-    results = await asyncio.gather(*[event.invoke() for _ in range(10)])
+    await asyncio.gather(*[event.invoke() for _ in range(10)])
 
     # CRITICAL: Only one execution (that fails)
     assert event.execution_count == 1, (
@@ -333,12 +330,9 @@ async def test_concurrent_invoke_with_exception_race(execution_tracker):
         f"Race condition: multiple concurrent invoke() calls executed _invoke() multiple times."
     )
 
-    # All callers should get None or Unset (error results in no meaningful response)
-    # First caller may get None (cached response), waiters get Unset
-    assert all(r is None or r is Unset for r in results), f"Expected None or Unset, got: {results}"
-
-    # Event should be FAILED
+    # Event should be FAILED with Unset response
     assert event.status == EventStatus.FAILED
+    assert event.execution.response is Unset
 
     # Error should be captured
     assert event.execution.error is not None

@@ -53,31 +53,14 @@ T = TypeVar("T", bound=Element)
 class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
     """Thread-safe typed collection with rich query interface.
 
-    Type-dispatched __getitem__: pile[uuid], pile[int/slice], pile[progression], pile[callable].
+    Type-dispatched __getitem__:
+    - Single item (T): pile[uuid], pile[str], pile[int]
+    - Multi item (Pile[T]): pile[slice], pile[list], pile[tuple], pile[progression], pile[callable]
 
     Args:
         items: Initial items
         item_type: Type(s) for validation (single/set/list/Union)
         strict_type: Enforce exact type match (no subclasses)
-
-    Adapter Registration (Rust-like isolated pattern):
-        Each Pile subclass has its own independent adapter registry. No auto-registration.
-        Must explicitly register adapters on each class that needs them:
-
-        ```python
-        from pydapter.adapters import TomlAdapter
-
-
-        class CustomPile(Pile):
-            pass
-
-
-        # Must register explicitly (no inheritance from parent)
-        CustomPile.register_adapter(TomlAdapter)
-        custom_pile.adapt_to("toml")  # Now works
-        ```
-
-        This prevents adapter pollution and ensures explicit control per class.
     """
 
     # Private internal state - excluded from serialization
@@ -198,8 +181,6 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
 
         # Store progression metadata in pile's metadata
         if self._progression.name and actual_meta_key in data:
-            if data[actual_meta_key] is None:
-                data[actual_meta_key] = {}
             data[actual_meta_key]["progression_name"] = self._progression.name
 
         # Serialize items in progression order (progression order is implicit)
@@ -391,8 +372,18 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         ...
 
     @overload
-    def __getitem__(self, key: slice) -> list[T]:
+    def __getitem__(self, key: slice) -> Pile[T]:
         """Get multiple items by slice."""
+        ...
+
+    @overload
+    def __getitem__(self, key: list[int] | tuple[int, ...]) -> Pile[T]:
+        """Get multiple items by list/tuple of indices."""
+        ...
+
+    @overload
+    def __getitem__(self, key: list[UUID] | tuple[UUID, ...]) -> Pile[T]:
+        """Get multiple items by list/tuple of UUIDs."""
         ...
 
     @overload
@@ -400,43 +391,48 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         """Filter by function - returns new Pile."""
         ...
 
-    def __getitem__(self, key: Any) -> T | list[T] | Pile[T]:
+    def __getitem__(self, key: Any) -> T | Pile[T]:
         """Type-dispatched query interface.
 
         Args:
-            key: UUID/str (get by ID), Progression (filter), int/slice (index), or callable (predicate)
+            key: UUID/str (get by ID), Progression (filter), int (index), slice (range),
+                 list/tuple of int (indices), list/tuple of UUID (IDs), or callable (predicate)
 
         Returns:
-            Element, list[Element], or new Pile (depends on key type)
+            Single item (T) for UUID/str/int access, new Pile[T] for all multi-item operations
 
         Raises:
-            TypeError: If key type is not supported
+            TypeError: If key type is not supported or list/tuple mixes int and UUID
             NotFoundError: If item not found (UUID/str access)
-            ValueError: If no items match filter or slice is empty
+            ValueError: If no items match filter or empty list/tuple provided
         """
-        # Type 1: UUID/str - Get by ID
+        # Type 1: UUID/str - Get by ID (returns T)
         if isinstance(key, (UUID, str)):
             return self.get(key)
 
-        # Type 2: Progression - Filter by progression (RETURNS NEW PILE!)
-        elif isinstance(key, Progression):
-            return self._filter_by_progression(key)
-
-        # Type 3: int - Index access
+        # Type 2: int - Index access (returns T)
         elif isinstance(key, int):
             return self._get_by_index(key)
 
-        # Type 4: slice - Multiple items
+        # Type 3: Progression - Filter by progression (returns Pile[T])
+        elif isinstance(key, Progression):
+            return self._filter_by_progression(key)
+
+        # Type 4: slice - Multiple items by range (returns Pile[T])
         elif isinstance(key, slice):
             return self._get_by_slice(key)
 
-        # Type 5: callable - Filter function
+        # Type 5: list/tuple - Multiple items by indices or UUIDs (returns Pile[T])
+        elif isinstance(key, (list, tuple)):
+            return self._get_by_list(key)
+
+        # Type 6: callable - Filter function (returns Pile[T])
         elif callable(key):
             return self._filter_by_function(key)
 
         else:
             raise TypeError(
-                f"Invalid key type: {type(key)}. Expected UUID, Progression, int, slice, or callable"
+                f"Invalid key type: {type(key)}. Expected UUID, str, int, slice, list, tuple, Progression, or callable"
             )
 
     def _filter_by_progression(self, prog: Progression) -> Pile[T]:
@@ -462,11 +458,63 @@ class Pile(Element, PydapterAdaptable, PydapterAsyncAdaptable, Generic[T]):
         return self._items[uid]
 
     @synchronized
-    def _get_by_slice(self, s: slice) -> list[T]:
-        """Get multiple items by slice."""
+    def _get_by_slice(self, s: slice) -> Pile[T]:
+        """Get multiple items by slice, returns new Pile."""
         # With overloaded __getitem__, mypy knows slice returns list[UUID]
         uids: list[UUID] = self._progression[s]
-        return [self._items[uid] for uid in uids]
+        items = [self._items[uid] for uid in uids]
+
+        return Pile(
+            items=items,
+            item_type=self.item_type,
+            strict_type=self.strict_type,
+        )
+
+    @synchronized
+    def _get_by_list(self, keys: list | tuple) -> Pile[T]:
+        """Get multiple items by list/tuple of indices or UUIDs, returns new Pile.
+
+        Args:
+            keys: list/tuple of int (indices) or UUID (IDs), no mixing allowed
+
+        Returns:
+            New Pile with items in the order specified by keys
+
+        Raises:
+            ValueError: If keys is empty or mixes int and UUID types
+            NotFoundError: If UUID not found in pile
+            IndexError: If index out of range
+        """
+        if not keys:
+            raise ValueError("Cannot get items with empty list/tuple")
+
+        # Detect type: all int or all UUID (no mixing)
+        first = keys[0]
+
+        if isinstance(first, int):
+            # All must be int
+            if not all(isinstance(k, int) for k in keys):
+                raise TypeError("Cannot mix int and UUID in list/tuple indexing")
+
+            # Get by indices
+            items = [self._get_by_index(idx) for idx in keys]
+
+        elif isinstance(first, (UUID, str)):
+            # All must be UUID or str
+            if not all(isinstance(k, (UUID, str)) for k in keys):
+                raise TypeError("Cannot mix int and UUID in list/tuple indexing")
+
+            # Get by UUIDs
+            items = [self.get(uid) for uid in keys]
+
+        else:
+            raise TypeError(f"list/tuple must contain only int or UUID, got {type(first)}")
+
+        return Pile(
+            items=items,
+            item_type=self.item_type,
+            strict_type=self.strict_type,
+        )
 
     def _filter_by_function(self, func: Callable[[T], bool]) -> Pile[T]:
         """Filter pile by function - returns NEW Pile."""

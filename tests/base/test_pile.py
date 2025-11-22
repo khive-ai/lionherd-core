@@ -131,17 +131,20 @@ import pytest
 
 from lionherd_core.base import Element, Pile, Progression
 from lionherd_core.errors import ExistsError, NotFoundError
-from lionherd_core.libs.concurrency import gather
+from lionherd_core.testing import (
+    TestElement,
+    create_test_elements,
+    create_test_pile,
+    mock_element,
+)
 
 # =============================================================================
 # Test Fixtures
 # =============================================================================
 
 
-class SimpleElement(Element):
-    """Simple element for testing."""
-
-    value: int = 0
+# Use lionherd_core.testing utilities instead of local fixtures
+# TestElement imported from testing module
 
 
 class TypedElement(Element):
@@ -158,8 +161,8 @@ class ChildElement(TypedElement):
 
 @pytest.fixture
 def simple_items():
-    """Create simple test items."""
-    return [SimpleElement(value=i) for i in range(5)]
+    """Create simple test items using testing utilities."""
+    return create_test_elements(count=5)
 
 
 @pytest.fixture
@@ -250,16 +253,16 @@ def test_pile_order_validation_invalid_uuid(simple_items):
 def test_pile_item_type_normalization():
     """Test item_type normalization from various inputs."""
     # Single type
-    pile1 = Pile(item_type=SimpleElement)
-    assert pile1.item_type == {SimpleElement}
+    pile1 = Pile(item_type=TestElement)
+    assert pile1.item_type == {TestElement}
 
     # List of types
-    pile2 = Pile(item_type=[SimpleElement, TypedElement])
-    assert pile2.item_type == {SimpleElement, TypedElement}
+    pile2 = Pile(item_type=[TestElement, TypedElement])
+    assert pile2.item_type == {TestElement, TypedElement}
 
     # Set of types
-    pile3 = Pile(item_type={SimpleElement, TypedElement})
-    assert pile3.item_type == {SimpleElement, TypedElement}
+    pile3 = Pile(item_type={TestElement, TypedElement})
+    assert pile3.item_type == {TestElement, TypedElement}
 
 
 # =============================================================================
@@ -270,7 +273,7 @@ def test_pile_item_type_normalization():
 def test_add_item():
     """Test adding items to Pile."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     pile.add(item)
     assert len(pile) == 1
@@ -281,7 +284,7 @@ def test_add_item():
 def test_add_duplicate_raises_error():
     """Test adding duplicate item raises ExistsError."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     pile.add(item)
     with pytest.raises(ExistsError, match="already exists"):
@@ -298,7 +301,7 @@ def test_add_with_type_validation():
     assert valid_item.id in pile
 
     # Invalid type
-    invalid_item = SimpleElement(value=42)
+    invalid_item = TestElement(value=42)
     with pytest.raises(TypeError, match="not a subclass"):
         pile.add(invalid_item)
 
@@ -321,7 +324,7 @@ def test_add_with_strict_type():
 def test_remove_item():
     """Test removing items from Pile."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     removed = pile.remove(item.id)
@@ -333,7 +336,7 @@ def test_remove_item():
 def test_remove_by_element():
     """Test remove accepts Element instance."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     removed = pile.remove(item)  # Pass element, not ID
@@ -353,7 +356,7 @@ def test_remove_nonexistent_raises_error():
 def test_pop_alias():
     """Test pop() is alias for remove()."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     popped = pile.pop(item.id)
@@ -385,7 +388,7 @@ def test_pop_with_custom_default():
     from uuid import uuid4
 
     pile = Pile()
-    default_item = SimpleElement(value=999)
+    default_item = TestElement(value=999)
 
     result = pile.pop(uuid4(), default=default_item)
     assert result == default_item
@@ -394,10 +397,10 @@ def test_pop_with_custom_default():
 def test_pop_with_default_when_exists():
     """Test pop() returns and removes item when it exists, ignoring default."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
-    default_item = SimpleElement(value=999)
+    default_item = TestElement(value=999)
     popped = pile.pop(item.id, default=default_item)
 
     assert popped == item
@@ -408,7 +411,7 @@ def test_pop_with_default_when_exists():
 def test_get_item():
     """Test getting items from Pile."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     retrieved = pile.get(item.id)
@@ -420,7 +423,7 @@ def test_get_with_default():
     from uuid import uuid4
 
     pile = Pile()
-    default = SimpleElement(value=999)
+    default = TestElement(value=999)
 
     result = pile.get(uuid4(), default=default)
     assert result == default
@@ -438,12 +441,12 @@ def test_get_nonexistent_raises_error():
 def test_update_item():
     """Test updating existing item."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     # Update with modified item (same ID)
     # Pass id during initialization (frozen field)
-    updated_item = SimpleElement(value=100, id=item.id)
+    updated_item = TestElement(value=100, id=item.id)
     pile.update(updated_item)
 
     assert pile.get(item.id).value == 100
@@ -452,7 +455,7 @@ def test_update_item():
 def test_update_nonexistent_raises_error():
     """Test updating nonexistent item raises NotFoundError."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     with pytest.raises(NotFoundError, match="not found"):
         pile.update(item)
@@ -465,7 +468,7 @@ def test_update_with_type_validation():
     pile.add(item)
 
     # Invalid type update (pass id during initialization)
-    invalid_item = SimpleElement(value=42, id=item.id)
+    invalid_item = TestElement(value=42, id=item.id)
 
     with pytest.raises(TypeError, match="not a subclass"):
         pile.update(invalid_item)
@@ -475,7 +478,7 @@ def test_clear():
     """Test clearing all items."""
     pile = Pile()
     for i in range(5):
-        pile.add(SimpleElement(value=i))
+        pile.add(TestElement(value=i))
 
     assert len(pile) == 5
     pile.clear()
@@ -491,7 +494,7 @@ def test_clear():
 def test_include_new_item():
     """Test include adds new item and returns True (membership guaranteed)."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     result = pile.include(item)
     assert result is True  # Membership guaranteed
@@ -501,7 +504,7 @@ def test_include_new_item():
 def test_include_existing_item():
     """Test include is idempotent - returns True even if already present."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     result = pile.include(item)
@@ -512,7 +515,7 @@ def test_include_existing_item():
 def test_exclude_existing_item():
     """Test exclude removes item and returns True (absence guaranteed)."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     result = pile.exclude(item.id)
@@ -532,7 +535,7 @@ def test_exclude_nonexistent_item():
 def test_exclude_by_element():
     """Test exclude accepts Element instance."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     result = pile.exclude(item)
@@ -542,7 +545,7 @@ def test_exclude_by_element():
 
 def test_include_validation_failure():
     """Test include returns False on validation failure."""
-    pile = Pile(item_type=SimpleElement, strict_type=True)
+    pile = Pile(item_type=TestElement, strict_type=True)
 
     # Create incompatible item (different type)
     class OtherElement(Element):
@@ -573,11 +576,13 @@ def test_exclude_invalid_id():
 # Design Philosophy:
 # ------------------
 # Python's __getitem__ allows operator overloading for expressive querying:
-#     pile[uuid]      → single item (by ID)
-#     pile[3]         → single item (by index)
-#     pile[1:5]       → list[items] (slice)
-#     pile[func]      → filtered Pile (predicate)
-#     pile[prog]      → filtered Pile (progression)
+#     pile[uuid]         → single item (by ID)
+#     pile[3]            → single item (by index)
+#     pile[1:5]          → Pile[items] (slice)
+#     pile[[0, 2]]       → Pile[items] (list of indices)
+#     pile[(id1, id2)]   → Pile[items] (tuple of UUIDs)
+#     pile[func]         → Pile[items] (predicate)
+#     pile[prog]         → Pile[items] (progression)
 #
 # This unified interface eliminates method proliferation:
 #     ❌ pile.get_by_uuid(), pile.get_by_index(), pile.filter_by_func()
@@ -597,7 +602,15 @@ def test_exclude_invalid_id():
 #
 # 3. slice → get multiple items
 #    - O(k) where k = slice width
-#    - Returns list[Element] (NOT new Pile)
+#    - Returns new Pile[Element]
+#
+# 4. list/tuple of int → get multiple items by indices
+#    - O(k) where k = list length
+#    - Returns new Pile[Element]
+#
+# 5. list/tuple of UUID → get multiple items by IDs
+#    - O(k) where k = list length
+#    - Returns new Pile[Element]
 #    - Uses progression order: pile[1:3] → [item1, item2]
 #
 # 4. Progression → filter by progression
@@ -680,11 +693,101 @@ def test_getitem_by_slice(simple_items):
     """Test __getitem__ with slice."""
     pile = Pile(items=simple_items)
 
-    # Slice returns list
+    # Slice returns Pile (changed from list in alpha7)
     result = pile[1:3]
-    assert isinstance(result, list)
+    assert isinstance(result, Pile)
     assert len(result) == 2
-    assert result == simple_items[1:3]
+    assert list(result) == simple_items[1:3]
+
+
+def test_getitem_by_list_of_indices(simple_items):
+    """Test __getitem__ with list of int indices."""
+    pile = Pile(items=simple_items)
+
+    # List of indices returns Pile
+    result = pile[[0, 2, 3]]
+    assert isinstance(result, Pile)
+    assert len(result) == 3
+    assert list(result) == [simple_items[0], simple_items[2], simple_items[3]]
+
+    # Order preserved
+    result_reversed = pile[[3, 0, 1]]
+    assert list(result_reversed) == [simple_items[3], simple_items[0], simple_items[1]]
+
+
+def test_getitem_by_tuple_of_indices(simple_items):
+    """Test __getitem__ with tuple of int indices."""
+    pile = Pile(items=simple_items)
+
+    # Tuple of indices returns Pile
+    result = pile[(1, 2)]
+    assert isinstance(result, Pile)
+    assert len(result) == 2
+    assert list(result) == [simple_items[1], simple_items[2]]
+
+
+def test_getitem_by_list_of_uuids(simple_items):
+    """Test __getitem__ with list of UUIDs."""
+    pile = Pile(items=simple_items)
+
+    # List of UUIDs returns Pile
+    uuids = [simple_items[1].id, simple_items[3].id]
+    result = pile[uuids]
+    assert isinstance(result, Pile)
+    assert len(result) == 2
+    assert simple_items[1].id in result
+    assert simple_items[3].id in result
+
+    # Order preserved
+    result_list = list(result)
+    assert result_list[0].id == simple_items[1].id
+    assert result_list[1].id == simple_items[3].id
+
+
+def test_getitem_by_tuple_of_uuids(simple_items):
+    """Test __getitem__ with tuple of UUIDs."""
+    pile = Pile(items=simple_items)
+
+    # Tuple of UUIDs returns Pile
+    uuids = (simple_items[0].id, simple_items[2].id)
+    result = pile[uuids]
+    assert isinstance(result, Pile)
+    assert len(result) == 2
+    assert simple_items[0].id in result
+    assert simple_items[2].id in result
+
+
+def test_getitem_list_empty_raises(simple_items):
+    """Test __getitem__ with empty list/tuple raises ValueError."""
+    pile = Pile(items=simple_items)
+
+    with pytest.raises(ValueError, match="empty list/tuple"):
+        _ = pile[[]]
+
+    with pytest.raises(ValueError, match="empty list/tuple"):
+        _ = pile[()]
+
+
+def test_getitem_list_mixed_types_raises(simple_items):
+    """Test __getitem__ with mixed int/UUID raises TypeError."""
+    pile = Pile(items=simple_items)
+
+    # Int first, UUID later (line 501)
+    with pytest.raises(TypeError, match="Cannot mix int and UUID"):
+        _ = pile[[0, simple_items[1].id]]
+
+    # UUID first, int later (line 507)
+    with pytest.raises(TypeError, match="Cannot mix int and UUID"):
+        _ = pile[[simple_items[0].id, 1]]
+
+
+def test_getitem_list_invalid_type_raises(simple_items):
+    """Test __getitem__ with invalid type in list raises TypeError."""
+    pile = Pile(items=simple_items)
+
+    # Float is neither int nor UUID (line 513)
+    with pytest.raises(TypeError, match="list/tuple must contain only int or UUID"):
+        _ = pile[[1.5, 2.5]]
 
 
 def test_getitem_by_progression(simple_items):
@@ -749,12 +852,12 @@ def test_filter_by_function_returns_new_pile(simple_items):
 def test_filter_by_type(simple_items, typed_items):
     """Test filter_by_type method."""
     # Create pile with mixed types
-    pile = Pile(items=simple_items + typed_items, item_type={SimpleElement, TypedElement})
+    pile = Pile(items=simple_items + typed_items, item_type={TestElement, TypedElement})
 
-    # Filter by SimpleElement
-    simple_pile = pile.filter_by_type(SimpleElement)
+    # Filter by TestElement
+    simple_pile = pile.filter_by_type(TestElement)
     assert len(simple_pile) == 5
-    assert all(isinstance(item, SimpleElement) for item in simple_pile)
+    assert all(isinstance(item, TestElement) for item in simple_pile)
 
 
 def test_filter_by_type_with_strict_validation():
@@ -763,12 +866,12 @@ def test_filter_by_type_with_strict_validation():
 
     # Try to filter by incompatible type
     with pytest.raises(TypeError, match="not compatible"):
-        pile.filter_by_type(SimpleElement)
+        pile.filter_by_type(TestElement)
 
 
 def test_filter_by_type_no_matches():
     """Test filter_by_type raises NotFoundError when no matches."""
-    pile = Pile(items=[SimpleElement(value=1)])
+    pile = Pile(items=[TestElement(value=1)])
 
     with pytest.raises(NotFoundError, match="No items of type"):
         pile.filter_by_type(TypedElement)
@@ -780,7 +883,7 @@ def test_filter_by_type_strict_mode_invalid_types():
 
     # Try to filter by type not in allowed set
     with pytest.raises(TypeError, match="not allowed in pile"):
-        pile.filter_by_type(SimpleElement)
+        pile.filter_by_type(TestElement)
 
 
 # =============================================================================
@@ -792,7 +895,7 @@ def test_filter_by_type_strict_mode_invalid_types():
 async def test_async_add():
     """Test async add operation using context manager."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     async with pile:
         pile.add(item)
@@ -805,7 +908,7 @@ async def test_async_add():
 async def test_async_add_duplicate_raises_error():
     """Test async add of duplicate raises ExistsError."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     async with pile:
         pile.add(item)
@@ -817,7 +920,7 @@ async def test_async_add_duplicate_raises_error():
 async def test_async_remove():
     """Test async remove operation using context manager."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     async with pile:
         pile.add(item)
@@ -842,7 +945,7 @@ async def test_async_remove_nonexistent_raises_error():
 async def test_async_get():
     """Test async get operation using context manager."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
 
     async with pile:
         pile.add(item)
@@ -866,7 +969,7 @@ async def test_async_get_nonexistent_raises_error():
 async def test_async_context_manager():
     """Test async context manager (__aenter__ / __aexit__)."""
     pile = Pile()
-    item = SimpleElement(value=42)
+    item = TestElement(value=42)
     pile.add(item)
 
     # Context manager acquires lock, so we access internal state directly
@@ -882,7 +985,7 @@ async def test_async_context_manager():
 async def test_concurrent_async_operations():
     """Test concurrent async operations using context manager."""
     pile = Pile()
-    items = [SimpleElement(value=i) for i in range(10)]
+    items = [TestElement(value=i) for i in range(10)]
 
     # Add items in async context
     async with pile:
@@ -1013,7 +1116,7 @@ def test_get_suppresses_keyerror():
 def test_thread_safe_add():
     """Test thread-safe add operations."""
     pile = Pile()
-    items = [SimpleElement(value=i) for i in range(20)]
+    items = [TestElement(value=i) for i in range(20)]
 
     def add_item(item):
         pile.add(item)
@@ -1030,7 +1133,7 @@ def test_thread_safe_add():
 def test_thread_safe_remove():
     """Test thread-safe remove operations."""
     pile = Pile()
-    items = [SimpleElement(value=i) for i in range(20)]
+    items = [TestElement(value=i) for i in range(20)]
     for item in items:
         pile.add(item)
 
@@ -1047,7 +1150,7 @@ def test_thread_safe_remove():
 def test_thread_safe_get():
     """Test thread-safe get operations."""
     pile = Pile()
-    items = [SimpleElement(value=i) for i in range(10)]
+    items = [TestElement(value=i) for i in range(10)]
     for item in items:
         pile.add(item)
 
@@ -1070,7 +1173,7 @@ def test_thread_safe_get():
 def test_thread_safe_mixed_operations():
     """Test thread-safe mixed operations (add, remove, get)."""
     pile = Pile()
-    initial_items = [SimpleElement(value=i) for i in range(10)]
+    initial_items = [TestElement(value=i) for i in range(10)]
     for item in initial_items:
         pile.add(item)
 
@@ -1079,7 +1182,7 @@ def test_thread_safe_mixed_operations():
 
     def add_items():
         for i in range(10, 15):
-            pile.include(SimpleElement(value=i))
+            pile.include(TestElement(value=i))
 
     def remove_items():
         for item in initial_items[:5]:
@@ -1183,10 +1286,10 @@ def test_validate_type_strict_allows_exact_type():
 
 def test_validate_type_multiple_allowed_types():
     """Test validation with multiple allowed types."""
-    pile = Pile(item_type={SimpleElement, TypedElement})
+    pile = Pile(item_type={TestElement, TypedElement})
 
     # Both types should be allowed
-    simple_item = SimpleElement(value=42)
+    simple_item = TestElement(value=42)
     typed_item = TypedElement(name="test")
 
     pile._validate_type(simple_item)
@@ -1239,11 +1342,11 @@ class TestPileTypeConstraintsEdgeCases:
         Scenario:
             1. Create pile with ChildElement (subclass of TypedElement)
             2. Serialize to dict
-            3. Change item_type to unrelated type (SimpleElement)
+            3. Change item_type to unrelated type (TestElement)
             4. Attempt deserialization in permissive mode
 
         Expected:
-            TypeError: ChildElement is not a subclass of SimpleElement
+            TypeError: ChildElement is not a subclass of TestElement
 
         Design Trade-off:
             Permissive mode allows subclasses for flexibility, but still
@@ -1261,11 +1364,11 @@ class TestPileTypeConstraintsEdgeCases:
         pile = Pile(items=[child_item])
         data = pile.to_dict()
 
-        # Change item_type to unrelated type (SimpleElement)
-        data["item_type"] = [f"{SimpleElement.__module__}.{SimpleElement.__name__}"]
+        # Change item_type to unrelated type (TestElement)
+        data["item_type"] = [f"{TestElement.__module__}.{TestElement.__name__}"]
         data["strict_type"] = False
 
-        # Should fail because ChildElement is not a subclass of SimpleElement
+        # Should fail because ChildElement is not a subclass of TestElement
         # (permissive mode allows subclasses, but not unrelated types)
         with pytest.raises(TypeError, match="is not a subclass of any allowed type"):
             Pile.from_dict(data)
@@ -1384,8 +1487,8 @@ class TestPileTypeConstraintsEdgeCases:
 # Type Serialization:
 # -------------------
 # item_type: set[type] → list[str]:
-#     {SimpleElement, TypedElement}
-#     → ["tests.base.test_pile.SimpleElement", "tests.base.test_pile.TypedElement"]
+#     {TestElement, TypedElement}
+#     → ["tests.base.test_pile.TestElement", "tests.base.test_pile.TypedElement"]
 #
 # Deserialization: list[str] → set[type]:
 #     load_type_from_string() imports each type
@@ -1485,7 +1588,7 @@ def test_to_dict_adds_metadata_for_progression_name():
     """Test to_dict creates metadata dict if needed for progression name."""
     # Create pile with no metadata
     pile = Pile()
-    pile.add(SimpleElement(value=1))
+    pile.add(TestElement(value=1))
     # Clear metadata and set progression name
     pile.metadata = {}
     pile._progression.name = "test_prog"
@@ -1500,7 +1603,7 @@ def test_to_dict_adds_metadata_for_progression_name():
 
 def test_serialize_item_type():
     """Test item_type serialization."""
-    pile = Pile(item_type={SimpleElement, TypedElement})
+    pile = Pile(item_type={TestElement, TypedElement})
     data = pile.to_dict()
 
     assert "item_type" in data
@@ -1523,11 +1626,11 @@ def test_from_dict_basic(simple_items):
 
 def test_from_dict_preserves_item_type():
     """Test from_dict preserves item_type."""
-    pile = Pile(item_type=SimpleElement)
+    pile = Pile(item_type=TestElement)
     data = pile.to_dict()
 
     restored = Pile.from_dict(data)
-    assert restored.item_type == {SimpleElement}
+    assert restored.item_type == {TestElement}
 
 
 def test_from_dict_preserves_strict_type():
@@ -1670,8 +1773,8 @@ class TestPileSerializationEdgeCases:
         from typing import Union
 
         # Create pile with Union type
-        pile = Pile(item_type=Union[SimpleElement, TypedElement])
-        pile.add(SimpleElement(value=1))
+        pile = Pile(item_type=Union[TestElement, TypedElement])
+        pile.add(TestElement(value=1))
         pile.add(TypedElement(name="test"))
 
         # Serialize
@@ -1681,7 +1784,7 @@ class TestPileSerializationEdgeCases:
         restored = Pile.from_dict(data)
 
         assert len(restored) == 2
-        assert restored.item_type == {SimpleElement, TypedElement}
+        assert restored.item_type == {TestElement, TypedElement}
 
     def test_from_dict_with_set_item_type(self):
         """
@@ -1720,8 +1823,8 @@ class TestPileSerializationEdgeCases:
             - Deserialization: O(k) list → set conversion
         """
         # Create pile with set of types
-        pile = Pile(item_type={SimpleElement, TypedElement})
-        pile.add(SimpleElement(value=1))
+        pile = Pile(item_type={TestElement, TypedElement})
+        pile.add(TestElement(value=1))
 
         data = pile.to_dict()
 
@@ -1730,7 +1833,7 @@ class TestPileSerializationEdgeCases:
 
         # Deserialize - should handle list correctly
         restored = Pile.from_dict(data)
-        assert restored.item_type == {SimpleElement, TypedElement}
+        assert restored.item_type == {TestElement, TypedElement}
 
     def test_from_dict_strict_mode_exact_match_in_list(self):
         """
@@ -2028,7 +2131,7 @@ def test_contains_by_element(simple_items):
     """Test __contains__ with Element instance."""
     pile = Pile(items=simple_items)
     assert simple_items[0] in pile
-    assert SimpleElement(value=999) not in pile
+    assert TestElement(value=999) not in pile
 
 
 def test_contains_invalid_returns_false():
@@ -2101,7 +2204,7 @@ def test_is_empty():
     assert pile.is_empty()
     assert not pile  # __bool__ returns False for empty pile
 
-    pile.add(SimpleElement(value=42))
+    pile.add(TestElement(value=42))
     assert not pile.is_empty()
     assert pile  # __bool__ returns True for non-empty pile
 
@@ -2186,7 +2289,7 @@ def test_pile_repr():
     pile = Pile()
     assert repr(pile) == "Pile(len=0)"
 
-    pile.add(SimpleElement(value=42))
+    pile.add(TestElement(value=42))
     assert repr(pile) == "Pile(len=1)"
 
 
@@ -2195,7 +2298,7 @@ def test_progression_order_integrity_after_operations(simple_items):
     pile = Pile(items=simple_items)
 
     # Add new item
-    new_item = SimpleElement(value=999)
+    new_item = TestElement(value=999)
     pile.add(new_item)
 
     # Check order includes new item at end
@@ -2221,7 +2324,7 @@ async def test_async_operations_with_type_validation():
 
     assert len(pile) == 1
 
-    invalid_item = SimpleElement(value=42)
+    invalid_item = TestElement(value=42)
     async with pile:
         with pytest.raises(TypeError, match="not a subclass"):
             pile.add(invalid_item)
@@ -2231,7 +2334,7 @@ def test_filter_operations_preserve_config(simple_items):
     """Test filter operations preserve item_type and strict_type."""
     pile = Pile(
         items=simple_items,
-        item_type=SimpleElement,
+        item_type=TestElement,
         strict_type=True,
     )
 

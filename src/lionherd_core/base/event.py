@@ -112,13 +112,6 @@ class Execution:
             eg: ExceptionGroup to serialize
             depth: Current recursion depth (internal)
             _seen: Set of seen exception IDs for cycle detection (internal)
-
-        Returns:
-            Serialized exception group dict
-
-        Note:
-            Maximum depth is 100 to prevent stack overflow.
-            Circular references are detected and handled gracefully.
         """
         from lionherd_core.errors import LionherdError
 
@@ -252,25 +245,21 @@ class Event(Element):
 
     @final
     @async_synchronized
-    async def invoke(self) -> Any:
+    async def invoke(self) -> None:
         """Execute with status tracking, timing, error capture (idempotent).
 
         **Idempotency**: Multiple concurrent calls execute _invoke() exactly once.
-        Subsequent calls return cached result without re-execution. Once COMPLETED
-        or FAILED, invoke() will return the cached response.
+        Once COMPLETED or FAILED, invoke() is a no-op. Access result via
+        `event.response` or `event.execution.response`.
 
         **Retry Pattern**: To retry after FAILED status, use `as_fresh_event()` to
-        create a new Event with reset execution state. Direct invoke() calls on
-        completed events always return cached results.
-
-        Returns:
-            Execution result (same for all concurrent callers)
+        create a new Event with reset execution state.
         """
         from lionherd_core.libs.concurrency import current_time
 
-        # Idempotency: Return cached result if already executed
+        # Idempotency: no-op if already executed
         if self.execution.status != EventStatus.PENDING:
-            return self.execution.response
+            return
 
         start = current_time()
 
@@ -290,7 +279,6 @@ class Event(Element):
             self.execution.error = None
             self.execution.status = EventStatus.COMPLETED
             self.execution.retryable = False
-            return result
 
         except TimeoutError:
             lionherd_timeout = LionherdTimeoutError(
@@ -302,7 +290,6 @@ class Event(Element):
             self.execution.error = lionherd_timeout
             self.execution.status = EventStatus.CANCELLED
             self.execution.retryable = lionherd_timeout.retryable
-            return None
 
         except Exception as e:
             from lionherd_core.errors import LionherdError
@@ -325,7 +312,6 @@ class Event(Element):
             self.execution.response = Unset
             self.execution.error = e
             self.execution.status = EventStatus.FAILED
-            return None
 
         except BaseException as e:
             from lionherd_core.libs.concurrency import get_cancelled_exc_class

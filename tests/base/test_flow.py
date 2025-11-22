@@ -108,39 +108,28 @@ from lionherd_core.errors import ExistsError, NotFoundError
 from lionherd_core.ln import to_dict
 
 # ==================== Fixtures ====================
-
-
-class FlowTestItem(Element):
-    """Test item for Flow tests."""
-
-    value: str = "test"
-
-
-class FlowTestProgression(Progression):
-    """Test progression for Flow tests."""
-
-    pass
+from lionherd_core.testing import TestElement, create_test_elements
 
 
 @pytest.fixture
 def items():
     """Create test items."""
-    return [FlowTestItem(value=f"item{i}") for i in range(5)]
+    return create_test_elements(count=5)
 
 
 @pytest.fixture
 def progressions():
     """Create test progressions."""
-    return [FlowTestProgression(name=f"prog{i}", order=[]) for i in range(3)]
+    return [Progression(name=f"prog{i}", order=[]) for i in range(3)]
 
 
 @pytest.fixture
 def flow(items, progressions):
     """Create Flow with items and progressions."""
-    f = Flow[FlowTestItem, FlowTestProgression](
+    f = Flow[TestElement, Progression](
         items=items,
         name="test_flow",
-        item_type=FlowTestItem,
+        item_type=TestElement,
     )
     # Add progressions
     for prog in progressions:
@@ -153,7 +142,7 @@ def flow(items, progressions):
 
 def test_flow_init_empty():
     """Test Flow initialization without items."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
     assert len(f.progressions) == 0
     assert len(f.items) == 0
     assert f.name is None
@@ -180,7 +169,7 @@ def test_flow_init_with_items(items):
         This pattern is consistent with Pile initialization and reduces boilerplate
         in common use cases (workflow initialization with known items).
     """
-    f = Flow[FlowTestItem, FlowTestProgression](items=items, name="test")
+    f = Flow[TestElement, Progression](items=items, name="test")
     assert len(f.items) == 5
     assert f.name == "test"
     # Verify all items are in pile
@@ -190,12 +179,12 @@ def test_flow_init_with_items(items):
 
 def test_flow_init_with_item_type():
     """Test Flow initialization with item_type validation."""
-    f = Flow[FlowTestItem, FlowTestProgression](
-        item_type=FlowTestItem,
+    f = Flow[TestElement, Progression](
+        item_type=TestElement,
         strict_type=True,
     )
-    # Should be able to add FlowTestItem
-    item = FlowTestItem(value="test")
+    # Should be able to add TestElement
+    item = TestElement(value=1, name="test")
     f.items.add(item)
     assert len(f.items) == 1
 
@@ -203,12 +192,12 @@ def test_flow_init_with_item_type():
 def test_flow_init_normalizes_item_type():
     """Test Flow initialization normalizes item_type to set."""
     # Single type
-    f1 = Flow[FlowTestItem, FlowTestProgression](item_type=FlowTestItem)
-    assert f1.items.item_type == {FlowTestItem}
+    f1 = Flow[TestElement, Progression](item_type=TestElement)
+    assert f1.items.item_type == {TestElement}
 
     # List of types
-    f2 = Flow[Element, FlowTestProgression](item_type=[FlowTestItem, Element])
-    assert f2.items.item_type == {FlowTestItem, Element}
+    f2 = Flow[Element, Progression](item_type=[TestElement, Element])
+    assert f2.items.item_type == {TestElement, Element}
 
 
 def test_flow_validate_piles_converts_dict():
@@ -235,7 +224,7 @@ def test_flow_validate_piles_converts_dict():
 
 def test_flow_validate_piles_preserves_pile():
     """Test _validate_piles delegates to handler for non-dict inputs."""
-    pile = Pile[FlowTestItem]()
+    pile = Pile[TestElement]()
 
     # Validator delegates to handler for non-dict inputs
     def mock_handler(v):  # Mock handler that returns input
@@ -269,8 +258,8 @@ def test_flow_add_progression():
         Named progressions are registered in `_progression_names` index for
         O(1) lookup. This enables ergonomic state queries in workflow code.
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name="test_prog")
+    f = Flow[TestElement, Progression]()
+    prog = Progression(name="test_prog")
 
     f.add_progression(prog)
     assert len(f.progressions) == 1
@@ -303,9 +292,9 @@ def test_flow_add_progression_duplicate_name_raises():
         Progressions without names bypass uniqueness check (name=None is valid).
         This enables workflows where only some progressions need named access.
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog1 = FlowTestProgression(name="duplicate")
-    prog2 = FlowTestProgression(name="duplicate")
+    f = Flow[TestElement, Progression]()
+    prog1 = Progression(name="duplicate")
+    prog2 = Progression(name="duplicate")
 
     f.add_progression(prog1)
     with pytest.raises(ExistsError, match="Progression with name 'duplicate' already exists"):
@@ -314,8 +303,8 @@ def test_flow_add_progression_duplicate_name_raises():
 
 def test_flow_add_progression_without_name():
     """Test adding progression without name (no name registration)."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name=None)
+    f = Flow[TestElement, Progression]()
+    prog = Progression(name=None)
 
     f.add_progression(prog)
     assert len(f.progressions) == 1
@@ -341,12 +330,12 @@ def test_flow_add_progression_validates_referential_integrity():
         - PR #162: Added @model_validator for __init__ validation
     """
     # Create flow with items
-    items = [FlowTestItem(value=f"item{i}") for i in range(3)]
-    f = Flow[FlowTestItem, FlowTestProgression](items=items)
+    items = [TestElement(value=i, name=f"item{i}") for i in range(3)]
+    f = Flow[TestElement, Progression](items=items)
 
     # Create progression with non-existent UUID
     missing_uuid = uuid4()
-    prog = FlowTestProgression(name="invalid_prog", order=[missing_uuid])
+    prog = Progression(name="invalid_prog", order=[missing_uuid])
 
     # Should raise NotFoundError before adding to pile
     with pytest.raises(NotFoundError, match="contains UUIDs not in items pile"):
@@ -406,8 +395,8 @@ def test_flow_remove_progression_cleans_name_index(flow, progressions):
 
 def test_flow_remove_progression_without_name():
     """Test removing progression that has no name."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name=None)
+    f = Flow[TestElement, Progression]()
+    prog = Progression(name=None)
     f.add_progression(prog)
 
     removed = f.remove_progression(prog.id)
@@ -419,8 +408,8 @@ def test_flow_remove_progression_without_name():
 
 def test_flow_add_item_to_pile_only():
     """Test adding item to pile without progressions."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
 
     f.add_item(item)
     assert len(f.items) == 1
@@ -448,11 +437,11 @@ def test_flow_add_item_to_single_progression():
     This design enables state transitions by moving UUIDs between progressions
     without copying/moving actual item data.
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name="test")
+    f = Flow[TestElement, Progression]()
+    prog = Progression(name="test")
     f.add_progression(prog)
 
-    item = FlowTestItem(value="test")
+    item = TestElement(value=42, name="test")
     f.add_item(item, progressions=prog.id)
 
     assert item.id in f.items
@@ -483,13 +472,13 @@ def test_flow_add_item_to_multiple_progressions():
         Single item in flow.progressions.items, multiple progressions reference its UUID.
         Removing from one progression doesn't affect others (independent lifecycle).
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog1 = FlowTestProgression(name="prog1")
-    prog2 = FlowTestProgression(name="prog2")
+    f = Flow[TestElement, Progression]()
+    prog1 = Progression(name="prog1")
+    prog2 = Progression(name="prog2")
     f.add_progression(prog1)
     f.add_progression(prog2)
 
-    item = FlowTestItem(value="test")
+    item = TestElement(value=42, name="test")
     f.add_item(item, progressions=[prog1.id, prog2.id])
 
     assert item.id in f.items
@@ -499,11 +488,11 @@ def test_flow_add_item_to_multiple_progressions():
 
 def test_flow_add_item_by_progression_name():
     """Test adding item using progression name."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog = FlowTestProgression(name="test_prog")
+    f = Flow[TestElement, Progression]()
+    prog = Progression(name="test_prog")
     f.add_progression(prog)
 
-    item = FlowTestItem(value="test")
+    item = TestElement(value=42, name="test")
     f.add_item(item, progressions="test_prog")
 
     assert item.id in prog
@@ -534,13 +523,13 @@ def test_flow_remove_item_from_pile_and_progressions():
     Performance:
         O(P) where P is number of progressions. Each progression is scanned once.
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    prog1 = FlowTestProgression(name="prog1")
-    prog2 = FlowTestProgression(name="prog2")
+    f = Flow[TestElement, Progression]()
+    prog1 = Progression(name="prog1")
+    prog2 = Progression(name="prog2")
     f.add_progression(prog1)
     f.add_progression(prog2)
 
-    item = FlowTestItem(value="test")
+    item = TestElement(value=42, name="test")
     f.add_item(item, progressions=[prog1.id, prog2.id])
 
     removed = f.remove_item(item.id)
@@ -552,8 +541,8 @@ def test_flow_remove_item_from_pile_and_progressions():
 
 def test_flow_remove_item_by_str_uuid():
     """Test removing item by string UUID."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
     f.add_item(item)
 
     removed = f.remove_item(str(item.id))
@@ -562,8 +551,8 @@ def test_flow_remove_item_by_str_uuid():
 
 def test_flow_remove_item_by_element():
     """Test removing item by Element instance."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
     f.add_item(item)
 
     removed = f.remove_item(item)
@@ -596,7 +585,7 @@ def test_flow_get_progression_by_str_uuid(flow, progressions):
 
 def test_flow_get_progression_invalid_string_raises():
     """Test getting progression by invalid string raises KeyError."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     with pytest.raises(KeyError, match="Progression 'nonexistent' not found"):
         _ = f.get_progression("nonexistent")
@@ -604,10 +593,10 @@ def test_flow_get_progression_invalid_string_raises():
 
 def test_flow_get_progression_checks_name_index_first():
     """Test get_progression checks name index before parsing UUID."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     # Add progression with name that looks like UUID
-    prog = FlowTestProgression(name="12345678-1234-5678-1234-567812345678")
+    prog = Progression(name="12345678-1234-5678-1234-567812345678")
     f.add_progression(prog)
 
     # Should find by name, not try to parse as UUID
@@ -655,7 +644,7 @@ def test_flow_repr_with_name(flow):
 
 def test_flow_repr_without_name():
     """Test Flow repr without name."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
     repr_str = repr(f)
     assert "items=0" in repr_str
     assert "progressions=0" in repr_str
@@ -704,11 +693,11 @@ def test_flow_to_dict_with_exclude_set(flow):
 def test_flow_from_dict():
     """Test Flow deserialization from dict."""
     # Create flow and serialize
-    f1 = Flow[FlowTestItem, FlowTestProgression](
-        items=[FlowTestItem(value=f"item{i}") for i in range(3)],
+    f1 = Flow[TestElement, Progression](
+        items=[TestElement(value=i, name=f"item{i}") for i in range(3)],
         name="test",
     )
-    prog = FlowTestProgression(name="prog1")
+    prog = Progression(name="prog1")
     f1.add_progression(prog)
 
     data = to_dict(f1)
@@ -771,10 +760,10 @@ def test_flow_progression_names_persisted_after_deserialization():
     from lionherd_core.ln import to_dict
 
     # Create flow with named progressions
-    f1 = Flow[FlowTestItem, FlowTestProgression](name="workflow")
-    prog1 = FlowTestProgression(name="stage1")
-    prog2 = FlowTestProgression(name="stage2")
-    prog3 = FlowTestProgression(name="stage3")
+    f1 = Flow[TestElement, Progression](name="workflow")
+    prog1 = Progression(name="stage1")
+    prog2 = Progression(name="stage2")
+    prog3 = Progression(name="stage3")
     f1.add_progression(prog1)
     f1.add_progression(prog2)
     f1.add_progression(prog3)
@@ -859,16 +848,16 @@ def test_flow_end_to_end_workflow():
         - Progression lifecycle independent from items (can remove stages)
     """
     # Create flow
-    f = Flow[FlowTestItem, FlowTestProgression](name="workflow")
+    f = Flow[TestElement, Progression](name="workflow")
 
     # Add items
-    items = [FlowTestItem(value=f"item{i}") for i in range(5)]
+    items = [TestElement(value=i, name=f"item{i}") for i in range(5)]
     for item in items:
         f.items.add(item)
 
     # Create progressions
-    prog1 = FlowTestProgression(name="stage1")
-    prog2 = FlowTestProgression(name="stage2")
+    prog1 = Progression(name="stage1")
+    prog2 = Progression(name="stage2")
     f.add_progression(prog1)
     f.add_progression(prog2)
 
@@ -904,7 +893,7 @@ def test_flow_with_multiple_item_types():
     class ItemB(Element):
         value_b: str = "b"
 
-    f = Flow[Element, FlowTestProgression](
+    f = Flow[Element, Progression](
         item_type=[ItemA, ItemB],
         strict_type=False,
     )
@@ -946,15 +935,15 @@ def test_flow_progression_order_independence():
         - Named progressions: Workflow-specific ordering
         - Both reference same items, different order lists
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     # Add items
-    items = [FlowTestItem(value=f"item{i}") for i in range(3)]
+    items = [TestElement(value=i, name=f"item{i}") for i in range(3)]
     for item in items:
         f.items.add(item)
 
     # Create progression with different order
-    prog = FlowTestProgression(name="custom_order")
+    prog = Progression(name="custom_order")
     prog.append(items[2].id)
     prog.append(items[0].id)
     prog.append(items[1].id)
@@ -970,8 +959,8 @@ def test_flow_progression_order_independence():
 
 def test_flow_add_item_duplicate_raises():
     """Test adding duplicate item raises ValueError."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
     f.add_item(item)
 
     with pytest.raises(ExistsError, match="already exists"):
@@ -980,7 +969,7 @@ def test_flow_add_item_duplicate_raises():
 
 def test_flow_remove_nonexistent_progression_raises():
     """Test removing nonexistent progression raises NotFoundError."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     with pytest.raises(NotFoundError, match="not found"):
         f.remove_progression(UUID("12345678-1234-5678-1234-567812345678"))
@@ -988,7 +977,7 @@ def test_flow_remove_nonexistent_progression_raises():
 
 def test_flow_remove_nonexistent_item_raises():
     """Test removing nonexistent item raises NotFoundError."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     with pytest.raises(NotFoundError, match="not found"):
         f.remove_item(UUID("12345678-1234-5678-1234-567812345678"))
@@ -996,8 +985,8 @@ def test_flow_remove_nonexistent_item_raises():
 
 def test_flow_add_item_invalid_progression_raises():
     """Test adding item to nonexistent progression raises error."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
 
     # Should raise when trying to access nonexistent progression
     with pytest.raises((ValueError, KeyError)):
@@ -1009,8 +998,8 @@ def test_flow_add_item_invalid_progression_raises():
 
 def test_flow_add_item_raises_existserror():
     """Test add_item raises ExistsError when item already exists."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    item = FlowTestItem(value="test")
+    f = Flow[TestElement, Progression]()
+    item = TestElement(value=42, name="test")
     f.add_item(item)
 
     # Adding again should raise ExistsError
@@ -1020,7 +1009,7 @@ def test_flow_add_item_raises_existserror():
 
 def test_flow_remove_item_raises_notfounderror():
     """Test remove_item raises NotFoundError from pile."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
     fake_id = UUID("12345678-1234-5678-1234-567812345678")
 
     # Should raise NotFoundError from pile
@@ -1030,7 +1019,7 @@ def test_flow_remove_item_raises_notfounderror():
 
 def test_flow_remove_progression_raises_notfounderror_with_metadata():
     """Test remove_progression raises NotFoundError with preserved metadata."""
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
     fake_id = UUID("12345678-1234-5678-1234-567812345678")
 
     # Should raise NotFoundError with better message
@@ -1093,11 +1082,11 @@ def test_flow_exception_group_collection():
     """
 
     def collect_errors():
-        f = Flow[FlowTestItem, FlowTestProgression]()
+        f = Flow[TestElement, Progression]()
         errors = []
 
         # Try adding duplicate items (raises ExistsError)
-        item1 = FlowTestItem(value="item1")
+        item1 = TestElement(value=1, name="item1")
         f.add_item(item1)
         try:
             f.add_item(item1)
@@ -1111,10 +1100,10 @@ def test_flow_exception_group_collection():
             errors.append(e)
 
         # Try adding progression with duplicate name (raises ExistsError - name uniqueness check)
-        prog1 = FlowTestProgression(name="duplicate")
+        prog1 = Progression(name="duplicate")
         f.add_progression(prog1)
         try:
-            prog2 = FlowTestProgression(name="duplicate")
+            prog2 = Progression(name="duplicate")
             f.add_progression(prog2)
         except ExistsError as e:
             errors.append(e)
@@ -1172,10 +1161,10 @@ async def test_flow_with_async_operations():
         Pile uses asyncio.Lock for thread-safe async operations.
         Multiple coroutines safely coordinate via context manager.
     """
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     # Use async context manager for thread-safe operations
-    item = FlowTestItem(value="async_test")
+    item = TestElement(value=99, name="async_test")
     async with f.items:
         f.items.add(item)
 
@@ -1224,8 +1213,8 @@ async def test_flow_concurrent_operations():
     """
     from lionherd_core.libs.concurrency import gather
 
-    f = Flow[FlowTestItem, FlowTestProgression]()
-    items = [FlowTestItem(value=f"item{i}") for i in range(10)]
+    f = Flow[TestElement, Progression]()
+    items = [TestElement(value=i, name=f"item{i}") for i in range(10)]
 
     # Multiple coroutines concurrently acquiring lock
     async def add_with_lock(item):
@@ -1280,15 +1269,15 @@ async def test_flow_async_operations_with_progressions():
     """
     from lionherd_core.libs.concurrency import gather
 
-    f = Flow[FlowTestItem, FlowTestProgression]()
+    f = Flow[TestElement, Progression]()
 
     # Add progressions
-    progs = [FlowTestProgression(name=f"prog{i}") for i in range(3)]
+    progs = [Progression(name=f"prog{i}") for i in range(3)]
     for prog in progs:
         f.add_progression(prog)
 
     # Multiple workers adding items with lock coordination
-    items = [FlowTestItem(value=f"item{i}") for i in range(5)]
+    items = [TestElement(value=i, name=f"item{i}") for i in range(5)]
 
     async def add_with_lock(item):
         async with f.items:
@@ -1307,14 +1296,14 @@ async def test_flow_async_operations_with_progressions():
 def test_flow_init_with_pile_instance():
     """Test passing a Pile instance directly to Flow __init__ (line 80)."""
     # Create a pre-populated Pile
-    pile = Pile[FlowTestItem]()
-    item1 = FlowTestItem(value="item1")
-    item2 = FlowTestItem(value="item2")
+    pile = Pile[TestElement]()
+    item1 = TestElement(value=1, name="item1")
+    item2 = TestElement(value=2, name="item2")
     pile.add(item1)
     pile.add(item2)
 
     # Pass Pile instance directly
-    flow = Flow[FlowTestItem, FlowTestProgression](items=pile)
+    flow = Flow[TestElement, Progression](items=pile)
 
     # Verify it uses the same Pile instance
     assert flow.items is pile
@@ -1325,10 +1314,10 @@ def test_flow_init_with_pile_instance():
 
 def test_flow_init_with_single_element():
     """Test passing a single Element to Flow __init__ (line 87)."""
-    item = FlowTestItem(value="single")
+    item = TestElement(value=1, name="single")
 
     # Pass single Element (not in a list)
-    flow = Flow[FlowTestItem, FlowTestProgression](items=item)
+    flow = Flow[TestElement, Progression](items=item)
 
     # Verify it was normalized to a list and added
     assert len(flow.items) == 1
@@ -1338,12 +1327,12 @@ def test_flow_init_with_single_element():
 
 def test_flow_field_validator_with_list_of_elements():
     """Test field validator with list of Element instances (lines 112-122)."""
-    item1 = FlowTestItem(value="item1")
-    item2 = FlowTestItem(value="item2")
+    item1 = TestElement(value=1, name="item1")
+    item2 = TestElement(value=2, name="item2")
 
     # Create Flow with list of elements directly to validator
     # (bypassing __init__ logic by using pydantic constructor)
-    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+    flow = Flow[TestElement, Progression].model_validate(
         {"items": [item1, item2], "progressions": []}
     )
 
@@ -1355,8 +1344,8 @@ def test_flow_field_validator_with_list_of_elements():
 def test_flow_field_validator_with_list_of_dicts():
     """Test field validator with list[dict] deserialization (lines 112-122)."""
     # Create serialized Flow dict that will go through deserialization path
-    item1 = FlowTestItem(value="item1")
-    item2 = FlowTestItem(value="item2")
+    item1 = TestElement(value=1, name="item1")
+    item2 = TestElement(value=2, name="item2")
 
     # Serialize items to dicts
     flow_dict = {
@@ -1367,7 +1356,7 @@ def test_flow_field_validator_with_list_of_dicts():
     }
 
     # Deserialize - field validator should handle list[dict]
-    flow = Flow[FlowTestItem, FlowTestProgression].from_dict(flow_dict)
+    flow = Flow[TestElement, Progression].from_dict(flow_dict)
 
     assert len(flow.items) == 2
     # Verify deserialized correctly
@@ -1378,15 +1367,15 @@ def test_flow_field_validator_with_list_of_dicts():
 
 def test_flow_referential_integrity_validation_failure():
     """Test model validator raises NotFoundError for missing UUIDs (line 137)."""
-    item1 = FlowTestItem(value="item1")
+    item1 = TestElement(value=1, name="item1")
     missing_uuid = uuid4()  # UUID not in items
 
     # Create progression with missing UUID
-    prog = FlowTestProgression(name="test", order=[item1.id, missing_uuid])
+    prog = Progression(name="test", order=[item1.id, missing_uuid])
 
     # Should raise NotFoundError during validation
     with pytest.raises(NotFoundError) as exc_info:
-        Flow[FlowTestItem, FlowTestProgression](items=[item1], progressions=[prog])
+        Flow[TestElement, Progression](items=[item1], progressions=[prog])
 
     assert "not in items pile" in str(exc_info.value)
     assert str(missing_uuid) in str(exc_info.value)
@@ -1394,7 +1383,7 @@ def test_flow_referential_integrity_validation_failure():
 
 def test_flow_check_item_exists_error_path():
     """Test _check_item_exists re-raises NotFoundError with context (lines 153-156)."""
-    flow = Flow[FlowTestItem, FlowTestProgression]()
+    flow = Flow[TestElement, Progression]()
     missing_uuid = uuid4()
 
     # Call _check_item_exists with missing UUID
@@ -1415,7 +1404,7 @@ def test_flow_field_validator_default_factory():
     """
     # Create Flow using model_validate with minimal fields
     # This forces Pydantic to use default_factory for items/progressions
-    flow = Flow[FlowTestItem, FlowTestProgression].model_validate(
+    flow = Flow[TestElement, Progression].model_validate(
         {
             "id": str(uuid4()),
             "created_at": "2024-01-01T00:00:00Z",

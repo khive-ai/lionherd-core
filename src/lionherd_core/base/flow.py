@@ -122,7 +122,7 @@ class Flow(Element, Generic[E, P]):
                     pile.add(item)
             return pile
         # Let Pydantic handle other cases (default_factory)
-        return handler(v)
+        return handler(v)  # pragma: no cover (Pydantic internal fallback)
 
     @model_validator(mode="after")
     def _validate_referential_integrity(self) -> Flow:
@@ -244,13 +244,13 @@ class Flow(Element, Generic[E, P]):
     def add_item(
         self,
         item: E,
-        progressions: list[UUID | str] | UUID | str | None = None,
+        progressions: list[UUID | str | P] | UUID | str | P | None = None,
     ) -> None:
         """Add item to items pile and optionally to progressions.
 
         Args:
             item: Item to add
-            progressions: Progression ID(s) or name(s) to add item to
+            progressions: Progression instance(s), ID(s), or name(s) to add item to
 
         Raises:
             ExistsError: If item already exists
@@ -260,12 +260,18 @@ class Flow(Element, Generic[E, P]):
 
         # Add to specified progressions
         if progressions is not None:
-            # Normalize to list - treat string/UUID as single value, convert other iterables
-            ids = [progressions] if isinstance(progressions, (str, UUID)) else list(progressions)
+            # Normalize to list - treat string/UUID/Progression as single value
+            if isinstance(progressions, (str, UUID, Progression)):
+                progs = [progressions]
+            else:
+                progs = list(progressions)
 
-            for prog_id in ids:
-                progression = self.get_progression(prog_id)
-                progression.append(item)
+            for prog in progs:
+                # If Progression instance, use directly; otherwise lookup
+                if isinstance(prog, Progression):
+                    prog.append(item)
+                else:
+                    self.get_progression(prog).append(item)
 
     def remove_item(self, item_id: UUID | str | Element) -> E:
         """Remove item from items pile and all progressions.

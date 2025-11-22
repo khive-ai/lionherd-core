@@ -167,11 +167,18 @@ class TestEventBusBasics:
         async def handler():
             pass
 
-        # Handler not subscribed
+        # Handler not subscribed (topic doesn't exist)
         assert bus.unsubscribe("test", handler) is False
 
         # Topic doesn't exist
         assert bus.unsubscribe("nonexistent", handler) is False
+
+        # Topic exists but different handler - tests line 54 (loop completes, return False)
+        async def other_handler():
+            pass
+
+        bus.subscribe("test", other_handler)
+        assert bus.unsubscribe("test", handler) is False  # handler not in topic
 
     @pytest.mark.asyncio
     async def test_emit_no_handlers(self):

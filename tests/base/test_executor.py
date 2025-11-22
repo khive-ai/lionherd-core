@@ -71,23 +71,11 @@ from lionherd_core.base import Event, EventStatus, Executor, Pile, Processor
 # ============================================================================
 # Test Event and Processor Subclasses (Minimal implementations for testing)
 # ============================================================================
-
-
-class ExecTestEvent(Event):
-    """Simple Event for testing Executor."""
-
-    return_value: Any = None
-    streaming: bool = False
-
-    async def _invoke(self) -> Any:
-        """Return configured value and update status."""
-        return self.return_value
-
-
-class ExecTestProcessor(Processor):
-    """Minimal Processor for testing Executor."""
-
-    event_type = ExecTestEvent
+# Import reusable Event and Processor from testing module
+from lionherd_core.testing import (
+    SimpleTestEvent as ExecTestEvent,
+    TestProcessor as ExecTestProcessor,
+)
 
 
 class ExecTestExecutor(Executor):
