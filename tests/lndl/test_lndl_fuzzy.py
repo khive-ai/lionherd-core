@@ -1029,3 +1029,112 @@ OUT{count: 42}
         output = parse_lndl_fuzzy(response, operable, threshold=0.85)
 
         assert output.count == 42
+
+
+class TestCapabilitiesFiltering:
+    """Test capabilities parameter for filtering active specs."""
+
+    def test_capabilities_filters_specs(self):
+        """Test that capabilities parameter filters which specs are validated."""
+
+        class ModelA(BaseModel):
+            name: str
+            value: int
+
+        # Create operable with 3 specs: a (ModelA), b (str), c (int)
+        operable = Operable(
+            [
+                Spec(ModelA, name="a"),
+                Spec(str, name="b"),
+                Spec(int, name="c"),
+            ]
+        )
+
+        # LNDL only provides values for 'a' and 'b'
+        lndl_text = """\
+        <lvar ModelA.name n>Test Name</lvar>
+        <lvar ModelA.value v>42</lvar>
+        <lvar b_val>string value</lvar>
+
+        OUT{a: [n, v], b: b_val}
+        """
+
+        # Without capabilities, this would fail because 'c' is required but missing
+        # With capabilities=['a', 'b'], only those specs are checked
+        result = parse_lndl_fuzzy(lndl_text, operable, capabilities=["a", "b"], threshold=0.85)
+
+        # Verify parsed values
+        assert "a" in result.fields
+        assert result.a.name == "Test Name"
+        assert result.a.value == 42
+        assert "b" in result.fields
+        assert result.b == "string value"
+        # 'c' should not be present (not in capabilities)
+        assert "c" not in result.fields
+
+    def test_capabilities_invalid_raises(self):
+        """Test that invalid capabilities raise ValueError."""
+
+        class Report(BaseModel):
+            title: str
+
+        operable = Operable([Spec(Report, name="report")])
+
+        lndl_text = """<lvar Report.title t>Title</lvar>
+        OUT{report: [t]}"""
+
+        # 'invalid' is not a valid spec name
+        with pytest.raises(ValueError, match="not allowed"):
+            parse_lndl_fuzzy(lndl_text, operable, capabilities=["invalid"], threshold=0.85)
+
+    def test_capabilities_none_uses_all_specs(self):
+        """Test that capabilities=None uses all specs (default behavior)."""
+
+        class Report(BaseModel):
+            title: str
+
+        operable = Operable([Spec(Report, name="report")])
+
+        lndl_text = """<lvar Report.title t>Title</lvar>
+        OUT{report: [t]}"""
+
+        # capabilities=None should use all specs
+        result = parse_lndl_fuzzy(lndl_text, operable, capabilities=None)
+
+        assert "report" in result.fields
+        assert result.report.title == "Title"
+
+    def test_capabilities_with_mixed_model_and_scalar_specs(self):
+        """Test capabilities with mixed model-based and field-based specs."""
+
+        class Analysis(BaseModel):
+            summary: str
+            score: float
+
+        # Mixed specs: model-based (Analysis) and scalar-based (str, int)
+        operable = Operable(
+            [
+                Spec(Analysis, name="analysis"),
+                Spec(str, name="comment"),
+                Spec(int, name="rating"),
+            ]
+        )
+
+        # Only use analysis and rating (skip comment)
+        lndl_text = """\
+        <lvar Analysis.summary s>Good analysis</lvar>
+        <lvar Analysis.score sc>0.95</lvar>
+        <lvar r>5</lvar>
+
+        OUT{analysis: [s, sc], rating: r}
+        """
+
+        result = parse_lndl_fuzzy(lndl_text, operable, capabilities=["analysis", "rating"])
+
+        assert "analysis" in result.fields
+        assert result.analysis.summary == "Good analysis"
+        assert result.analysis.score == 0.95
+        assert "rating" in result.fields
+        assert result.rating == 5
+        # 'comment' not in capabilities, should not be present
+        assert "comment" not in result.fields

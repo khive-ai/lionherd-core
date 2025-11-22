@@ -43,7 +43,7 @@ from lionherd_core.libs.string_handlers._string_similarity import (
     SIMILARITY_ALGO_MAP,
     string_similarity,
 )
-from lionherd_core.types import Operable
+from lionherd_core.types import Operable, Spec
 
 from .errors import AmbiguousMatchError, MissingFieldError, MissingOutBlockError
 from .resolver import resolve_references_prefixed
@@ -137,6 +137,7 @@ def parse_lndl_fuzzy(
     operable: Operable,
     /,
     *,
+    capabilities: list[str] | None = None,
     threshold: float = 0.85,
     threshold_field: float | None = None,
     threshold_lvar: float | None = None,
@@ -148,6 +149,10 @@ def parse_lndl_fuzzy(
     Args:
         response: Full LLM response containing lvars and OUT{}
         operable: Operable containing allowed specs
+        capabilities: Optional list of spec names to filter which specs are active.
+                      If None, all specs in operable are used.
+                      Example: capabilities=['a', 'b'] with Operable([Spec(A, name='a'),
+                               Spec(str, name='b'), Spec(int, name='c')]) uses only 'a' and 'b'.
         threshold: Global similarity threshold (default: 0.85)
                    - 0.85: Fuzzy matching (production-proven)
                    - 1.0: Strict mode (exact matches only)
@@ -176,6 +181,9 @@ def parse_lndl_fuzzy(
         >>> # Strict mode
         >>> parse_lndl_fuzzy(response, operable, threshold=1.0)  # Raises error
 
+        >>> # With capabilities filter
+        >>> parse_lndl_fuzzy(response, operable, capabilities=["a", "b"])
+
     Architecture:
         1. Parse LNDL (extract lvars and OUT{})
         2. Pre-correct typos in lvar names, model names, field names, spec names
@@ -188,6 +196,19 @@ def parse_lndl_fuzzy(
         threshold_model if threshold_model is not None else max(threshold, 0.90)
     )  # Stricter for model names
     threshold_spec = threshold_spec if threshold_spec is not None else threshold
+
+    # Filter specs based on capabilities (if provided)
+    if capabilities is not None:
+        # Validate capabilities against operable
+        operable.check_allowed(*capabilities)
+        active_specs = operable.get_specs(include=set(capabilities))
+        active_spec_names = set(capabilities)
+        # Create filtered operable for resolver (only contains active specs)
+        filtered_operable = Operable(active_specs, name=operable.name)
+    else:
+        active_specs = operable.get_specs()
+        active_spec_names = operable.allowed()
+        filtered_operable = operable  # Use original when no filtering
 
     # 1. Parse using new lexer/parser (hybrid approach)
     from .ast import Lvar
@@ -233,7 +254,31 @@ def parse_lndl_fuzzy(
     out_fields_raw = program.out_block.fields
 
     # Build spec map for O(1) lookups (used in both strict and fuzzy modes)
-    spec_map = {spec.base_type.__name__: spec for spec in operable.get_specs()}
+    # Support both:
+    #   - Model-based Specs: base_type is Pydantic model → key by base_type.__name__
+    #   - Field-based Specs: base_type is primitive → key by spec.name
+    #
+    # Model-based: <lvar Model.field alias>...</lvar> OUT{spec: [alias1, alias2]}
+    # Field-based: <lvar alias>...</lvar> OUT{field: alias}
+    spec_map: dict[str, tuple] = {}  # model_name → (spec, is_model_based)
+    field_based_specs: dict[str, Spec] = {}  # field_name → spec (for field-based)
+
+    for spec in active_specs:
+        base_type = spec.base_type
+        is_pydantic_model = hasattr(base_type, "model_fields")
+
+        if is_pydantic_model:
+            # Model-based Spec - key by model class name
+            spec_map[base_type.__name__] = (spec, True)
+        else:
+            # Field-based Spec - these use raw lvars, not namespaced
+            if spec.name:
+                field_based_specs[spec.name] = spec
+            # Also register Operable.name as virtual model for namespaced syntax fallback
+            if operable.name and operable.name not in spec_map:
+                spec_map[operable.name] = (spec, False)
+
+    # expected_models = model names that can appear in <lvar Model.field> syntax
     expected_models = set(spec_map.keys())
 
     # If threshold is 1.0 (strict mode), validate strictly then call resolver
@@ -253,10 +298,16 @@ def parse_lndl_fuzzy(
             if isinstance(lvar, RLvarMetadata):
                 continue  # Raw lvars don't have fields
             # Get spec for this model (guaranteed to exist if lvar.model in expected_models)
-            spec = spec_map[lvar.model]
+            spec, is_model_based = spec_map[lvar.model]
 
             # Check if field exists
-            expected_fields = list(spec.base_type.model_fields.keys())
+            if is_model_based:
+                # Model-based: fields from Pydantic model
+                expected_fields = list(spec.base_type.model_fields.keys())
+            else:
+                # Field-based: fields are the spec names in operable
+                expected_fields = list(active_spec_names)
+
             if lvar.field not in expected_fields:
                 raise MissingFieldError(
                     f"Field '{lvar.field}' not found in model {lvar.model}. "
@@ -273,8 +324,12 @@ def parse_lndl_fuzzy(
                     )
 
                 # Find spec and validate field
-                spec = spec_map[lact.model]
-                expected_fields = list(spec.base_type.model_fields.keys())
+                spec, is_model_based = spec_map[lact.model]
+                if is_model_based:
+                    expected_fields = list(spec.base_type.model_fields.keys())
+                else:
+                    expected_fields = list(active_spec_names)
+
                 if lact.field not in expected_fields:
                     raise MissingFieldError(
                         f"Action field '{lact.field}' not found in model {lact.model}. "
@@ -282,7 +337,7 @@ def parse_lndl_fuzzy(
                     )
 
         # Validate spec names in OUT{} block
-        expected_spec_names = list(operable.allowed())
+        expected_spec_names = list(active_spec_names)
         for spec_name in out_fields_raw:
             if spec_name not in expected_spec_names:
                 raise MissingFieldError(
@@ -290,7 +345,7 @@ def parse_lndl_fuzzy(
                     f"Available: {expected_spec_names} (strict mode: exact match required)"
                 )
 
-        return resolve_references_prefixed(out_fields_raw, lvars_raw, lacts_raw, operable)
+        return resolve_references_prefixed(out_fields_raw, lvars_raw, lacts_raw, filtered_operable)
 
     # 2. Pre-correct lvar metadata (model names and field names - skip raw lvars)
     # Collect all unique model names and field names from namespaced lvars only
@@ -316,8 +371,11 @@ def parse_lndl_fuzzy(
 
         # Get expected fields for this model from spec (O(1) lookup)
         # (spec guaranteed to exist: corrected_model from fuzzy match against expected_models)
-        spec = spec_map[corrected_model]
-        expected_fields = list(spec.base_type.model_fields.keys())
+        spec, is_model_based = spec_map[corrected_model]
+        if is_model_based:
+            expected_fields = list(spec.base_type.model_fields.keys())
+        else:
+            expected_fields = list(active_spec_names)
 
         for raw_field in raw_fields:
             corrected_field = _correct_name(
@@ -364,7 +422,7 @@ def parse_lndl_fuzzy(
             lacts_corrected[local_name] = lact
 
     # 3. Pre-correct OUT{} spec names (keys in out_fields_raw)
-    expected_spec_names = list(operable.allowed())
+    expected_spec_names = list(active_spec_names)
     out_fields_corrected: dict[str, list[str] | str] = {}
 
     for raw_spec_name, value in out_fields_raw.items():
@@ -397,4 +455,6 @@ def parse_lndl_fuzzy(
             out_fields_final[spec_name] = value
 
     # 5. Call strict resolver with corrected inputs (REUSE existing logic)
-    return resolve_references_prefixed(out_fields_final, lvars_corrected, lacts_corrected, operable)
+    return resolve_references_prefixed(
+        out_fields_final, lvars_corrected, lacts_corrected, filtered_operable
+    )
