@@ -24,7 +24,7 @@
 
 | Path | Contents |
 |------|----------|
-| `src/lionherd_core/base/` | Element, Node, Pile, Graph, Flow, Progression |
+| `src/lionherd_core/base/` | Element, Node, Pile, Graph, Flow, Progression, Event, Broadcaster, EventBus, Processor |
 | `src/lionherd_core/protocols.py` | Observable, Serializable, Adaptable |
 | `src/lionherd_core/types/` | Spec, Operable (Pydantic integration) |
 | `src/lionherd_core/lndl/` | Fuzzy LLM output parser (lexer/parser/AST) |
@@ -145,7 +145,14 @@ result = parse_lndl_fuzzy(llm_response, operable)
 
 ## Breaking Changes
 
-### v1.0.0-alpha6 (Latest)
+### v1.0.0-alpha7 (Latest)
+
+| Change | Before | After |
+|--------|--------|-------|
+| Pile slicing | `pile[1:3]` returns `list[T]` | `pile[1:3]` returns `Pile[T]` |
+| Spec/Operable methods | `allowed()`/`to_dict()` included ClassVar | `allowed()`/`to_dict()` exclude ClassVar |
+
+### v1.0.0-alpha6
 
 | Change | Before | After |
 |--------|--------|-------|

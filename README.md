@@ -186,6 +186,7 @@ class CustomAgent:
 | **Graph** | Directed graph with edges | You need workflow DAGs |
 | **Flow** | Pile of progressions + items | You need multi-stage workflows |
 | **Progression** | Ordered UUID sequence | You need to track execution order |
+| **Event** | Async lifecycle | You need tracked async execution |
 | **LNDL** | LLM output parser | You need structured LLM outputs |
 
 ### Protocols (Rust-Inspired)

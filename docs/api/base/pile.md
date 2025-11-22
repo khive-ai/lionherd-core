@@ -151,7 +151,7 @@ def add(self, item: T) -> None
 
 **Raises:**
 
-- `ValueError`: If item already exists (duplicate ID)
+- `ExistsError`: If item already exists (duplicate ID)
 - `TypeError`: If item type validation fails
 
 **Returns:** None (modifies in place)

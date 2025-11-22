@@ -26,7 +26,11 @@ src/lionherd_core/
 │   ├── pile.py           # Pile[T]: O(1) UUID lookup, thread-safe collections
 │   ├── graph.py          # Directed graph with conditional edges
 │   ├── flow.py           # Flow[E, P]: items + progressions (composition)
-│   └── progression.py    # Ordered UUID sequence (list + Element)
+│   ├── progression.py    # Ordered UUID sequence (list + Element)
+│   ├── event.py          # Async lifecycle with status tracking
+│   ├── broadcaster.py    # Event broadcasting/routing
+│   ├── eventbus.py       # Pub/sub event bus
+│   └── processor.py      # Event processing pipelines
 ├── protocols.py          # Observable, Serializable, Adaptable (structural typing)
 ├── types/
 │   ├── spec.py           # Pydantic model specifications

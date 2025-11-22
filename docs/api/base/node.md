@@ -968,10 +968,9 @@ See [User Guides](../../user_guide/) including [API Design](../../user_guide/api
 ```python
 from lionherd_core.base import Node, Element
 
-# Different content types
-node_str = Node(content="plain string")
+# Different content types (must be dict, Serializable, or BaseModel)
 node_dict = Node(content={"key": "value"})
-node_list = Node(content=[1, 2, 3])
+node_nested = Node(content={"items": [1, 2, 3], "name": "example"})
 
 # Nested Element
 elem = Element(metadata={"type": "config"})
