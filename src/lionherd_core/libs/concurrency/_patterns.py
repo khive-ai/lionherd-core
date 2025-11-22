@@ -7,8 +7,8 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from typing import TypeVar
 
 import anyio
+import anyio.abc
 
-# ExceptionGroup is built-in in Python 3.11+
 from ._cancel import effective_deadline, move_on_at
 from ._errors import non_cancel_subgroup
 from ._primitives import CapacityLimiter
